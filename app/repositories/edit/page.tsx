@@ -15,10 +15,12 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
+import { pulpRemoteService } from "@/services/pulp/remote-service";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import type {
   PulpDebRepositoryDetail,
   PulpFileRepositoryDetail,
+  PulpRemote,
   PulpRpmRepositoryDetail,
   RepositoryUpdatePayload,
 } from "@/services/pulp/types";
@@ -130,6 +132,35 @@ function ActivityLog({ lines }: { lines: ActivityLine[] }) {
   );
 }
 
+function RemoteSelect({
+  value,
+  remotes,
+  onChange,
+}: {
+  value: string | null;
+  remotes: { pulp_href: string; name: string; url: string }[];
+  onChange: (v: string | null) => void;
+}) {
+  const hasCurrent = value === null || remotes.some((r) => r.pulp_href === value);
+  return (
+    <select
+      className={selectClass}
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+    >
+      <option value="">(none)</option>
+      {!hasCurrent && value !== null ? (
+        <option value={value}>{value} (current)</option>
+      ) : null}
+      {remotes.map((remote) => (
+        <option key={remote.pulp_href} value={remote.pulp_href}>
+          {remote.name} — {remote.url}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ChecksumSelect({
   label,
   value,
@@ -174,6 +205,9 @@ function RepositoriesEditInner() {
   const [rpmMeta, setRpmMeta] = useState<RpmReadOnlyMeta | null>(null);
   const [deb, setDeb] = useState<RepositoryUpdatePayload | null>(null);
   const [fileRepo, setFileRepo] = useState<RepositoryUpdatePayload | null>(null);
+  const [rpmRemotes, setRpmRemotes] = useState<PulpRemote[]>([]);
+  const [debRemotes, setDebRemotes] = useState<PulpRemote[]>([]);
+  const [fileRemotes, setFileRemotes] = useState<PulpRemote[]>([]);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveAlsoPublish, setSaveAlsoPublish] = useState(false);
@@ -264,6 +298,43 @@ function RepositoriesEditInner() {
       active = false;
     };
   }, [hasSession, pulpHref, setError]);
+
+  useEffect(() => {
+    if (!hasSession) {
+      setRpmRemotes([]);
+      setDebRemotes([]);
+      setFileRemotes([]);
+      return;
+    }
+
+    let active = true;
+
+    async function loadRemotes() {
+      try {
+        const remotes = await pulpRemoteService.list("rpm");
+        if (active) setRpmRemotes(remotes);
+      } catch {
+        if (active) setRpmRemotes([]);
+      }
+      try {
+        const remotes = await pulpRemoteService.list("deb");
+        if (active) setDebRemotes(remotes);
+      } catch {
+        if (active) setDebRemotes([]);
+      }
+      try {
+        const remotes = await pulpRemoteService.list("file");
+        if (active) setFileRemotes(remotes);
+      } catch {
+        if (active) setFileRemotes([]);
+      }
+    }
+
+    void loadRemotes();
+    return () => {
+      active = false;
+    };
+  }, [hasSession]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -559,16 +630,10 @@ function RepositoriesEditInner() {
                     />
                   </FormField>
                   <FormField label="Remote (Pulp href)">
-                    <Input
-                      value={rpm.remote ?? ""}
-                      onChange={(e) =>
-                        setRpm({
-                          ...rpm,
-                          remote: e.target.value.trim() === "" ? null : e.target.value.trim(),
-                        })
-                      }
-                      placeholder="null"
-                      className="font-mono text-xs"
+                    <RemoteSelect
+                      value={rpm.remote}
+                      remotes={rpmRemotes}
+                      onChange={(v) => setRpm({ ...rpm, remote: v })}
                     />
                   </FormField>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -739,15 +804,10 @@ function RepositoriesEditInner() {
                     />
                   </FormField>
                   <FormField label="Remote (Pulp href)">
-                    <Input
-                      value={deb.remote ?? ""}
-                      onChange={(e) =>
-                        setDeb({
-                          ...deb,
-                          remote: e.target.value.trim() === "" ? null : e.target.value.trim(),
-                        })
-                      }
-                      className="font-mono text-xs"
+                    <RemoteSelect
+                      value={deb.remote}
+                      remotes={debRemotes}
+                      onChange={(v) => setDeb({ ...deb, remote: v })}
                     />
                   </FormField>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -843,15 +903,10 @@ function RepositoriesEditInner() {
                     />
                   </FormField>
                   <FormField label="Remote (Pulp href)">
-                    <Input
-                      value={fileRepo.remote ?? ""}
-                      onChange={(e) =>
-                        setFileRepo({
-                          ...fileRepo,
-                          remote: e.target.value.trim() === "" ? null : e.target.value.trim(),
-                        })
-                      }
-                      className="font-mono text-xs"
+                    <RemoteSelect
+                      value={fileRepo.remote}
+                      remotes={fileRemotes}
+                      onChange={(v) => setFileRepo({ ...fileRepo, remote: v })}
                     />
                   </FormField>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">

@@ -26,6 +26,7 @@ import {
   MoreVertical,
   Package,
   Pencil,
+  RefreshCw,
   Share2,
   Trash2,
   Upload,
@@ -41,13 +42,16 @@ import {
 } from "@/components/ui/table";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
 import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
   type RepositoryCreateResult,
 } from "@/services/pulp/repository-management-service";
 import {
   PulpDistribution,
+  PulpRemote,
   PulpRepository,
+  RpmSyncPolicy,
   type RepositoryCreatePayload,
 } from "@/services/pulp/types";
 
@@ -111,6 +115,22 @@ export default function RepositoriesListPage() {
     task: string | null;
   } | null>(null);
 
+  const [syncModalRepo, setSyncModalRepo] = useState<PulpRepository | null>(null);
+  const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemote[]>>({
+    rpm: [],
+    deb: [],
+    file: [],
+  });
+  const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
+  const [syncRemoteHref, setSyncRemoteHref] = useState("");
+  const [syncPolicy, setSyncPolicy] = useState<RpmSyncPolicy>("additive");
+  const [syncMirror, setSyncMirror] = useState(false);
+  const [syncOptimize, setSyncOptimize] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ repoName: string; task: string | null } | null>(
+    null
+  );
+
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createKind, setCreateKind] = useState<PulpPluginKind>("rpm");
   const [createName, setCreateName] = useState("");
@@ -164,8 +184,27 @@ export default function RepositoriesListPage() {
     if (searchParams.get("create") !== "1") return;
     setCreateKind(kind);
     setCreateModalOpen(true);
+    loadCreateRemotes();
     router.replace("/repositories/list", { scroll: false });
   }, [searchParams, router, kind]);
+
+  function loadCreateRemotes() {
+    setIsLoadingRemotes(true);
+    void (async () => {
+      try {
+        const lists = await Promise.all(
+          PULP_PLUGINS.map(async (plugin) => [plugin.kind, await pulpRemoteService.list(plugin.kind)] as const)
+        );
+        setRemotesByKind(
+          Object.fromEntries(lists) as Record<PulpPluginKind, PulpRemote[]>
+        );
+      } catch {
+        // Leave remotes empty; the (none) option still works.
+      } finally {
+        setIsLoadingRemotes(false);
+      }
+    })();
+  }
 
   function openCreateModal() {
     setCreateKind(kind);
@@ -175,6 +214,7 @@ export default function RepositoriesListPage() {
     setCreateResult(null);
     setError(null);
     setCreateModalOpen(true);
+    loadCreateRemotes();
   }
 
   function closeCreateModal() {
@@ -244,6 +284,7 @@ export default function RepositoriesListPage() {
     setError(null);
     setPublishResult(null);
     setDistributeResult(null);
+    setSyncResult(null);
     try {
       const result = await pulpRepositoryManagementService.publish(kind, repo.pulp_href);
       setPublishResult({
@@ -263,6 +304,7 @@ export default function RepositoriesListPage() {
     setBusyHref(repo.pulp_href);
     setError(null);
     setDistributeResult(null);
+    setSyncResult(null);
     try {
       const result = await pulpDistributionService.createRpmDistributionForRepository(
         repo.pulp_href,
@@ -281,6 +323,72 @@ export default function RepositoriesListPage() {
       setError(e instanceof Error ? e.message : "Failed to create distribution.");
     } finally {
       setBusyHref(null);
+    }
+  }
+
+  function openSyncModal(repo: PulpRepository) {
+    setSyncModalRepo(repo);
+    setSyncRemoteHref("");
+    setSyncPolicy("additive");
+    setSyncMirror(false);
+    setSyncOptimize(true);
+    setSyncResult(null);
+    setError(null);
+    setIsLoadingRemotes(true);
+    void (async () => {
+      try {
+        const remotes = await pulpRemoteService.list(kind);
+        setRemotesByKind((prev) => ({ ...prev, [kind]: remotes }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load remotes.");
+        setRemotesByKind((prev) => ({ ...prev, [kind]: [] }));
+      } finally {
+        setIsLoadingRemotes(false);
+      }
+    })();
+  }
+
+  function closeSyncModal() {
+    if (isSyncing) return;
+    setSyncModalRepo(null);
+  }
+
+  async function confirmSync() {
+    const repo = syncModalRepo;
+    if (!repo) return;
+    if (!syncRemoteHref) {
+      setError("Select a remote to sync from.");
+      return;
+    }
+    setBusyHref(repo.pulp_href);
+    setIsSyncing(true);
+    setError(null);
+    setSyncResult(null);
+    try {
+      const result = await pulpRepositoryManagementService.sync(
+        kind,
+        getPulpPlugin(kind).syncFlavor === "sync_policy"
+          ? {
+              pulp_href: repo.pulp_href,
+              remote: syncRemoteHref,
+              sync_policy: syncPolicy,
+              optimize: syncOptimize,
+            }
+          : {
+              pulp_href: repo.pulp_href,
+              remote: syncRemoteHref,
+              mirror: syncMirror,
+              optimize: syncOptimize,
+            }
+      );
+      setSyncResult({ repoName: repo.name, task: result.task });
+      setSyncModalRepo(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed.");
+    } finally {
+      setBusyHref(null);
+      setIsSyncing(false);
     }
   }
 
@@ -379,6 +487,7 @@ export default function RepositoriesListPage() {
                   onClick={() => {
                     setPublishResult(null);
                     setDistributeResult(null);
+                    setSyncResult(null);
                     setKind(plugin.kind);
                   }}
                   className={cn(
@@ -397,6 +506,7 @@ export default function RepositoriesListPage() {
                 onClick={() => {
                   setPublishResult(null);
                   setDistributeResult(null);
+                  setSyncResult(null);
                   void load();
                 }}
                 disabled={isLoadingRepos}
@@ -476,6 +586,23 @@ export default function RepositoriesListPage() {
               </div>
             ) : null}
 
+            {syncResult ? (
+              <div className="rounded-lg border border-violet-300/80 bg-violet-50/90 p-4 text-sm dark:border-violet-800 dark:bg-violet-950/35">
+                <p className="font-medium text-violet-900 dark:text-violet-100">
+                  Synced “{syncResult.repoName}” ({kind.toUpperCase()})
+                </p>
+                <p className="mt-1 text-violet-800 dark:text-violet-200/90">
+                  A new repository version is created only if the remote had content the repository did
+                  not already have.
+                </p>
+                {syncResult.task ? (
+                  <p className="mt-1 break-all font-mono text-xs text-violet-800/80 dark:text-violet-300/70">
+                    Task: {syncResult.task}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -546,6 +673,15 @@ export default function RepositoriesListPage() {
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
+                              {getPulpPlugin(kind).supportsSync ? (
+                                <DropdownMenuItem
+                                  disabled={busyHref === repo.pulp_href}
+                                  onSelect={() => openSyncModal(repo)}
+                                >
+                                  <RefreshCw className="size-4" />
+                                  Sync
+                                </DropdownMenuItem>
+                              ) : null}
                               {getPulpPlugin(kind).supportsPublish ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href}
@@ -685,19 +821,23 @@ export default function RepositoriesListPage() {
                   />
                 </FormField>
                 <FormField label="Remote">
-                  <Input
+                  <select
                     value={createRemote}
                     onChange={(e) => setCreateRemote(e.target.value)}
                     disabled={isCreating}
-                    placeholder={
-                      createKind === "deb"
-                        ? "Optional — Pulp APT remote href for sync"
-                        : createKind === "file"
-                          ? "Optional — Pulp File remote href for sync"
-                        : "Optional — Pulp RPM remote href for sync"
-                    }
-                    className="font-mono text-xs"
-                  />
+                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+                  >
+                    <option value="">(none)</option>
+                    {createRemote !== "" &&
+                    !remotesByKind[createKind].some((r) => r.pulp_href === createRemote) ? (
+                      <option value={createRemote}>{createRemote} (current)</option>
+                    ) : null}
+                    {remotesByKind[createKind].map((remote) => (
+                      <option key={remote.pulp_href} value={remote.pulp_href}>
+                        {remote.name} — {remote.url}
+                      </option>
+                    ))}
+                  </select>
                 </FormField>
                 {createKind === "rpm" || createKind === "file" ? (
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
@@ -830,6 +970,121 @@ export default function RepositoriesListPage() {
                 onClick={() => void confirmDeleteRepository()}
               >
                 {isDeleting ? "Deleting…" : "Delete repository"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {syncModalRepo ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSyncing) {
+              closeSyncModal();
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Sync ${syncModalRepo.name}`}
+            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              Sync repository
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                {syncModalRepo.name}
+              </span>
+              <span className="mt-1 block break-all font-mono text-xs text-zinc-500">
+                {syncModalRepo.pulp_href}
+              </span>
+            </p>
+            <div className="mt-4 flex flex-col gap-4">
+              <FormField label="Remote">
+                <select
+                  value={syncRemoteHref}
+                  onChange={(e) => setSyncRemoteHref(e.target.value)}
+                  disabled={isSyncing || isLoadingRemotes}
+                  className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+                >
+                  <option value="">
+                    {isLoadingRemotes
+                      ? "Loading remotes…"
+                      : remotesByKind[kind].length === 0
+                        ? `No ${kind.toUpperCase()} remotes found`
+                        : "Select a remote…"}
+                  </option>
+                  {remotesByKind[kind].map((remote) => (
+                    <option key={remote.pulp_href} value={remote.pulp_href}>
+                      {remote.name} — {remote.url}
+                    </option>
+                  ))}
+                </select>
+                {!isLoadingRemotes && remotesByKind[kind].length === 0 ? (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Create one first on the{" "}
+                    <Link href="/remotes/list" className="underline underline-offset-2">
+                      Remotes
+                    </Link>{" "}
+                    page.
+                  </span>
+                ) : null}
+              </FormField>
+              {getPulpPlugin(kind).syncFlavor === "sync_policy" ? (
+                <FormField label="Sync policy">
+                  <select
+                    value={syncPolicy}
+                    onChange={(e) => setSyncPolicy(e.target.value as RpmSyncPolicy)}
+                    disabled={isSyncing}
+                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+                  >
+                    <option value="additive">additive — add new content, keep existing</option>
+                    <option value="mirror_complete">
+                      mirror_complete — match remote exactly (metadata + content)
+                    </option>
+                    <option value="mirror_content_only">
+                      mirror_content_only — match remote content, regenerate metadata
+                    </option>
+                  </select>
+                </FormField>
+              ) : (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0"
+                    checked={syncMirror}
+                    disabled={isSyncing}
+                    onChange={(e) => setSyncMirror(e.target.checked)}
+                  />
+                  Mirror (match remote exactly, removing content not present upstream)
+                </label>
+              )}
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 shrink-0"
+                  checked={syncOptimize}
+                  disabled={isSyncing}
+                  onChange={(e) => setSyncOptimize(e.target.checked)}
+                />
+                Optimize (skip sync if nothing upstream changed)
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={isSyncing} onClick={closeSyncModal}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={isSyncing || isLoadingRemotes || !syncRemoteHref}
+                onClick={() => void confirmSync()}
+              >
+                {isSyncing ? "Syncing…" : "Start sync"}
               </Button>
             </div>
           </div>

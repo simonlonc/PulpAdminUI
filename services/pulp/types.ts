@@ -115,6 +115,86 @@ export type PulpDistribution = {
   repository: string | null;
 };
 
+/** Download policy for a remote, shared by every plugin family. */
+export type PulpRemotePolicy = "immediate" | "on_demand" | "streamed";
+
+/**
+ * Row from GET .../remotes/{plugin}/{type}/ (e.g. rpm.RpmRemoteResponse).
+ * Write-only secrets (password, client_key, proxy credentials) are not returned by Pulp.
+ * Plugin-specific fields (see PulpPluginDescriptor.extraRemoteFields) are optional.
+ */
+export type PulpRemote = {
+  pulp_href: string;
+  pulp_created: string;
+  pulp_last_updated: string | null;
+  name: string;
+  url: string;
+  policy: PulpRemotePolicy;
+  tls_validation: boolean;
+  ca_cert: string | null;
+  client_cert: string | null;
+  proxy_url: string | null;
+  download_concurrency: number | null;
+  /** Debian APT only: space-separated list of distributions to sync. */
+  distributions?: string | null;
+};
+
+/** POST .../remotes/{plugin}/{type}/ — matches the Pulp remote create body. */
+export type RemoteCreatePayload = {
+  name: string;
+  url: string;
+  policy: PulpRemotePolicy;
+  tls_validation: boolean;
+  proxy_url: string | null;
+  username: string | null;
+  password: string | null;
+  ca_cert: string | null;
+  client_cert: string | null;
+  client_key: string | null;
+  download_concurrency: number | null;
+  /** Debian APT only. */
+  distributions?: string | null;
+};
+
+/** PATCH .../remotes/{plugin}/{type}/{id}/ — all fields optional. Omitted secrets are left unchanged. */
+export type RemoteUpdatePayload = {
+  name?: string;
+  url?: string;
+  policy?: PulpRemotePolicy;
+  tls_validation?: boolean;
+  proxy_url?: string | null;
+  username?: string | null;
+  password?: string | null;
+  ca_cert?: string | null;
+  client_cert?: string | null;
+  client_key?: string | null;
+  download_concurrency?: number | null;
+  /** Debian APT only. */
+  distributions?: string | null;
+};
+
+/** RPM sync strategy (POST .../repositories/rpm/rpm/{id}/sync/). */
+export type RpmSyncPolicy = "additive" | "mirror_complete" | "mirror_content_only";
+
+/**
+ * Sync body sent to /api/pulp/repositories/{kind}/sync.
+ * rpm sends sync_policy; every other family sends mirror (see PulpPluginDescriptor.syncFlavor).
+ */
+export type RepositorySyncPayload = {
+  pulp_href: string;
+  remote: string;
+  optimize: boolean;
+  /** rpm only. */
+  sync_policy?: RpmSyncPolicy;
+  /** deb, file. */
+  mirror?: boolean;
+};
+
+export type RepositorySyncResult = {
+  repository: string;
+  task: string | null;
+};
+
 export type PulpContentItem = {
   pulp_href: string;
   pulp_created: string;

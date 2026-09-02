@@ -5,6 +5,8 @@ import {
   PulpRepository,
   PulpRepositoryDetail,
   RepositoryCreatePayload,
+  RepositorySyncPayload,
+  RepositorySyncResult,
   RepositoryUpdatePayload,
   PulpRpmRepositoryVersion,
   RpmRepositoryVersionsListResult,
@@ -86,6 +88,19 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: pulpHref }),
     });
     if (!response.ok) throw new Error(await readApiDetail(response));
+  },
+
+  async sync(
+    kind: PulpPluginKind,
+    payload: RepositorySyncPayload
+  ): Promise<RepositorySyncResult> {
+    const response = await fetch(`/api/pulp/repositories/${kind}/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await readApiDetail(response));
+    return (await response.json()) as RepositorySyncResult;
   },
 
   async publish(kind: PulpPluginKind, pulpHref: string): Promise<RepositoryPublishResult> {
