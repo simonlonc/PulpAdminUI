@@ -202,74 +202,42 @@ export type PulpRepositoryDetail =
   | PulpDebRepositoryDetail
   | PulpFileRepositoryDetail;
 
-export type RpmRepositoryUpdatePayload = {
+/** Common repository update fields plus every plugin-specific field (see extraRepoFields). */
+export type RepositoryUpdatePayload = {
   name: string;
   description: string | null;
   retain_repo_versions: number | null;
   remote: string | null;
-  autopublish: boolean;
-  metadata_signing_service: string | null;
-  retain_package_versions: number;
-  metadata_checksum_type: string | null;
-  package_checksum_type: string | null;
-  gpgcheck: number;
-  repo_gpgcheck: number;
-  sqlite_metadata: boolean;
+  /** rpm, file */
+  autopublish?: boolean;
+  /** rpm */
+  metadata_signing_service?: string | null;
+  retain_package_versions?: number;
+  metadata_checksum_type?: string | null;
+  package_checksum_type?: string | null;
+  gpgcheck?: number;
+  repo_gpgcheck?: number;
+  sqlite_metadata?: boolean;
+  /** deb */
+  structured_repo?: boolean;
+  /** file */
+  manifest?: string | null;
 };
 
-/** POST /repositories/rpm/rpm/ — matches Pulp RPM repository create body. */
-export type RpmRepositoryCreatePayload = {
+/** POST /repositories/{plugin}/{type}/ — common create fields plus plugin-specific ones. */
+export type RepositoryCreatePayload = {
   pulp_labels: Record<string, string>;
   name: string;
   description: string;
   retain_repo_versions: number | null;
   remote: string | null;
-  autopublish: boolean;
-  metadata_signing_service: string | null;
-  retain_package_versions: number | null;
-  metadata_checksum_type: string | null;
-  package_checksum_type: string | null;
-  gpgcheck: number | null;
-  repo_gpgcheck: number | null;
-  sqlite_metadata: boolean;
-};
-
-export type DebRepositoryUpdatePayload = {
-  name: string;
-  description: string | null;
-  retain_repo_versions: number | null;
-  remote: string | null;
-  autopublish: boolean;
-  structured_repo: boolean;
-};
-
-/** POST /repositories/deb/apt/ — matches Pulp Debian APT repository create body. */
-export type DebRepositoryCreatePayload = {
-  pulp_labels: Record<string, string>;
-  name: string;
-  description: string;
-  retain_repo_versions: number | null;
-  remote: string | null;
-};
-
-export type FileRepositoryUpdatePayload = {
-  name: string;
-  description: string | null;
-  retain_repo_versions: number | null;
-  remote: string | null;
-  autopublish: boolean;
-  manifest: string | null;
-};
-
-/** POST /repositories/file/file/ — matches Pulp File repository create body. */
-export type FileRepositoryCreatePayload = {
-  pulp_labels: Record<string, string>;
-  name: string;
-  description: string;
-  retain_repo_versions: number | null;
-  remote: string | null;
-  autopublish: boolean;
-  manifest: string | null;
+  /** rpm, file */
+  autopublish?: boolean;
+  /** rpm */
+  metadata_signing_service?: string | null;
+  retain_package_versions?: number | null;
+  /** file */
+  manifest?: string | null;
 };
 
 /** Per-type counts in repository version content_summary (e.g. rpm.package). */

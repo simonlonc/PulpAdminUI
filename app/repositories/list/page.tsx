@@ -40,6 +40,7 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
+import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   pulpRepositoryManagementService,
   type RepositoryCreateResult,
@@ -47,9 +48,7 @@ import {
 import {
   PulpDistribution,
   PulpRepository,
-  type DebRepositoryCreatePayload,
-  type FileRepositoryCreatePayload,
-  type RpmRepositoryCreatePayload,
+  type RepositoryCreatePayload,
 } from "@/services/pulp/types";
 
 const repoCreateTextareaClass =
@@ -76,8 +75,6 @@ function rpmDistributionsForRepository(
   );
 }
 
-type RepoKind = "rpm" | "deb" | "file";
-
 export default function RepositoriesListPage() {
   const deleteDialogTitleId = useId();
   const createDialogTitleId = useId();
@@ -90,7 +87,7 @@ export default function RepositoriesListPage() {
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
 
-  const [kind, setKind] = useState<RepoKind>("rpm");
+  const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [items, setItems] = useState<PulpRepository[]>([]);
   const [count, setCount] = useState(0);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -115,7 +112,7 @@ export default function RepositoriesListPage() {
   } | null>(null);
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createKind, setCreateKind] = useState<RepoKind>("rpm");
+  const [createKind, setCreateKind] = useState<PulpPluginKind>("rpm");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createRemote, setCreateRemote] = useState("");
@@ -137,12 +134,7 @@ export default function RepositoriesListPage() {
     setIsLoadingRepos(true);
     setError(null);
     try {
-      const page =
-        kind === "rpm"
-          ? await pulpRepositoryManagementService.listRpm()
-          : kind === "deb"
-            ? await pulpRepositoryManagementService.listDeb()
-            : await pulpRepositoryManagementService.listFile();
+      const page = await pulpRepositoryManagementService.list(kind);
       setItems(page.results);
       setCount(page.count);
       try {
@@ -220,54 +212,25 @@ export default function RepositoriesListPage() {
     setIsCreating(true);
     setCreateResult(null);
     try {
-      if (createKind === "rpm") {
-        const payload: RpmRepositoryCreatePayload = {
-          pulp_labels: {},
-          name: trimmed,
-          description: createDescription,
-          retain_repo_versions: null,
-          remote: createRemote.trim() === "" ? null : createRemote.trim(),
-          autopublish: createAutopublish,
-          metadata_signing_service: null,
-          retain_package_versions: null,
-          metadata_checksum_type: null,
-          package_checksum_type: null,
-          gpgcheck: null,
-          repo_gpgcheck: null,
-          sqlite_metadata: false,
-        };
-
-        const result = await pulpRepositoryManagementService.createRpm(payload);
-        setCreateResult(result);
-        setCreateName("");
-        resetCreateRepositoryFields();
-      } else if (createKind === "deb") {
-        const debPayload: DebRepositoryCreatePayload = {
-          pulp_labels: {},
-          name: trimmed,
-          description: createDescription,
-          retain_repo_versions: null,
-          remote: createRemote.trim() === "" ? null : createRemote.trim(),
-        };
-        const result = await pulpRepositoryManagementService.createDeb(debPayload);
-        setCreateResult(result);
-        setCreateName("");
-        resetCreateRepositoryFields();
-      } else {
-        const filePayload: FileRepositoryCreatePayload = {
-          pulp_labels: {},
-          name: trimmed,
-          description: createDescription,
-          retain_repo_versions: null,
-          remote: createRemote.trim() === "" ? null : createRemote.trim(),
-          autopublish: createAutopublish,
-          manifest: createManifest.trim() === "" ? null : createManifest.trim(),
-        };
-        const result = await pulpRepositoryManagementService.createFile(filePayload);
-        setCreateResult(result);
-        setCreateName("");
-        resetCreateRepositoryFields();
+      const extraRepoFields = getPulpPlugin(createKind).extraRepoFields;
+      const payload: RepositoryCreatePayload = {
+        pulp_labels: {},
+        name: trimmed,
+        description: createDescription,
+        retain_repo_versions: null,
+        remote: createRemote.trim() === "" ? null : createRemote.trim(),
+      };
+      if (extraRepoFields.includes("autopublish")) {
+        payload.autopublish = createAutopublish;
       }
+      if (extraRepoFields.includes("manifest")) {
+        payload.manifest = createManifest.trim() === "" ? null : createManifest.trim();
+      }
+
+      const result = await pulpRepositoryManagementService.create(createKind, payload);
+      setCreateResult(result);
+      setCreateName("");
+      resetCreateRepositoryFields();
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Create failed.");
@@ -282,12 +245,7 @@ export default function RepositoriesListPage() {
     setPublishResult(null);
     setDistributeResult(null);
     try {
-      const result =
-        kind === "rpm"
-          ? await pulpRepositoryManagementService.publishRpm(repo.pulp_href)
-          : kind === "deb"
-            ? await pulpRepositoryManagementService.publishDeb(repo.pulp_href)
-            : await pulpRepositoryManagementService.publishFile(repo.pulp_href);
+      const result = await pulpRepositoryManagementService.publish(kind, repo.pulp_href);
       setPublishResult({
         repoName: repo.name,
         publication: result.publication,
@@ -376,13 +334,7 @@ export default function RepositoriesListPage() {
         }
       }
 
-      if (kind === "rpm") {
-        await pulpRepositoryManagementService.deleteRpm(repo.pulp_href);
-      } else if (kind === "deb") {
-        await pulpRepositoryManagementService.deleteDeb(repo.pulp_href);
-      } else {
-        await pulpRepositoryManagementService.deleteFile(repo.pulp_href);
-      }
+      await pulpRepositoryManagementService.remove(kind, repo.pulp_href);
 
       setDeleteModalRepo(null);
       await load();
@@ -420,23 +372,23 @@ export default function RepositoriesListPage() {
           </CardTitle>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {(["rpm", "deb", "file"] as const).map((k) => (
+              {PULP_PLUGINS.map((plugin) => (
                 <button
-                  key={k}
+                  key={plugin.kind}
                   type="button"
                   onClick={() => {
                     setPublishResult(null);
                     setDistributeResult(null);
-                    setKind(k);
+                    setKind(plugin.kind);
                   }}
                   className={cn(
                     "rounded-md border px-3 py-1.5 text-sm",
-                    kind === k
+                    kind === plugin.kind
                       ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
                       : "border-zinc-300 dark:border-zinc-700"
                   )}
                 >
-                  {k.toUpperCase()}
+                  {plugin.kind.toUpperCase()}
                 </button>
               ))}
               <Button
@@ -594,13 +546,15 @@ export default function RepositoriesListPage() {
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={busyHref === repo.pulp_href}
-                                onSelect={() => void handlePublish(repo)}
-                              >
-                                <Upload className="size-4" />
-                                Publish
-                              </DropdownMenuItem>
+                              {getPulpPlugin(kind).supportsPublish ? (
+                                <DropdownMenuItem
+                                  disabled={busyHref === repo.pulp_href}
+                                  onSelect={() => void handlePublish(repo)}
+                                >
+                                  <Upload className="size-4" />
+                                  Publish
+                                </DropdownMenuItem>
+                              ) : null}
                               {kind === "rpm" ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href}
@@ -694,20 +648,20 @@ export default function RepositoriesListPage() {
 
             <form className="mt-4 flex flex-col gap-4" onSubmit={(e) => void handleCreateSubmit(e)}>
               <div className="flex flex-wrap gap-2">
-                {(["rpm", "deb", "file"] as const).map((k) => (
+                {PULP_PLUGINS.map((plugin) => (
                   <button
-                    key={k}
+                    key={plugin.kind}
                     type="button"
-                    onClick={() => setCreateKind(k)}
+                    onClick={() => setCreateKind(plugin.kind)}
                     disabled={isCreating}
                     className={cn(
                       "rounded-md border px-3 py-1.5 text-sm disabled:opacity-50",
-                      createKind === k
+                      createKind === plugin.kind
                         ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
                         : "border-zinc-300 dark:border-zinc-700"
                     )}
                   >
-                    {k.toUpperCase()}
+                    {plugin.kind.toUpperCase()}
                   </button>
                 ))}
               </div>

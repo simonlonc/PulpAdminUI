@@ -196,7 +196,7 @@ export default function PackageDetailsPage() {
     setIsPublishingRepository(true);
     setPublishRepositoryResult(null);
     try {
-      const result = await pulpRepositoryManagementService.publishRpm(repoHref);
+      const result = await pulpRepositoryManagementService.publish("rpm", repoHref);
       setPublishRepositoryResult(result);
     } catch (publishError) {
       setError(

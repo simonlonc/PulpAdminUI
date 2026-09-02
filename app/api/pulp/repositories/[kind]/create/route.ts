@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import type { RpmRepositoryCreatePayload } from "@/services/pulp/types";
 import { authHeaders, hrefFromCreatedResource, readDetail, TaskRefResponse, waitForTask } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
@@ -33,10 +33,59 @@ function parseNullableInt(value: unknown): number | null {
   return null;
 }
 
-export async function POST(request: Request) {
+/**
+ * Common create fields plus the plugin's extraRepoFields (see lib/pulp-plugins.ts).
+ * Deprecated/read-only RPM fields (checksum types, gpgcheck, sqlite_metadata) must not
+ * be sent on create (pulp_rpm 3.30+), so they are skipped here even though PATCH sends them.
+ */
+function buildCreateBody(
+  plugin: PulpPluginDescriptor,
+  raw: Record<string, unknown>,
+  name: string,
+  labels: Record<string, string>,
+  description: string
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    pulp_labels: labels,
+    name,
+    description,
+    retain_repo_versions: parseNullableInt(raw.retain_repo_versions),
+    remote: trimOrNull(raw.remote),
+  };
+
+  for (const field of plugin.extraRepoFields) {
+    switch (field) {
+      case "autopublish":
+        body.autopublish = Boolean(raw.autopublish);
+        break;
+      case "metadata_signing_service":
+        body.metadata_signing_service = trimOrNull(raw.metadata_signing_service);
+        break;
+      case "retain_package_versions": {
+        // Pulp rpm: retain_package_versions is a non-null integer (0 = keep all versions).
+        const parsed = parseNullableInt(raw.retain_package_versions);
+        body.retain_package_versions = parsed === null ? 0 : parsed >= 0 ? parsed : 0;
+        break;
+      }
+      case "manifest":
+        body.manifest = trimOrNull(raw.manifest);
+        break;
+    }
+  }
+
+  return body;
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
   const raw = (await request.json()) as Record<string, unknown>;
@@ -51,46 +100,14 @@ export async function POST(request: Request) {
   }
 
   const description = typeof raw.description === "string" ? raw.description : "";
-  const autopublish = Boolean(raw.autopublish);
 
-  const parsedRetainPkg = parseNullableInt(raw.retain_package_versions);
-  const retainPackageVersions =
-    parsedRetainPkg === null ? 0 : parsedRetainPkg >= 0 ? parsedRetainPkg : 0;
-
-  const payload: RpmRepositoryCreatePayload = {
-    pulp_labels: labels,
-    name,
-    description,
-    retain_repo_versions: parseNullableInt(raw.retain_repo_versions),
-    remote: trimOrNull(raw.remote),
-    autopublish,
-    metadata_signing_service: trimOrNull(raw.metadata_signing_service),
-    retain_package_versions: retainPackageVersions,
-    metadata_checksum_type: trimOrNull(raw.metadata_checksum_type),
-    package_checksum_type: trimOrNull(raw.package_checksum_type),
-    gpgcheck: parseNullableInt(raw.gpgcheck),
-    repo_gpgcheck: parseNullableInt(raw.repo_gpgcheck),
-    sqlite_metadata: Boolean(raw.sqlite_metadata),
-  };
-
-  // Pulp rpm: retain_package_versions is a non-null integer (0 = keep all versions).
-  // Deprecated/read-only RPM fields must not be sent on create (pulp_rpm 3.30+).
-  const pulpBody: Record<string, unknown> = {
-    pulp_labels: labels,
-    name,
-    description,
-    retain_repo_versions: payload.retain_repo_versions,
-    remote: payload.remote,
-    autopublish: payload.autopublish,
-    metadata_signing_service: payload.metadata_signing_service,
-    retain_package_versions: retainPackageVersions,
-  };
+  const pulpBody = buildCreateBody(plugin, raw, name, labels, description);
 
   const authHeader = toBasicAuthHeader(authResult.auth);
   const headers = authHeaders(authHeader);
   headers.set("Content-Type", "application/json");
 
-  const createResponse = await fetch(getPulpApiUrl("/repositories/rpm/rpm/"), {
+  const createResponse = await fetch(getPulpApiUrl(plugin.repositoryPath), {
     method: "POST",
     headers,
     body: JSON.stringify(pulpBody),
@@ -121,7 +138,7 @@ export async function POST(request: Request) {
   }
 
   return Response.json({
-    name: payload.name,
+    name,
     pulp_href: pulpHref,
     task: created.task ?? null,
   });

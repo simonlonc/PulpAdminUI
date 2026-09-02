@@ -14,17 +14,16 @@ import { FormField } from "@/components/ui/form-field";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
+import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import type {
-  DebRepositoryUpdatePayload,
   PulpDebRepositoryDetail,
   PulpFileRepositoryDetail,
   PulpRpmRepositoryDetail,
-  FileRepositoryUpdatePayload,
-  RpmRepositoryUpdatePayload,
+  RepositoryUpdatePayload,
 } from "@/services/pulp/types";
 
-type RepoKind = "rpm" | "deb" | "file";
+type RepoKind = PulpPluginKind;
 
 const checksumAlgorithms = ["sha256", "sha1", "md5", "sha224", "sha384", "sha512"] as const;
 
@@ -34,7 +33,7 @@ const textareaClass =
 const selectClass =
   "w-full max-w-md rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
-function rpmDetailToForm(d: PulpRpmRepositoryDetail): RpmRepositoryUpdatePayload {
+function rpmDetailToForm(d: PulpRpmRepositoryDetail): RepositoryUpdatePayload {
   return {
     name: d.name,
     description: d.description,
@@ -51,7 +50,7 @@ function rpmDetailToForm(d: PulpRpmRepositoryDetail): RpmRepositoryUpdatePayload
   };
 }
 
-function debDetailToForm(d: PulpDebRepositoryDetail): DebRepositoryUpdatePayload {
+function debDetailToForm(d: PulpDebRepositoryDetail): RepositoryUpdatePayload {
   return {
     name: d.name,
     description: d.description,
@@ -62,7 +61,7 @@ function debDetailToForm(d: PulpDebRepositoryDetail): DebRepositoryUpdatePayload
   };
 }
 
-function fileDetailToForm(d: PulpFileRepositoryDetail): FileRepositoryUpdatePayload {
+function fileDetailToForm(d: PulpFileRepositoryDetail): RepositoryUpdatePayload {
   return {
     name: d.name,
     description: d.description,
@@ -171,10 +170,10 @@ function RepositoriesEditInner() {
   const { groups } = usePulpGroups(hasSession);
 
   const [loadedKind, setLoadedKind] = useState<RepoKind | null>(null);
-  const [rpm, setRpm] = useState<RpmRepositoryUpdatePayload | null>(null);
+  const [rpm, setRpm] = useState<RepositoryUpdatePayload | null>(null);
   const [rpmMeta, setRpmMeta] = useState<RpmReadOnlyMeta | null>(null);
-  const [deb, setDeb] = useState<DebRepositoryUpdatePayload | null>(null);
-  const [fileRepo, setFileRepo] = useState<FileRepositoryUpdatePayload | null>(null);
+  const [deb, setDeb] = useState<RepositoryUpdatePayload | null>(null);
+  const [fileRepo, setFileRepo] = useState<RepositoryUpdatePayload | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveAlsoPublish, setSaveAlsoPublish] = useState(false);
@@ -295,11 +294,11 @@ function RepositoriesEditInner() {
     try {
       const result =
         loadedKind === "rpm" && rpm
-          ? await pulpRepositoryManagementService.updateRpm(pulpHref, rpm)
+          ? await pulpRepositoryManagementService.update(loadedKind, pulpHref, rpm)
           : loadedKind === "deb" && deb
-            ? await pulpRepositoryManagementService.updateDeb(pulpHref, deb)
+            ? await pulpRepositoryManagementService.update(loadedKind, pulpHref, deb)
             : loadedKind === "file" && fileRepo
-              ? await pulpRepositoryManagementService.updateFile(pulpHref, fileRepo)
+              ? await pulpRepositoryManagementService.update(loadedKind, pulpHref, fileRepo)
             : null;
       if (!result) {
         setError("Nothing to save.");
@@ -341,12 +340,7 @@ function RepositoriesEditInner() {
           { id: publishLineId, label: "Publish — create publication from repository", phase: "running" },
         ]);
         try {
-          const published =
-            loadedKind === "rpm"
-              ? await pulpRepositoryManagementService.publishRpm(pulpHref)
-              : loadedKind === "deb"
-                ? await pulpRepositoryManagementService.publishDeb(pulpHref)
-                : await pulpRepositoryManagementService.publishFile(pulpHref);
+          const published = await pulpRepositoryManagementService.publish(loadedKind, pulpHref);
           const pubDetail = [
             published.publication ? `publication: ${published.publication}` : null,
             published.task ? `task: ${published.task}` : null,
@@ -622,12 +616,12 @@ function RepositoriesEditInner() {
                   </FormField>
                   <ChecksumSelect
                     label="Metadata checksum type"
-                    value={rpm.metadata_checksum_type}
+                    value={rpm.metadata_checksum_type ?? null}
                     onChange={(v) => setRpm({ ...rpm, metadata_checksum_type: v })}
                   />
                   <ChecksumSelect
                     label="Package checksum type"
-                    value={rpm.package_checksum_type}
+                    value={rpm.package_checksum_type ?? null}
                     onChange={(v) => setRpm({ ...rpm, package_checksum_type: v })}
                   />
                   <FormField label="GPG check (0 or 1)">

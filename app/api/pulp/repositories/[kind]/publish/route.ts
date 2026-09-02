@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { findPulpPlugin } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
@@ -15,10 +16,22 @@ type PublishBody = {
   pulp_href?: string;
 };
 
-export async function POST(request: Request) {
+export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
+  }
+  if (!plugin.supportsPublish || !plugin.publicationPath) {
+    return Response.json(
+      { detail: `${plugin.label} repositories cannot be published.` },
+      { status: 400 }
+    );
   }
 
   const body = (await request.json()) as PublishBody;
@@ -33,10 +46,13 @@ export async function POST(request: Request) {
 
   const repository = toPulpHrefPath(repoHref);
 
-  const publishResponse = await fetch(getPulpApiUrl("/publications/rpm/rpm/"), {
+  const publishResponse = await fetch(getPulpApiUrl(plugin.publicationPath), {
     method: "POST",
     headers,
-    body: JSON.stringify({ repository }),
+    body: JSON.stringify({
+      repository,
+      ...(plugin.publicationDefaults ?? {}),
+    }),
     cache: "no-store",
   });
 

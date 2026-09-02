@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
+import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
@@ -9,23 +10,23 @@ import {
   waitForTask,
 } from "../_server";
 
-type PulpRpmRepositoryRow = {
+type PulpRepositoryRow = {
   name: string;
   pulp_href: string;
 };
 
-type PulpRpmRepositoryListResponse = {
+type PulpRepositoryListResponse = {
   count: number;
   next: string | null;
   previous: string | null;
-  results: PulpRpmRepositoryRow[];
+  results: PulpRepositoryRow[];
 };
 
 type DeleteBody = {
   pulp_href?: string;
 };
 
-type RpmPatchBody = {
+type RepositoryPatchBody = {
   pulp_href?: string;
   name?: string;
   description?: string | null;
@@ -39,15 +40,11 @@ type RpmPatchBody = {
   gpgcheck?: number;
   repo_gpgcheck?: number;
   sqlite_metadata?: boolean;
+  structured_repo?: boolean;
+  manifest?: string | null;
 };
 
-function nullIfBlankRemote(v: string | null | undefined): string | null {
-  if (v === null || v === undefined) return null;
-  const t = String(v).trim();
-  return t.length ? t : null;
-}
-
-function nullIfBlankChecksum(v: string | null | undefined): string | null {
+function nullIfBlank(v: string | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   const t = String(v).trim();
   return t.length ? t : null;
@@ -71,42 +68,93 @@ function toGpgFlag(v: number | undefined): number {
   return 1;
 }
 
-function buildRpmPatchPayload(body: RpmPatchBody, name: string): Record<string, unknown> {
-  return {
+/** Common writable fields plus the plugin's extraRepoFields (see lib/pulp-plugins.ts). */
+function buildPatchPayload(
+  plugin: PulpPluginDescriptor,
+  body: RepositoryPatchBody,
+  name: string
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
     name: name.trim(),
     description:
       body.description === undefined || body.description === null || body.description === ""
         ? null
         : String(body.description),
     retain_repo_versions: toRetainRepoVersions(body.retain_repo_versions),
-    remote: nullIfBlankRemote(body.remote ?? null),
-    autopublish: Boolean(body.autopublish),
-    metadata_signing_service: nullIfBlankRemote(body.metadata_signing_service ?? null),
-    retain_package_versions: toRetainPackageVersions(body.retain_package_versions),
-    metadata_checksum_type: nullIfBlankChecksum(body.metadata_checksum_type ?? null),
-    package_checksum_type: nullIfBlankChecksum(body.package_checksum_type ?? null),
-    gpgcheck: toGpgFlag(body.gpgcheck),
-    repo_gpgcheck: toGpgFlag(body.repo_gpgcheck),
-    sqlite_metadata: Boolean(body.sqlite_metadata),
+    remote: nullIfBlank(body.remote ?? null),
   };
+
+  for (const field of plugin.extraRepoFields) {
+    switch (field) {
+      case "autopublish":
+        payload.autopublish = Boolean(body.autopublish);
+        break;
+      case "metadata_signing_service":
+        payload.metadata_signing_service = nullIfBlank(body.metadata_signing_service ?? null);
+        break;
+      case "retain_package_versions":
+        payload.retain_package_versions = toRetainPackageVersions(body.retain_package_versions);
+        break;
+      case "metadata_checksum_type":
+        payload.metadata_checksum_type = nullIfBlank(body.metadata_checksum_type ?? null);
+        break;
+      case "package_checksum_type":
+        payload.package_checksum_type = nullIfBlank(body.package_checksum_type ?? null);
+        break;
+      case "gpgcheck":
+        payload.gpgcheck = toGpgFlag(body.gpgcheck);
+        break;
+      case "repo_gpgcheck":
+        payload.repo_gpgcheck = toGpgFlag(body.repo_gpgcheck);
+        break;
+      case "sqlite_metadata":
+        payload.sqlite_metadata = Boolean(body.sqlite_metadata);
+        break;
+      case "structured_repo":
+        payload.structured_repo = Boolean(body.structured_repo);
+        break;
+      case "manifest":
+        payload.manifest = nullIfBlank(body.manifest ?? null);
+        break;
+    }
+  }
+
+  return payload;
 }
 
-function isRpmRepositoryApiPath(path: string): boolean {
-  return path.includes("/repositories/rpm/rpm/");
+/** Resolve the {kind} segment to a plugin descriptor, or a 400 response when unknown. */
+async function resolvePlugin(
+  params: Promise<{ kind: string }>
+): Promise<{ ok: true; plugin: PulpPluginDescriptor } | { ok: false; response: Response }> {
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return {
+      ok: false,
+      response: Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 }),
+    };
+  }
+  return { ok: true, plugin };
 }
 
-export async function GET(request: Request) {
+export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
   }
 
+  const pluginResult = await resolvePlugin(params);
+  if (!pluginResult.ok) {
+    return pluginResult.response;
+  }
+  const { plugin } = pluginResult;
+
   const url = new URL(request.url);
   const limit = url.searchParams.get("limit") ?? "200";
   const offset = url.searchParams.get("offset") ?? "0";
 
-  const result = await pulpFetch<PulpRpmRepositoryListResponse>(
-    `/repositories/rpm/rpm/?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+  const result = await pulpFetch<PulpRepositoryListResponse>(
+    `${plugin.repositoryPath}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
     authResult.auth
   );
 
@@ -122,13 +170,19 @@ export async function GET(request: Request) {
   return Response.json(result.data);
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
   }
 
-  const body = (await request.json()) as RpmPatchBody;
+  const pluginResult = await resolvePlugin(params);
+  if (!pluginResult.ok) {
+    return pluginResult.response;
+  }
+  const { plugin } = pluginResult;
+
+  const body = (await request.json()) as RepositoryPatchBody;
   const pulpHref = body.pulp_href?.trim();
   const name = body.name?.trim();
   if (!pulpHref) {
@@ -139,15 +193,15 @@ export async function PATCH(request: Request) {
   }
 
   const apiPath = normalizePulpHrefToApiPath(pulpHref);
-  if (!isRpmRepositoryApiPath(apiPath)) {
-    return Response.json({ detail: "Not an RPM repository href." }, { status: 400 });
+  if (!apiPath.includes(plugin.repositoryPath)) {
+    return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
   }
 
   const authHeader = toBasicAuthHeader(authResult.auth);
   const headers = authHeaders(authHeader);
   headers.set("Content-Type", "application/json");
 
-  const patchPayload = buildRpmPatchPayload(body, name);
+  const patchPayload = buildPatchPayload(plugin, body, name);
 
   const patchResponse = await fetch(getPulpApiUrl(apiPath), {
     method: "PATCH",
@@ -197,10 +251,15 @@ export async function PATCH(request: Request) {
   return Response.json({ detail: await readDetail(patchResponse) }, { status: patchResponse.status });
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const pluginResult = await resolvePlugin(params);
+  if (!pluginResult.ok) {
+    return pluginResult.response;
   }
 
   const body = (await request.json()) as DeleteBody;
