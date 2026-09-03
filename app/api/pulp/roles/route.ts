@@ -32,11 +32,15 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = parseLimit(url.searchParams.get("limit"));
   const offset = parseOffset(url.searchParams.get("offset"));
+  const forObjectType = url.searchParams.get("for_object_type")?.trim();
 
   const qs = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
+  if (forObjectType) {
+    qs.set("for_object_type", forObjectType);
+  }
 
   const result = await pulpFetch<PulpPaginatedResponse<PulpRole>>(
     `/roles/?${qs.toString()}`,

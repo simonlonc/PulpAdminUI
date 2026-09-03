@@ -20,6 +20,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
@@ -238,6 +239,7 @@ function RemotesListPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [busyHref, setBusyHref] = useState<string | null>(null);
   const [labelsTarget, setLabelsTarget] = useState<RemoteRow | null>(null);
+  const [accessTarget, setAccessTarget] = useState<RemoteRow | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -524,6 +526,15 @@ function RemotesListPageContent() {
                             <Button
                               type="button"
                               variant="outline"
+                              className="px-3 py-1.5 text-xs"
+                              onClick={() => setAccessTarget(remote)}
+                              disabled={isLoading || busyHref === remote.pulp_href}
+                            >
+                              Access
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
                               className="border-red-300 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                               onClick={() => void handleDelete(remote)}
                               disabled={isLoading || busyHref === remote.pulp_href}
@@ -759,6 +770,14 @@ function RemotesListPageContent() {
             setLabelsTarget(null);
             void load();
           }}
+        />
+      ) : null}
+
+      {accessTarget ? (
+        <AccessPanelModal
+          pulpHref={accessTarget.pulp_href}
+          resourceName={accessTarget.name}
+          onClose={() => setAccessTarget(null)}
         />
       ) : null}
     </AdminShell>
