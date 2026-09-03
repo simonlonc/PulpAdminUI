@@ -8,7 +8,6 @@ import {
   readDetail,
   TaskRefResponse,
   toPulpHrefPath,
-  waitForTask,
 } from "../../_server";
 
 const RPM_SYNC_POLICIES = ["additive", "mirror_complete", "mirror_content_only"] as const;
@@ -95,17 +94,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const dispatched = (await syncResponse.json()) as TaskRefResponse;
 
-  try {
-    if (dispatched.task) {
-      await waitForTask(dispatched.task, authHeader);
-    }
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Sync task failed." },
-      { status: 500 }
-    );
-  }
-
+  // Sync is dispatch-and-return: a large first sync outlives waitForTask's 5-minute ceiling,
+  // so the task href goes back to the UI to poll instead.
   return Response.json({
     repository: repoApiPath,
     task: dispatched.task ?? null,

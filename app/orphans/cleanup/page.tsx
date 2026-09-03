@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
@@ -112,7 +113,13 @@ export default function OrphanCleanupPage() {
                 Cleanup {result.state}
               </p>
               <p className="mt-1 break-all font-mono text-xs text-emerald-800/80 dark:text-emerald-300/70">
-                Task: {result.task}
+                Task:{" "}
+                <Link
+                  href={`/tasks/detail?pulp_href=${encodeURIComponent(result.task)}`}
+                  className="underline decoration-emerald-400 underline-offset-2"
+                >
+                  {result.task}
+                </Link>
               </p>
               {result.progress_reports.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-emerald-800 dark:text-emerald-200/90">

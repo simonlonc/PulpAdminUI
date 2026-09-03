@@ -29,7 +29,9 @@ type NavIconName =
   | "remotes"
   | "upload"
   | "repos"
-  | "orphans";
+  | "orphans"
+  | "status"
+  | "purge";
 
 type NavItem = {
   href: string;
@@ -47,6 +49,12 @@ const navSections = [
         label: "Dashboard",
         hint: "Overview and quick links",
         icon: "dashboard",
+      },
+      {
+        href: "/status",
+        label: "Server status",
+        hint: "Versions, online services, connectivity, and storage",
+        icon: "status",
       },
     ] satisfies NavItem[],
   },
@@ -91,6 +99,12 @@ const navSections = [
         icon: "tasks",
       },
       {
+        href: "/task-groups/list",
+        label: "Task groups",
+        hint: "Related tasks dispatched together",
+        icon: "tasks",
+      },
+      {
         href: "/task-schedules/list",
         label: "Task schedules",
         hint: "Periodic dispatch and Celery beat schedules",
@@ -112,6 +126,12 @@ const navSections = [
         label: "Orphan cleanup",
         hint: "Remove content and artifacts no longer used by any repository",
         icon: "orphans",
+      },
+      {
+        href: "/tasks/purge",
+        label: "Task purge",
+        hint: "Delete finished task records from the database",
+        icon: "purge",
       },
     ] satisfies NavItem[],
   }
@@ -265,6 +285,37 @@ function SidebarIcon({ name }: { name: NavIconName }) {
           <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
           <path d="M6.5 7 7.3 18.5A2 2 0 0 0 9.3 20.3h5.4a2 2 0 0 0 2-1.8L17.5 7" />
           <path d="M10 10.5v6M14 10.5v6" />
+        </svg>
+      );
+    case "status":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <path d="M3.5 12h4l2.5-6 4 12 2.5-6h4" />
+        </svg>
+      );
+    case "purge":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <path d="M5 7h14" />
+          <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+          <path d="M6.5 7 7.3 18.5A2 2 0 0 0 9.3 20.3h5.4a2 2 0 0 0 2-1.8L17.5 7" />
+          <path d="M9.5 13.5h5" />
         </svg>
       );
     case "remotes":
