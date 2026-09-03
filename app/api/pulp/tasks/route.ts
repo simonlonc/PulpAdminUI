@@ -1,23 +1,23 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "../_helpers";
-import { normalizePulpHrefToApiPath } from "../repositories/_server";
+import { buildUpstreamListParams, normalizePulpHrefToApiPath } from "../repositories/_server";
 import { PulpPaginatedResponse, PulpTask } from "@/services/pulp/types";
 
-function parseOffset(value: string | null): number {
-  const n = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(n) || n < 0) {
-    return 0;
-  }
-  return n;
-}
+/** Task-specific list params /tasks/ accepts beyond the shared ordering/label allowlist. */
+const TASK_LIST_PARAMS = [
+  "name__contains",
+  "state",
+  "started_at__gte",
+  "started_at__lte",
+  "finished_at__gte",
+  "finished_at__lte",
+] as const;
 
-function parseLimit(value: string | null): number {
+/** Tasks default to a smaller page (100) and a hard cap (500) than the shared list default. */
+function clampLimit(value: string | null): number {
   const n = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(n) || n < 1) {
-    return 100;
-  }
-  return Math.min(500, n);
+  return Number.isFinite(n) && n >= 1 ? Math.min(500, n) : 100;
 }
 
 export async function GET(request: Request) {
@@ -27,13 +27,8 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const limit = parseLimit(url.searchParams.get("limit"));
-  const offset = parseOffset(url.searchParams.get("offset"));
-
-  const qs = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-  });
+  const qs = buildUpstreamListParams(url.searchParams, TASK_LIST_PARAMS);
+  qs.set("limit", String(clampLimit(url.searchParams.get("limit"))));
 
   const result = await pulpFetch<PulpPaginatedResponse<PulpTask>>(
     `/tasks/?${qs.toString()}`,

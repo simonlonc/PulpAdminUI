@@ -312,19 +312,19 @@ function RepositoriesEditInner() {
     async function loadRemotes() {
       try {
         const remotes = await pulpRemoteService.list("rpm");
-        if (active) setRpmRemotes(remotes);
+        if (active) setRpmRemotes(remotes.results);
       } catch {
         if (active) setRpmRemotes([]);
       }
       try {
         const remotes = await pulpRemoteService.list("deb");
-        if (active) setDebRemotes(remotes);
+        if (active) setDebRemotes(remotes.results);
       } catch {
         if (active) setDebRemotes([]);
       }
       try {
         const remotes = await pulpRemoteService.list("file");
-        if (active) setFileRemotes(remotes);
+        if (active) setFileRemotes(remotes.results);
       } catch {
         if (active) setFileRemotes([]);
       }

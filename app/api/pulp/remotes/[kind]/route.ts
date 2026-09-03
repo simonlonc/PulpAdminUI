@@ -5,6 +5,7 @@ import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
   authHeaders,
+  buildUpstreamListParams,
   normalizePulpHrefToApiPath,
   PulpPaginatedJson,
   readDetail,
@@ -93,11 +94,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   const { plugin } = pluginResult;
 
   const url = new URL(request.url);
-  const limit = url.searchParams.get("limit") ?? "200";
-  const offset = url.searchParams.get("offset") ?? "0";
+  const queryParams = buildUpstreamListParams(url.searchParams);
 
   const result = await pulpFetch<PulpPaginatedJson<PulpRemote>>(
-    `${plugin.remotePath}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+    `${plugin.remotePath}?${queryParams.toString()}`,
     authResult.auth
   );
 

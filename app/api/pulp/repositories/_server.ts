@@ -100,6 +100,32 @@ export async function readDetail(response: Response): Promise<string> {
   return response.statusText || `Pulp request failed with status ${response.status}.`;
 }
 
+/** List-query params forwarded from an incoming request to a Pulp list endpoint. */
+const FORWARDED_LIST_PARAMS = ["ordering", "name__icontains", "pulp_label_select", "q"] as const;
+
+/**
+ * Builds the query string for a Pulp list endpoint from an incoming request's search params:
+ * limit/offset (with their existing defaults) plus an allowlist of ordering/search/label params.
+ * Anything not on the allowlist is dropped rather than forwarded blindly. `extraAllowedParams`
+ * lets a specific route (e.g. tasks) forward additional param names without making those
+ * forwardable from every route that calls this function.
+ */
+export function buildUpstreamListParams(
+  searchParams: URLSearchParams,
+  extraAllowedParams: readonly string[] = []
+): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set("limit", searchParams.get("limit") ?? "200");
+  params.set("offset", searchParams.get("offset") ?? "0");
+  for (const key of [...FORWARDED_LIST_PARAMS, ...extraAllowedParams]) {
+    const value = searchParams.get(key);
+    if (value !== null) {
+      params.set(key, value);
+    }
+  }
+  return params;
+}
+
 export function getBaseApiPath(): string {
   return new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
 }

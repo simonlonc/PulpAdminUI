@@ -9,12 +9,8 @@ import {
 const TASKS_PATH = "/api/pulp/tasks";
 
 export const pulpTaskService = {
-  async list(params: { limit: number; offset: number }): Promise<PulpPaginatedResponse<PulpTask>> {
-    const qs = new URLSearchParams({
-      limit: String(params.limit),
-      offset: String(params.offset),
-    });
-    const response = await fetch(`${TASKS_PATH}?${qs}`);
+  async list(params: URLSearchParams): Promise<PulpPaginatedResponse<PulpTask>> {
+    const response = await fetch(`${TASKS_PATH}?${params}`);
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
     }

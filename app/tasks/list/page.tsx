@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
@@ -11,6 +10,7 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { FormField } from "@/components/ui/form-field";
 import {
   Table,
   TableBody,
@@ -21,6 +21,10 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { cn } from "@/components/ui/cn";
+import { ListPagination } from "@/components/pulp/list-pagination";
+import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpTaskService } from "@/services/pulp/task-service";
 import { PulpTask } from "@/services/pulp/types";
 
@@ -28,6 +32,20 @@ const PAGE_SIZE = 100;
 
 /** Only these states can be canceled; Pulp rejects a cancel on anything finished. */
 const CANCELABLE_STATES = ["running", "waiting"];
+
+/** GET /tasks/ state filter enum, verified against the live server's OpenAPI spec. */
+const TASK_STATES = [
+  "canceled",
+  "canceling",
+  "completed",
+  "failed",
+  "running",
+  "skipped",
+  "waiting",
+] as const;
+
+const selectClassName =
+  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
 function formatIso(iso: string | null): string {
   if (!iso) {
@@ -58,54 +76,69 @@ function shortTaskName(name: string): string {
   return parts.length > 2 ? parts.slice(-2).join(".") : name;
 }
 
-function paginationItems(current: number, total: number): (number | "ellipsis")[] {
-  if (total <= 1) {
-    return [1];
-  }
-  const delta = 2;
-  const range: number[] = [];
-  for (let i = 1; i <= total; i++) {
-    if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
-      range.push(i);
-    }
-  }
-  const out: (number | "ellipsis")[] = [];
-  let prev: number | undefined;
-  for (const i of range) {
-    if (prev !== undefined && i - prev > 1) {
-      out.push("ellipsis");
-    }
-    out.push(i);
-    prev = i;
-  }
-  return out;
+/** "YYYY-MM-DD" from a date input to the ISO-8601 timestamp Pulp's date-range filters accept. */
+function dateInputToIsoStart(value: string): string {
+  return `${value}T00:00:00.000Z`;
+}
+
+function dateInputToIsoEnd(value: string): string {
+  return `${value}T23:59:59.999Z`;
 }
 
 function TasksListPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const rawPage = searchParams.get("page");
-  const parsed = Number.parseInt(rawPage ?? "1", 10);
-  const page = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { data, loading, totalPages, reload } = usePulpTasks(hasSession, page, PAGE_SIZE);
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery({
+    pageSize: PAGE_SIZE,
+  });
+
+  const [state, setState] = useState("");
+  const [startedAfter, setStartedAfter] = useState("");
+  const [startedBefore, setStartedBefore] = useState("");
+
+  const params = useMemo(() => {
+    const p = buildPulpListParams(query, { searchField: "name", searchLookup: "contains" });
+    if (state) {
+      p.set("state", state);
+    }
+    if (startedAfter) {
+      p.set("started_at__gte", dateInputToIsoStart(startedAfter));
+    }
+    if (startedBefore) {
+      p.set("started_at__lte", dateInputToIsoEnd(startedBefore));
+    }
+    return p;
+  }, [query, state, startedAfter, startedBefore]);
+
+  const { data, loading, totalPages, reload } = usePulpTasks(hasSession, params, query.pageSize);
 
   const [cancelModalTask, setCancelModalTask] = useState<PulpTask | null>(null);
   const [cancelingHref, setCancelingHref] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!data || totalPages < 1 || page <= totalPages) {
+    if (!data || totalPages < 1 || query.page <= totalPages) {
       return;
     }
-    const next = new URLSearchParams(searchParams.toString());
-    next.set("page", String(totalPages));
-    router.replace(`/tasks/list?${next.toString()}`);
-  }, [data, page, router, searchParams, totalPages]);
+    setPage(totalPages);
+  }, [data, query.page, totalPages, setPage]);
+
+  function handleStateChange(value: string) {
+    setState(value);
+    setPage(1);
+  }
+
+  function handleStartedAfterChange(value: string) {
+    setStartedAfter(value);
+    setPage(1);
+  }
+
+  function handleStartedBeforeChange(value: string) {
+    setStartedBefore(value);
+    setPage(1);
+  }
 
   async function confirmCancel() {
     const task = cancelModalTask;
@@ -125,7 +158,6 @@ function TasksListPageContent() {
 
   const tasks = data?.results ?? [];
   const count = data?.count ?? 0;
-  const pages = paginationItems(page, totalPages);
 
   return (
     <AdminShell
@@ -152,53 +184,97 @@ function TasksListPageContent() {
             ) : null}
           </CardTitle>
           <CardContent className="space-y-4">
-            {totalPages > 1 ? (
-              <nav
-                className="flex flex-wrap items-center gap-1 text-sm"
-                aria-label="Task list pagination"
-              >
-                <PaginationLink
-                  href={page > 1 ? `/tasks/list?page=${page - 1}` : null}
-                  label="«"
-                  disabled={page <= 1 || loading}
+            <ListQueryBar
+              search={query.search}
+              onSearchChange={setSearch}
+              pageSize={query.pageSize}
+              onPageSizeChange={setPageSize}
+              disabled={loading}
+              searchPlaceholder="Search by task name"
+              q={query.q}
+              onQChange={setQ}
+            />
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="State">
+                <select
+                  value={state}
+                  onChange={(event) => handleStateChange(event.target.value)}
+                  disabled={loading}
+                  className={selectClassName}
+                >
+                  <option value="">All states</option>
+                  {TASK_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Started after">
+                <input
+                  type="date"
+                  value={startedAfter}
+                  onChange={(event) => handleStartedAfterChange(event.target.value)}
+                  disabled={loading}
+                  className={selectClassName}
                 />
-                {pages.map((item, idx) =>
-                  item === "ellipsis" ? (
-                    <span
-                      key={`e-${idx}`}
-                      className="px-2 text-zinc-400 dark:text-zinc-500"
-                      aria-hidden
-                    >
-                      …
-                    </span>
-                  ) : (
-                    <PaginationLink
-                      key={item}
-                      href={`/tasks/list?page=${item}`}
-                      label={String(item)}
-                      active={item === page}
-                      disabled={loading}
-                    />
-                  )
-                )}
-                <PaginationLink
-                  href={page < totalPages ? `/tasks/list?page=${page + 1}` : null}
-                  label="»"
-                  disabled={page >= totalPages || loading}
+              </FormField>
+              <FormField label="Started before">
+                <input
+                  type="date"
+                  value={startedBefore}
+                  onChange={(event) => handleStartedBeforeChange(event.target.value)}
+                  disabled={loading}
+                  className={selectClassName}
                 />
-              </nav>
-            ) : null}
+              </FormField>
+            </div>
 
             <TableWrapper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell>State</TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="State"
+                        field="state"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
                     <TableHeaderCell>Task</TableHeaderCell>
-                    <TableHeaderCell>Name</TableHeaderCell>
-                    <TableHeaderCell>Created</TableHeaderCell>
-                    <TableHeaderCell>Started</TableHeaderCell>
-                    <TableHeaderCell>Finished</TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Name"
+                        field="name"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Created"
+                        field="pulp_created"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Started"
+                        field="started_at"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Finished"
+                        field="finished_at"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
                     <TableHeaderCell>Worker</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
                   </TableRow>
@@ -283,6 +359,13 @@ function TasksListPageContent() {
                 </TableBody>
               </Table>
             </TableWrapper>
+
+            <ListPagination
+              page={query.page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={loading}
+            />
           </CardContent>
         </Card>
       )}
@@ -369,51 +452,5 @@ export default function TasksListPage() {
     <Suspense fallback={<TasksListSuspenseFallback />}>
       <TasksListPageContent />
     </Suspense>
-  );
-}
-
-const paginationBtnBase =
-  "inline-flex min-w-[2.25rem] items-center justify-center rounded-md px-2 py-1.5 text-sm transition-opacity";
-
-function PaginationLink({
-  href,
-  label,
-  disabled,
-  active,
-}: {
-  href: string | null;
-  label: string;
-  disabled?: boolean;
-  active?: boolean;
-}) {
-  if (!href || disabled) {
-    return (
-      <span
-        className={cn(
-          paginationBtnBase,
-          "cursor-not-allowed border border-zinc-300 opacity-40 dark:border-zinc-700"
-        )}
-        aria-disabled
-      >
-        {label}
-      </span>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      className={cn(
-        paginationBtnBase,
-        active
-          ? "bg-black text-white dark:bg-white dark:text-black"
-          : "border border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/80",
-        active && "pointer-events-none"
-      )}
-      aria-current={active ? "page" : undefined}
-    >
-      {label}
-    </Link>
   );
 }

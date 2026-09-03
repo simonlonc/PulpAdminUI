@@ -38,10 +38,10 @@ export type RepositoryUpdateResult = {
 export const pulpRepositoryManagementService = {
   async list(
     kind: PulpPluginKind,
-    limit = 200,
-    offset = 0
+    params?: URLSearchParams
   ): Promise<PulpPaginatedResponse<PulpRepository>> {
-    const response = await fetch(`/api/pulp/repositories/${kind}?limit=${limit}&offset=${offset}`);
+    const qs = params?.toString();
+    const response = await fetch(`/api/pulp/repositories/${kind}${qs ? `?${qs}` : ""}`);
     if (!response.ok) throw new Error(await readApiDetail(response));
     return (await response.json()) as PulpPaginatedResponse<PulpRepository>;
   },
