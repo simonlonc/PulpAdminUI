@@ -25,6 +25,8 @@ export type PulpPluginDescriptor = {
   remotePath: string;
   /** null when the plugin has no publications endpoint. */
   publicationPath: string | null;
+  /** The `pulp_type` of this plugin's primary content unit, for filtering GET /content/. */
+  contentType: string;
   supportsPublish: boolean;
   supportsSync: boolean;
   /**
@@ -51,6 +53,7 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     repositoryPath: "/repositories/rpm/rpm/",
     remotePath: "/remotes/rpm/rpm/",
     publicationPath: "/publications/rpm/rpm/",
+    contentType: "rpm.package",
     supportsPublish: true,
     supportsSync: true,
     syncFlavor: "sync_policy",
@@ -73,6 +76,7 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     repositoryPath: "/repositories/deb/apt/",
     remotePath: "/remotes/deb/apt/",
     publicationPath: "/publications/deb/apt/",
+    contentType: "deb.package",
     supportsPublish: true,
     supportsSync: true,
     publicationDefaults: { simple: true },
@@ -87,6 +91,7 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     repositoryPath: "/repositories/file/file/",
     remotePath: "/remotes/file/file/",
     publicationPath: "/publications/file/file/",
+    contentType: "file.file",
     supportsPublish: true,
     supportsSync: true,
     syncFlavor: "mirror",

@@ -151,7 +151,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   const { plugin } = pluginResult;
 
   const url = new URL(request.url);
-  const queryParams = buildUpstreamListParams(url.searchParams);
+  const queryParams = buildUpstreamListParams(url.searchParams, ["remote"]);
 
   const result = await pulpFetch<PulpRepositoryListResponse>(
     `${plugin.repositoryPath}?${queryParams.toString()}`,
