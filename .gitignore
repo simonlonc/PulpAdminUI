@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /.idea
+
+# local planning notes, not part of the fork
+TASKS.md
