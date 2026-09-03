@@ -21,6 +21,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
@@ -63,6 +64,7 @@ function DistributionsListPageContent() {
   const [editName, setEditName] = useState("");
   const [editBasePath, setEditBasePath] = useState("");
   const [labelsTarget, setLabelsTarget] = useState<PulpDistribution | null>(null);
+  const [accessTarget, setAccessTarget] = useState<PulpDistribution | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -266,6 +268,14 @@ function DistributionsListPageContent() {
                                   <Button
                                     type="button"
                                     variant="outline"
+                                    onClick={() => setAccessTarget(distribution)}
+                                    disabled={isLoading}
+                                  >
+                                    Access
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
                                     className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                                     onClick={() => removeDistribution(distribution.pulp_href)}
                                     disabled={isLoading}
@@ -303,6 +313,14 @@ function DistributionsListPageContent() {
             setLabelsTarget(null);
             void refreshDistributions();
           }}
+        />
+      ) : null}
+
+      {accessTarget ? (
+        <AccessPanelModal
+          pulpHref={accessTarget.pulp_href}
+          resourceName={accessTarget.name}
+          onClose={() => setAccessTarget(null)}
         />
       ) : null}
     </AdminShell>

@@ -30,11 +30,18 @@ function roleUrl(id: string): string {
 }
 
 export const pulpRoleService = {
-  async list(params: { limit: number; offset: number }): Promise<PulpPaginatedResponse<PulpRole>> {
+  async list(params: {
+    limit: number;
+    offset: number;
+    forObjectType?: string;
+  }): Promise<PulpPaginatedResponse<PulpRole>> {
     const qs = new URLSearchParams({
       limit: String(params.limit),
       offset: String(params.offset),
     });
+    if (params.forObjectType) {
+      qs.set("for_object_type", params.forObjectType);
+    }
     const response = await fetch(`${ROLES_PATH}?${qs}`);
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
