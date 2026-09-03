@@ -21,10 +21,12 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { getPulpPlugin } from "@/lib/pulp-plugins";
+import { PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
@@ -44,7 +46,8 @@ function DistributionsListPageContent() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
+  const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
+    usePulpListQuery();
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
   const [repositoryFilter, setRepositoryFilter] = useState("");
   const requestParams = useMemo(() => {
@@ -54,13 +57,12 @@ function DistributionsListPageContent() {
     }
     return next;
   }, [params, repositoryFilter]);
-  const { distributions, count, updateDistribution, deleteDistribution } = usePulpDistributions(
-    hasSession,
-    requestParams
-  );
+  const { distributions, count, updateDistribution, deleteDistribution, refreshDistributions } =
+    usePulpDistributions(hasSession, requestParams);
   const [editingHref, setEditingHref] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editBasePath, setEditBasePath] = useState("");
+  const [labelsTarget, setLabelsTarget] = useState<PulpDistribution | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -131,6 +133,8 @@ function DistributionsListPageContent() {
               disabled={isLoading}
               q={query.q}
               onQChange={setQ}
+              labelSelect={query.labelSelect}
+              onLabelSelectChange={setLabelSelect}
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Repository">
@@ -164,13 +168,14 @@ function DistributionsListPageContent() {
                     <TableHeaderCell>Base Path</TableHeaderCell>
                     <TableHeaderCell>Base URL</TableHeaderCell>
                     <TableHeaderCell>Created</TableHeaderCell>
+                    <TableHeaderCell>Labels</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {distributions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-zinc-500">
+                      <TableCell colSpan={6} className="text-zinc-500">
                         No distributions found.
                       </TableCell>
                     </TableRow>
@@ -211,6 +216,9 @@ function DistributionsListPageContent() {
                             </a>
                           </TableCell>
                           <TableCell>{distribution.pulp_created}</TableCell>
+                          <TableCell>
+                            <LabelChips labels={distribution.pulp_labels} />
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {isEditing ? (
@@ -250,6 +258,14 @@ function DistributionsListPageContent() {
                                   <Button
                                     type="button"
                                     variant="outline"
+                                    onClick={() => setLabelsTarget(distribution)}
+                                    disabled={isLoading}
+                                  >
+                                    Labels
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
                                     className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                                     onClick={() => removeDistribution(distribution.pulp_href)}
                                     disabled={isLoading}
@@ -276,6 +292,19 @@ function DistributionsListPageContent() {
           </CardContent>
         </Card>
       )}
+
+      {labelsTarget ? (
+        <LabelEditorModal
+          pulpHref={labelsTarget.pulp_href}
+          resourceName={labelsTarget.name}
+          labels={labelsTarget.pulp_labels}
+          onClose={() => setLabelsTarget(null)}
+          onSaved={() => {
+            setLabelsTarget(null);
+            void refreshDistributions();
+          }}
+        />
+      ) : null}
     </AdminShell>
   );
 }
