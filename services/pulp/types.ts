@@ -213,8 +213,22 @@ export type PulpRemote = {
   client_cert: string | null;
   proxy_url: string | null;
   download_concurrency: number | null;
-  /** Debian APT only: space-separated list of distributions to sync. */
+  /** Debian APT only: whitespace-separated list of distributions to sync. */
   distributions?: string | null;
+  /** Debian APT only: whitespace-separated list of components; null syncs all available. */
+  components?: string | null;
+  /** Debian APT only: whitespace-separated list of architectures; null syncs all available. */
+  architectures?: string | null;
+  /** Debian APT only. */
+  sync_sources?: boolean;
+  /** Debian APT only. */
+  sync_udebs?: boolean;
+  /** Debian APT only. */
+  sync_installer?: boolean;
+  /** Debian APT only: GPG public key the origin releases are verified against. */
+  gpgkey?: string | null;
+  /** Debian APT only. */
+  ignore_missing_package_indices?: boolean;
 };
 
 /** POST .../remotes/{plugin}/{type}/ — matches the Pulp remote create body. */
@@ -230,8 +244,22 @@ export type RemoteCreatePayload = {
   client_cert: string | null;
   client_key: string | null;
   download_concurrency: number | null;
-  /** Debian APT only. */
+  /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
+  /** Debian APT only. */
+  components?: string | null;
+  /** Debian APT only. */
+  architectures?: string | null;
+  /** Debian APT only. */
+  sync_sources?: boolean;
+  /** Debian APT only. */
+  sync_udebs?: boolean;
+  /** Debian APT only. */
+  sync_installer?: boolean;
+  /** Debian APT only. */
+  gpgkey?: string | null;
+  /** Debian APT only. */
+  ignore_missing_package_indices?: boolean;
 };
 
 /** PATCH .../remotes/{plugin}/{type}/{id}/ — all fields optional. Omitted secrets are left unchanged. */
@@ -247,8 +275,22 @@ export type RemoteUpdatePayload = {
   client_cert?: string | null;
   client_key?: string | null;
   download_concurrency?: number | null;
-  /** Debian APT only. */
+  /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
+  /** Debian APT only. */
+  components?: string | null;
+  /** Debian APT only. */
+  architectures?: string | null;
+  /** Debian APT only. */
+  sync_sources?: boolean;
+  /** Debian APT only. */
+  sync_udebs?: boolean;
+  /** Debian APT only. */
+  sync_installer?: boolean;
+  /** Debian APT only. */
+  gpgkey?: string | null;
+  /** Debian APT only. */
+  ignore_missing_package_indices?: boolean;
 };
 
 /** RPM sync strategy (POST .../repositories/rpm/rpm/{id}/sync/). */
