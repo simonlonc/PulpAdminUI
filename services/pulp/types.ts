@@ -90,6 +90,84 @@ export type PulpTask = {
   reserved_resources_record: string[];
 };
 
+/** Task states accepted by POST /tasks/purge/ (OpenAPI components/schemas/StatesEnum). */
+export type PulpTaskPurgeState = "skipped" | "completed" | "failed" | "canceled";
+
+export type PulpTaskPurgePayload = {
+  finished_before: string;
+  states: PulpTaskPurgeState[];
+};
+
+export type PulpTaskPurgeResult = {
+  task: string;
+  state: string;
+  progress_reports: PulpTaskProgressReport[];
+};
+
+/** Group progress reports have no state, unlike task progress reports. */
+export type PulpTaskGroupProgressReport = {
+  message: string;
+  code: string;
+  total: number;
+  done: number;
+  suffix: string | null;
+};
+
+/** Matches OpenAPI components/schemas/MinimalTaskResponse. */
+export type PulpTaskGroupTask = {
+  pulp_href: string;
+  name: string;
+  state: string;
+  started_at: string | null;
+  finished_at: string | null;
+  worker: string | null;
+};
+
+export type PulpTaskGroup = {
+  pulp_href: string;
+  description: string;
+  all_tasks_dispatched: boolean;
+  waiting: number;
+  skipped: number;
+  running: number;
+  completed: number;
+  canceled: number;
+  failed: number;
+  canceling: number;
+  group_progress_reports: PulpTaskGroupProgressReport[];
+  tasks: PulpTaskGroupTask[];
+};
+
+export type PulpStatusVersion = {
+  component: string;
+  version: string;
+  package: string;
+  module: string;
+  domain_compatible: boolean;
+};
+
+export type PulpStatusApp = {
+  name: string;
+  last_heartbeat: string;
+  versions: Record<string, string>;
+};
+
+/**
+ * Matches OpenAPI components/schemas/StatusResponse. redis_connection, storage, and
+ * content_settings are absent on some deployments, so treat them as nullable.
+ */
+export type PulpStatus = {
+  versions: PulpStatusVersion[];
+  online_workers: PulpStatusApp[];
+  online_api_apps: PulpStatusApp[];
+  online_content_apps: PulpStatusApp[];
+  database_connection: { connected: boolean } | null;
+  redis_connection: { connected: boolean } | null;
+  storage: { total: number; used: number; free: number } | null;
+  content_settings: { content_origin: string | null; content_path_prefix: string } | null;
+  domain_enabled: boolean;
+};
+
 export type PulpOrphanCleanupResult = {
   task: string;
   state: string;

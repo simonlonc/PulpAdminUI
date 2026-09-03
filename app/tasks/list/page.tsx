@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpTasks } from "@/components/pulp/use-pulp-tasks";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -20,8 +21,13 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { cn } from "@/components/ui/cn";
+import { pulpTaskService } from "@/services/pulp/task-service";
+import { PulpTask } from "@/services/pulp/types";
 
 const PAGE_SIZE = 100;
+
+/** Only these states can be canceled; Pulp rejects a cancel on anything finished. */
+const CANCELABLE_STATES = ["running", "waiting"];
 
 function formatIso(iso: string | null): string {
   if (!iso) {
@@ -82,12 +88,15 @@ function TasksListPageContent() {
   const parsed = Number.parseInt(rawPage ?? "1", 10);
   const page = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
 
-  const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
+  const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { data, loading, totalPages } = usePulpTasks(hasSession, page, PAGE_SIZE);
+  const { data, loading, totalPages, reload } = usePulpTasks(hasSession, page, PAGE_SIZE);
+
+  const [cancelModalTask, setCancelModalTask] = useState<PulpTask | null>(null);
+  const [cancelingHref, setCancelingHref] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data || totalPages < 1 || page <= totalPages) {
@@ -97,6 +106,22 @@ function TasksListPageContent() {
     next.set("page", String(totalPages));
     router.replace(`/tasks/list?${next.toString()}`);
   }, [data, page, router, searchParams, totalPages]);
+
+  async function confirmCancel() {
+    const task = cancelModalTask;
+    if (!task) return;
+    setCancelingHref(task.pulp_href);
+    setError(null);
+    try {
+      await pulpTaskService.cancel(task.pulp_href);
+      setCancelModalTask(null);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cancel failed.");
+    } finally {
+      setCancelingHref(null);
+    }
+  }
 
   const tasks = data?.results ?? [];
   const count = data?.count ?? 0;
@@ -175,24 +200,25 @@ function TasksListPageContent() {
                     <TableHeaderCell>Started</TableHeaderCell>
                     <TableHeaderCell>Finished</TableHeaderCell>
                     <TableHeaderCell>Worker</TableHeaderCell>
+                    <TableHeaderCell className="text-right">Actions</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {loading && tasks.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-zinc-500">
+                      <TableCell colSpan={8} className="text-zinc-500">
                         Loading tasks…
                       </TableCell>
                     </TableRow>
                   ) : !loading && tasks.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-zinc-500">
+                      <TableCell colSpan={8} className="text-zinc-500">
                         No tasks on this page.
                       </TableCell>
                     </TableRow>
                   ) : (
                     tasks.map((t) => (
-                      <TableRow key={t.pulp_href}>
+                      <TableRow key={t.pulp_href} frozen={cancelingHref === t.pulp_href}>
                         <TableCell>
                           <span
                             className={cn(
@@ -230,6 +256,27 @@ function TasksListPageContent() {
                         <TableCell className="max-w-[10rem] truncate font-mono text-xs">
                           {workerIdFromHref(t.worker)}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Link
+                              href={`/tasks/detail?pulp_href=${encodeURIComponent(t.pulp_href)}`}
+                              className="inline-flex rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                            >
+                              Details
+                            </Link>
+                            {CANCELABLE_STATES.includes(t.state) ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="px-2.5 py-1 text-xs border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                disabled={cancelingHref === t.pulp_href}
+                                onClick={() => setCancelModalTask(t)}
+                              >
+                                Cancel
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -239,6 +286,58 @@ function TasksListPageContent() {
           </CardContent>
         </Card>
       )}
+
+      {cancelModalTask ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && cancelingHref === null) {
+              setCancelModalTask(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Cancel task ${taskIdFromHref(cancelModalTask.pulp_href)}`}
+            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Cancel task</h2>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                {shortTaskName(cancelModalTask.name)}
+              </span>
+              <span className="mt-1 block break-all font-mono text-xs text-zinc-500">
+                {cancelModalTask.pulp_href}
+              </span>
+            </p>
+            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+              Work already done by the task is not rolled back. A task that finished before the
+              request reaches Pulp cannot be canceled.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={cancelingHref !== null}
+                onClick={() => setCancelModalTask(null)}
+              >
+                Keep running
+              </Button>
+              <Button
+                type="button"
+                className="border-red-300 bg-red-600 text-white hover:bg-red-700 dark:border-red-800 dark:bg-red-700 dark:hover:bg-red-600"
+                disabled={cancelingHref !== null}
+                onClick={() => void confirmCancel()}
+              >
+                {cancelingHref !== null ? "Canceling…" : "Cancel task"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminShell>
   );
 }

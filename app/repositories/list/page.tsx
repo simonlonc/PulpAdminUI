@@ -385,7 +385,7 @@ export default function RepositoriesListPage() {
       setSyncModalRepo(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed.");
+      setError(e instanceof Error ? e.message : "Failed to start sync.");
     } finally {
       setBusyHref(null);
       setIsSyncing(false);
@@ -537,7 +537,13 @@ export default function RepositoriesListPage() {
                 )}
                 {publishResult.task ? (
                   <p className="mt-1 break-all font-mono text-xs text-emerald-800/80 dark:text-emerald-300/70">
-                    Task: {publishResult.task}
+                    Task:{" "}
+                    <Link
+                      href={`/tasks/detail?pulp_href=${encodeURIComponent(publishResult.task)}`}
+                      className="underline decoration-emerald-400 underline-offset-2"
+                    >
+                      {publishResult.task}
+                    </Link>
                   </p>
                 ) : null}
               </div>
@@ -574,7 +580,13 @@ export default function RepositoriesListPage() {
                 ) : null}
                 {distributeResult.task ? (
                   <p className="mt-1 break-all font-mono text-xs text-sky-800/80 dark:text-sky-300/70">
-                    Task: {distributeResult.task}
+                    Task:{" "}
+                    <Link
+                      href={`/tasks/detail?pulp_href=${encodeURIComponent(distributeResult.task)}`}
+                      className="underline decoration-sky-400 underline-offset-2"
+                    >
+                      {distributeResult.task}
+                    </Link>
                   </p>
                 ) : null}
                 <Link
@@ -589,15 +601,22 @@ export default function RepositoriesListPage() {
             {syncResult ? (
               <div className="rounded-lg border border-violet-300/80 bg-violet-50/90 p-4 text-sm dark:border-violet-800 dark:bg-violet-950/35">
                 <p className="font-medium text-violet-900 dark:text-violet-100">
-                  Synced “{syncResult.repoName}” ({kind.toUpperCase()})
+                  Sync dispatched for “{syncResult.repoName}” ({kind.toUpperCase()})
                 </p>
                 <p className="mt-1 text-violet-800 dark:text-violet-200/90">
-                  A new repository version is created only if the remote had content the repository did
+                  The sync runs in the background; open the task to follow its progress. A new
+                  repository version is created only if the remote had content the repository did
                   not already have.
                 </p>
                 {syncResult.task ? (
                   <p className="mt-1 break-all font-mono text-xs text-violet-800/80 dark:text-violet-300/70">
-                    Task: {syncResult.task}
+                    Task:{" "}
+                    <Link
+                      href={`/tasks/detail?pulp_href=${encodeURIComponent(syncResult.task)}`}
+                      className="underline decoration-violet-400 underline-offset-2"
+                    >
+                      {syncResult.task}
+                    </Link>
                   </p>
                 ) : null}
               </div>
@@ -882,7 +901,17 @@ export default function RepositoriesListPage() {
                   <span className="font-medium">Href:</span> {createResult.pulp_href ?? "—"}
                 </p>
                 <p className="mt-1 break-all">
-                  <span className="font-medium">Task:</span> {createResult.task ?? "—"}
+                  <span className="font-medium">Task:</span>{" "}
+                  {createResult.task ? (
+                    <Link
+                      href={`/tasks/detail?pulp_href=${encodeURIComponent(createResult.task)}`}
+                      className="underline underline-offset-2"
+                    >
+                      {createResult.task}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
                 </p>
                 {createResult.pulp_href ? (
                   <Link
@@ -1084,7 +1113,7 @@ export default function RepositoriesListPage() {
                 disabled={isSyncing || isLoadingRemotes || !syncRemoteHref}
                 onClick={() => void confirmSync()}
               >
-                {isSyncing ? "Syncing…" : "Start sync"}
+                {isSyncing ? "Starting…" : "Start sync"}
               </Button>
             </div>
           </div>
