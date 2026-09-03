@@ -191,6 +191,7 @@ export type PulpDistribution = {
   base_url: string;
   name: string;
   repository: string | null;
+  pulp_labels: Record<string, string>;
 };
 
 /** Download policy for a remote, shared by every plugin family. */
@@ -209,6 +210,7 @@ export type PulpRemote = {
   url: string;
   policy: PulpRemotePolicy;
   tls_validation: boolean;
+  pulp_labels: Record<string, string>;
   ca_cert: string | null;
   client_cert: string | null;
   proxy_url: string | null;
@@ -350,6 +352,7 @@ export type PulpRepository = {
   name: string;
   pulp_href: string;
   latest_version_href: string | null;
+  pulp_labels: Record<string, string>;
 };
 
 /** Fields from GET /repositories/rpm/rpm/{id}/ used by the edit UI. */

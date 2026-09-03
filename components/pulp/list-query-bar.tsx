@@ -10,6 +10,9 @@ import { PULP_PAGE_SIZES } from "@/lib/pulp-list-query";
 const Q_HELP_TEXT =
   'Combine the endpoint\'s own filters with NOT, AND, OR. Examples: "state=completed AND name__contains=sync", "NOT state=completed". Field names are the same filters this endpoint accepts elsewhere.';
 
+const LABEL_SELECT_HELP_TEXT =
+  'Filter by label. "key" matches any object with that key, "key=value" an exact value, "key!=value" any other value, "!key" objects without the key, and "key~text" a substring match.';
+
 /**
  * Search input plus a page-size select for a Pulp list page, driven by
  * usePulpListQuery. The search box holds its own draft text and only calls
@@ -32,6 +35,9 @@ export type ListQueryBarProps = {
   /** Current `q` complex-filter value. Ignored (and the row hidden) unless onQChange is set. */
   q?: string;
   onQChange?: (q: string) => void;
+  /** Current `pulp_label_select` value. Ignored (and the control hidden) unless onLabelSelectChange is set. */
+  labelSelect?: string;
+  onLabelSelectChange?: (labelSelect: string) => void;
 };
 
 export function ListQueryBar({
@@ -44,10 +50,13 @@ export function ListQueryBar({
   showSearch = true,
   q = "",
   onQChange,
+  labelSelect = "",
+  onLabelSelectChange,
 }: ListQueryBarProps) {
   const [draft, setDraft] = useState(search);
   const [qDraft, setQDraft] = useState(q);
   const [advancedOpen, setAdvancedOpen] = useState(q.length > 0);
+  const [labelSelectDraft, setLabelSelectDraft] = useState(labelSelect);
 
   useEffect(() => {
     setDraft(search);
@@ -57,10 +66,15 @@ export function ListQueryBar({
     setQDraft(q);
   }, [q]);
 
+  useEffect(() => {
+    setLabelSelectDraft(labelSelect);
+  }, [labelSelect]);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSearchChange(draft.trim());
     onQChange?.(qDraft.trim());
+    onLabelSelectChange?.(labelSelectDraft.trim());
   }
 
   function handleClear() {
@@ -71,6 +85,11 @@ export function ListQueryBar({
   function handleClearQ() {
     setQDraft("");
     onQChange?.("");
+  }
+
+  function handleClearLabelSelect() {
+    setLabelSelectDraft("");
+    onLabelSelectChange?.("");
   }
 
   return (
@@ -111,6 +130,36 @@ export function ListQueryBar({
             ))}
           </select>
         </FormField>
+        {onLabelSelectChange ? (
+          <FormField
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                Label
+                <InfoTooltip text={LABEL_SELECT_HELP_TEXT} />
+              </span>
+            }
+          >
+            <div className="flex gap-2">
+              <Input
+                value={labelSelectDraft}
+                onChange={(event) => setLabelSelectDraft(event.target.value)}
+                placeholder="env=prod"
+                disabled={disabled}
+                className="w-48"
+              />
+              {labelSelectDraft ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={handleClearLabelSelect}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </FormField>
+        ) : null}
         {onQChange ? (
           <Button
             type="button"
