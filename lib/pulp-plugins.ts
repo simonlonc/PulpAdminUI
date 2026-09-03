@@ -13,6 +13,22 @@
 /** Sync request body accepted by a repository's sync/ endpoint. */
 export type PulpSyncFlavor = "sync_policy" | "mirror";
 
+/**
+ * A writable remote field a plugin adds beyond the common set.
+ *
+ * Routes coerce the value by `type` and pages render it from `label` and
+ * `placeholder`, so a plugin's extra fields need no per-kind branches.
+ */
+export type PulpRemoteField = {
+  /** Pulp field name, sent verbatim in the request body. */
+  name: string;
+  type: "string" | "boolean";
+  /** Rejected before the request when blank. Pulp requires it on create. */
+  required?: boolean;
+  label: string;
+  placeholder?: string;
+};
+
 export type PulpPluginKind = "rpm" | "deb" | "file";
 
 export type PulpPluginDescriptor = {
@@ -39,8 +55,8 @@ export type PulpPluginDescriptor = {
    * "mirror": { remote, mirror, optimize } (generic RepositorySyncURL).
    */
   syncFlavor: PulpSyncFlavor;
-  /** Writable remote fields beyond the common set, in Pulp field-name form. */
-  extraRemoteFields: readonly string[];
+  /** Writable remote fields beyond the common set. */
+  extraRemoteFields: readonly PulpRemoteField[];
   /** Writable repository fields beyond the common set, in Pulp field-name form. */
   extraRepoFields: readonly string[];
 };
@@ -81,7 +97,36 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     supportsSync: true,
     publicationDefaults: { simple: true },
     syncFlavor: "mirror",
-    extraRemoteFields: ["distributions"],
+    extraRemoteFields: [
+      {
+        name: "distributions",
+        type: "string",
+        required: true,
+        label: "Distributions",
+        placeholder: "bookworm bookworm-updates",
+      },
+      { name: "components", type: "string", label: "Components", placeholder: "main contrib" },
+      {
+        name: "architectures",
+        type: "string",
+        label: "Architectures",
+        placeholder: "amd64 arm64",
+      },
+      {
+        name: "gpgkey",
+        type: "string",
+        label: "GPG public key",
+        placeholder: "-----BEGIN PGP PUBLIC KEY BLOCK-----",
+      },
+      { name: "sync_sources", type: "boolean", label: "Sync source packages" },
+      { name: "sync_udebs", type: "boolean", label: "Sync installer (udeb) packages" },
+      { name: "sync_installer", type: "boolean", label: "Sync installer files" },
+      {
+        name: "ignore_missing_package_indices",
+        type: "boolean",
+        label: "Ignore missing package indices",
+      },
+    ],
     extraRepoFields: ["structured_repo"],
   },
   {

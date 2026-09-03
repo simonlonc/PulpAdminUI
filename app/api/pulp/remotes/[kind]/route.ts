@@ -28,7 +28,6 @@ type RemoteBody = {
   client_cert?: string | null;
   client_key?: string | null;
   download_concurrency?: number | null;
-  distributions?: string | null;
 };
 
 function trimOrNull(value: unknown): string | null {
@@ -52,6 +51,35 @@ function parseNullableConcurrency(value: unknown): number | null {
 
 function isRemoteApiPath(plugin: PulpPluginDescriptor, path: string): boolean {
   return path.includes(plugin.remotePath);
+}
+
+/**
+ * Copy the plugin's extra remote fields out of the request body.
+ * `onlySupplied` skips fields the caller omitted, which is what PATCH needs so an
+ * untouched field is left alone. Returns a 400 response when a required field is blank.
+ */
+function assignExtraRemoteFields(
+  target: Record<string, unknown>,
+  plugin: PulpPluginDescriptor,
+  body: RemoteBody,
+  onlySupplied: boolean
+): Response | null {
+  const source = body as Record<string, unknown>;
+  for (const field of plugin.extraRemoteFields) {
+    if (onlySupplied && source[field.name] === undefined) {
+      continue;
+    }
+    if (field.type === "boolean") {
+      target[field.name] = Boolean(source[field.name]);
+      continue;
+    }
+    const value = trimOrNull(source[field.name]);
+    if (field.required && value === null) {
+      return Response.json({ detail: `${field.label} is required.` }, { status: 400 });
+    }
+    target[field.name] = value;
+  }
+  return null;
 }
 
 /** Only include a secret in the payload when a non-empty value was supplied, so PATCH never clears it. */
@@ -144,8 +172,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     client_cert: trimOrNull(body.client_cert),
     download_concurrency: parseNullableConcurrency(body.download_concurrency),
   };
-  if (plugin.extraRemoteFields.includes("distributions")) {
-    payload.distributions = trimOrNull(body.distributions);
+  const extraError = assignExtraRemoteFields(payload, plugin, body, false);
+  if (extraError) {
+    return extraError;
   }
   assignSecretIfPresent(payload, "username", body.username);
   assignSecretIfPresent(payload, "password", body.password);
@@ -223,8 +252,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
   if (body.download_concurrency !== undefined) {
     patchPayload.download_concurrency = parseNullableConcurrency(body.download_concurrency);
   }
-  if (plugin.extraRemoteFields.includes("distributions") && body.distributions !== undefined) {
-    patchPayload.distributions = trimOrNull(body.distributions);
+  const extraError = assignExtraRemoteFields(patchPayload, plugin, body, true);
+  if (extraError) {
+    return extraError;
   }
   // Secrets are only sent when a new value is supplied; omitting them leaves Pulp's stored value intact.
   assignSecretIfPresent(patchPayload, "username", body.username);
