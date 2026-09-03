@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "../_helpers";
+import { buildUpstreamListParams } from "../repositories/_server";
 
 type PulpDistribution = {
   pulp_href: string;
@@ -20,14 +21,17 @@ type PulpListResponse<T> = {
   results: T[];
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
   }
 
+  const url = new URL(request.url);
+  const qs = buildUpstreamListParams(url.searchParams);
+
   const result = await pulpFetch<PulpListResponse<PulpDistribution>>(
-    "/distributions/",
+    `/distributions/?${qs.toString()}`,
     authResult.auth
   );
   if (!result.ok) {

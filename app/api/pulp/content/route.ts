@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "../_helpers";
+import { buildUpstreamListParams } from "../repositories/_server";
 
 type PulpContentItem = {
   pulp_href: string;
@@ -15,6 +16,9 @@ type PulpPaginatedResponse<T> = {
   results: T[];
 };
 
+/** GET /content/ has no name filter of any kind; only pulp_type narrows results. */
+const CONTENT_LIST_PARAMS = ["pulp_type"] as const;
+
 export async function GET(request: Request) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
@@ -22,11 +26,13 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const limit = url.searchParams.get("limit") ?? "50";
-  const offset = url.searchParams.get("offset") ?? "0";
+  const qs = buildUpstreamListParams(url.searchParams, CONTENT_LIST_PARAMS);
+  if (!url.searchParams.get("limit")) {
+    qs.set("limit", "50");
+  }
 
   const result = await pulpFetch<PulpPaginatedResponse<PulpContentItem>>(
-    `/content/?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+    `/content/?${qs.toString()}`,
     authResult.auth
   );
 

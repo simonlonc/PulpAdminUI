@@ -1,30 +1,29 @@
 import { readApiDetail } from "./http";
 import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import {
+  PulpPaginatedResponse,
   PulpRemote,
   RemoteCreatePayload,
   RemoteUpdatePayload,
   ServiceResult,
 } from "./types";
 
-type PulpListResponse<T> = {
-  count: number;
-  results: T[];
-};
-
 function remotesPath(kind: PulpPluginKind): string {
   return `/api/pulp/remotes/${kind}`;
 }
 
 export const pulpRemoteService = {
-  async list(kind: PulpPluginKind): Promise<PulpRemote[]> {
-    const response = await fetch(remotesPath(kind));
+  async list(
+    kind: PulpPluginKind,
+    params?: URLSearchParams
+  ): Promise<PulpPaginatedResponse<PulpRemote>> {
+    const qs = params?.toString();
+    const response = await fetch(`${remotesPath(kind)}${qs ? `?${qs}` : ""}`);
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
     }
 
-    const payload = (await response.json()) as PulpListResponse<PulpRemote>;
-    return payload.results;
+    return (await response.json()) as PulpPaginatedResponse<PulpRemote>;
   },
 
   async create(kind: PulpPluginKind, payload: RemoteCreatePayload): Promise<PulpRemote> {

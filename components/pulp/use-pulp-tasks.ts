@@ -5,27 +5,25 @@ import { usePulpAuthContext } from "./auth-context";
 import { PulpPaginatedResponse, PulpTask } from "@/services/pulp/types";
 import { pulpTaskService } from "@/services/pulp/task-service";
 
-export function usePulpTasks(enabled: boolean, page: number, pageSize: number) {
+export function usePulpTasks(enabled: boolean, params: URLSearchParams, pageSize: number) {
   const { setError } = usePulpAuthContext();
   const [data, setData] = useState<PulpPaginatedResponse<PulpTask> | null>(null);
   const [loading, setLoading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const paramsKey = params.toString();
 
   useEffect(() => {
     let active = true;
 
     async function load() {
-      if (!enabled || page < 1) {
+      if (!enabled) {
         setData(null);
         return;
       }
 
       setLoading(true);
       try {
-        const next = await pulpTaskService.list({
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-        });
+        const next = await pulpTaskService.list(new URLSearchParams(paramsKey));
         if (active) {
           setData(next);
         }
@@ -46,7 +44,7 @@ export function usePulpTasks(enabled: boolean, page: number, pageSize: number) {
     return () => {
       active = false;
     };
-  }, [enabled, page, pageSize, reloadToken, setError]);
+  }, [enabled, paramsKey, reloadToken, setError]);
 
   const totalPages = data == null ? 0 : Math.max(1, Math.ceil(data.count / pageSize));
 

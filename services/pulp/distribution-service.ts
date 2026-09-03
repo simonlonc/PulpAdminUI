@@ -1,5 +1,10 @@
 import { readApiDetail } from "./http";
-import { PulpDistribution, ServiceResult, UpdatePulpDistributionPayload } from "./types";
+import {
+  PulpDistribution,
+  PulpPaginatedResponse,
+  ServiceResult,
+  UpdatePulpDistributionPayload,
+} from "./types";
 
 export type CreateRpmDistributionResult = {
   name: string;
@@ -56,6 +61,7 @@ export const pulpDistributionService = {
     });
   },
 
+  /** Used by app/repositories/list/page.tsx to look up distributions by repository href. */
   async list(): Promise<PulpDistribution[]> {
     const response = await fetch(DISTRIBUTIONS_PATH);
     if (!response.ok) {
@@ -64,6 +70,16 @@ export const pulpDistributionService = {
 
     const payload = (await response.json()) as PulpListResponse<PulpDistribution>;
     return payload.results;
+  },
+
+  /** Paginated variant for app/distributions/list/page.tsx, driven by usePulpListQuery. */
+  async listPaged(params: URLSearchParams): Promise<PulpPaginatedResponse<PulpDistribution>> {
+    const response = await fetch(`${DISTRIBUTIONS_PATH}?${params}`);
+    if (!response.ok) {
+      throw new Error(await readApiDetail(response));
+    }
+
+    return (await response.json()) as PulpPaginatedResponse<PulpDistribution>;
   },
 
   async update(

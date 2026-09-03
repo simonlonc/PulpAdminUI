@@ -5,19 +5,23 @@ import { usePulpAuthContext } from "./auth-context";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
 import { PulpDistribution, UpdatePulpDistributionPayload } from "@/services/pulp/types";
 
-export function usePulpDistributions(enabled: boolean) {
+export function usePulpDistributions(enabled: boolean, params: URLSearchParams) {
   const { setError, setIsLoading } = usePulpAuthContext();
   const [distributions, setDistributions] = useState<PulpDistribution[]>([]);
+  const [count, setCount] = useState(0);
+  const paramsKey = params.toString();
 
   const refreshDistributions = useCallback(async () => {
     if (!enabled) {
       setDistributions([]);
+      setCount(0);
       return;
     }
 
-    const nextDistributions = await pulpDistributionService.list();
-    setDistributions(nextDistributions);
-  }, [enabled]);
+    const page = await pulpDistributionService.listPaged(new URLSearchParams(paramsKey));
+    setDistributions(page.results);
+    setCount(page.count);
+  }, [enabled, paramsKey]);
 
   const runMutation = useCallback(
     async (mutate: () => Promise<{ ok: true } | { ok: false; detail: string }>) => {
@@ -61,13 +65,15 @@ export function usePulpDistributions(enabled: boolean) {
     async function load() {
       if (!enabled) {
         setDistributions([]);
+        setCount(0);
         return;
       }
 
       try {
-        const nextDistributions = await pulpDistributionService.list();
+        const page = await pulpDistributionService.listPaged(new URLSearchParams(paramsKey));
         if (active) {
-          setDistributions(nextDistributions);
+          setDistributions(page.results);
+          setCount(page.count);
         }
       } catch (error) {
         if (active) {
@@ -81,10 +87,11 @@ export function usePulpDistributions(enabled: boolean) {
     return () => {
       active = false;
     };
-  }, [enabled, setError]);
+  }, [enabled, paramsKey, setError]);
 
   return {
     distributions,
+    count,
     refreshDistributions,
     updateDistribution,
     deleteDistribution,

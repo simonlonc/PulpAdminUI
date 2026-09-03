@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
@@ -19,6 +19,9 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { ListPagination } from "@/components/pulp/list-pagination";
+import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 
 function resolveDistributionUrl(raw: string): string {
   const hrefMatch = raw.match(/href="([^"]+)"/i);
@@ -29,16 +32,22 @@ function resolveDistributionUrl(raw: string): string {
   return raw;
 }
 
-export default function DistributionsListPage() {
+function DistributionsListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { distributions, updateDistribution, deleteDistribution } = usePulpDistributions(hasSession);
+  const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
+  const { distributions, count, updateDistribution, deleteDistribution } = usePulpDistributions(
+    hasSession,
+    params
+  );
   const [editingHref, setEditingHref] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editBasePath, setEditBasePath] = useState("");
+
+  const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
   function startEdit(href: string, name: string, basePath: string) {
     setEditingHref(href);
@@ -85,13 +94,36 @@ export default function DistributionsListPage() {
         <Card>Checking existing session...</Card>
       ) : (
         <Card>
-          <CardTitle>Distributions ({distributions.length})</CardTitle>
-          <CardContent>
+          <CardTitle>
+            Distributions
+            {count > 0 ? (
+              <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
+                ({count.toLocaleString()} total)
+              </span>
+            ) : null}
+          </CardTitle>
+          <CardContent className="space-y-4">
+            <ListQueryBar
+              search={query.search}
+              onSearchChange={setSearch}
+              pageSize={query.pageSize}
+              onPageSizeChange={setPageSize}
+              disabled={isLoading}
+              q={query.q}
+              onQChange={setQ}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Name"
+                        field="name"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
                     <TableHeaderCell>Base Path</TableHeaderCell>
                     <TableHeaderCell>Base URL</TableHeaderCell>
                     <TableHeaderCell>Created</TableHeaderCell>
@@ -99,100 +131,144 @@ export default function DistributionsListPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {distributions.map((distribution) => {
-                    const url = resolveDistributionUrl(distribution.base_url);
-                    const isEditing = editingHref === distribution.pulp_href;
-                    return (
-                      <TableRow key={distribution.pulp_href}>
-                        <TableCell className="font-medium">
-                          {isEditing ? (
-                            <Input
-                              value={editName}
-                              onChange={(event) => setEditName(event.target.value)}
-                            />
-                          ) : (
-                            distribution.name
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing ? (
-                            <Input
-                              value={editBasePath}
-                              onChange={(event) => setEditBasePath(event.target.value)}
-                            />
-                          ) : (
-                            distribution.base_path
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline dark:text-blue-400"
-                          >
-                            {url}
-                          </a>
-                        </TableCell>
-                        <TableCell>{distribution.pulp_created}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                  {distributions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-zinc-500">
+                        No distributions found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    distributions.map((distribution) => {
+                      const url = resolveDistributionUrl(distribution.base_url);
+                      const isEditing = editingHref === distribution.pulp_href;
+                      return (
+                        <TableRow key={distribution.pulp_href}>
+                          <TableCell className="font-medium">
                             {isEditing ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={cancelEdit}
-                                  disabled={isLoading}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  onClick={() => saveDistribution(distribution.pulp_href)}
-                                  disabled={isLoading}
-                                >
-                                  Save
-                                </Button>
-                              </>
+                              <Input
+                                value={editName}
+                                onChange={(event) => setEditName(event.target.value)}
+                              />
                             ) : (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() =>
-                                    startEdit(
-                                      distribution.pulp_href,
-                                      distribution.name,
-                                      distribution.base_path
-                                    )
-                                  }
-                                  disabled={isLoading}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                  onClick={() => removeDistribution(distribution.pulp_href)}
-                                  disabled={isLoading}
-                                >
-                                  Delete
-                                </Button>
-                              </>
+                              distribution.name
                             )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input
+                                value={editBasePath}
+                                onChange={(event) => setEditBasePath(event.target.value)}
+                              />
+                            ) : (
+                              distribution.base_path
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline dark:text-blue-400"
+                            >
+                              {url}
+                            </a>
+                          </TableCell>
+                          <TableCell>{distribution.pulp_created}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {isEditing ? (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={cancelEdit}
+                                    disabled={isLoading}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => saveDistribution(distribution.pulp_href)}
+                                    disabled={isLoading}
+                                  >
+                                    Save
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      startEdit(
+                                        distribution.pulp_href,
+                                        distribution.name,
+                                        distribution.base_path
+                                      )
+                                    }
+                                    disabled={isLoading}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                    onClick={() => removeDistribution(distribution.pulp_href)}
+                                    disabled={isLoading}
+                                  >
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </TableWrapper>
+            <ListPagination
+              page={query.page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={isLoading}
+            />
           </CardContent>
         </Card>
       )}
     </AdminShell>
+  );
+}
+
+function DistributionsListSuspenseFallback() {
+  const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
+  const { users } = usePulpUsers(hasSession);
+  const { groups } = usePulpGroups(hasSession);
+
+  return (
+    <AdminShell
+      title="Distributions List"
+      description="View published distributions from your connected Pulp server."
+      hasSession={hasSession}
+      sessionUser={sessionUser}
+      isLoading={isLoading}
+      usersCount={users.length}
+      groupsCount={groups.length}
+      error={error}
+      onLogout={logout}
+    >
+      <Card>Loading distribution list…</Card>
+    </AdminShell>
+  );
+}
+
+export default function DistributionsListPage() {
+  return (
+    <Suspense fallback={<DistributionsListSuspenseFallback />}>
+      <DistributionsListPageContent />
+    </Suspense>
   );
 }

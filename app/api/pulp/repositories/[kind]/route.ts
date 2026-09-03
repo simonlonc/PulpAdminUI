@@ -4,6 +4,7 @@ import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
+  buildUpstreamListParams,
   normalizePulpHrefToApiPath,
   readDetail,
   TaskRefResponse,
@@ -150,11 +151,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   const { plugin } = pluginResult;
 
   const url = new URL(request.url);
-  const limit = url.searchParams.get("limit") ?? "200";
-  const offset = url.searchParams.get("offset") ?? "0";
+  const queryParams = buildUpstreamListParams(url.searchParams);
 
   const result = await pulpFetch<PulpRepositoryListResponse>(
-    `${plugin.repositoryPath}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+    `${plugin.repositoryPath}?${queryParams.toString()}`,
     authResult.auth
   );
 

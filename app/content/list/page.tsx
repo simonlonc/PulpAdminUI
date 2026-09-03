@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
@@ -8,7 +9,6 @@ import { usePulpContent } from "@/components/pulp/use-pulp-content";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -19,23 +19,22 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { ListPagination } from "@/components/pulp/list-pagination";
+import { ListQueryBar } from "@/components/pulp/list-query-bar";
+import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 
-export default function ContentListPage() {
+const PAGE_SIZE = 50;
+
+function ContentListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const {
-    contentItems,
-    count,
-    page,
-    totalPages,
-    canGoNext,
-    canGoPrevious,
-    goNext,
-    goPrevious,
-  } = usePulpContent(hasSession, 20);
+  const { query, params, setPage, setPageSize, setQ } = usePulpListQuery({ pageSize: PAGE_SIZE });
+  const { contentItems, count, loading } = usePulpContent(hasSession, params);
+
+  const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
   return (
     <AdminShell
@@ -54,9 +53,24 @@ export default function ContentListPage() {
       ) : (
         <Card>
           <CardTitle>
-            Content ({count}) - Page {page} / {totalPages}
+            Content
+            {count > 0 ? (
+              <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
+                ({count.toLocaleString()} total)
+              </span>
+            ) : null}
           </CardTitle>
           <CardContent className="space-y-4">
+            <ListQueryBar
+              search={query.search}
+              onSearchChange={() => {}}
+              pageSize={query.pageSize}
+              onPageSizeChange={setPageSize}
+              disabled={loading}
+              showSearch={false}
+              q={query.q}
+              onQChange={setQ}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -68,48 +82,87 @@ export default function ContentListPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {contentItems.map((item) => {
-                    const rpmPackageId = extractRpmPackageContentId(item.pulp_href);
-                    return (
-                      <TableRow key={item.pulp_href}>
-                        <TableCell className="font-mono text-xs">{item.pulp_href}</TableCell>
-                        <TableCell>{item.pulp_created}</TableCell>
-                        <TableCell className="text-xs">
-                          {Object.keys(item.artifacts).join(", ") || "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {rpmPackageId ? (
-                            <Link
-                              href={`/content/packages/${rpmPackageId}`}
-                              className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                            >
-                              View package
-                            </Link>
-                          ) : (
-                            <span className="text-xs text-zinc-500">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {loading && contentItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-zinc-500">
+                        Loading content…
+                      </TableCell>
+                    </TableRow>
+                  ) : !loading && contentItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-zinc-500">
+                        No content on this page.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    contentItems.map((item) => {
+                      const rpmPackageId = extractRpmPackageContentId(item.pulp_href);
+                      return (
+                        <TableRow key={item.pulp_href}>
+                          <TableCell className="font-mono text-xs">{item.pulp_href}</TableCell>
+                          <TableCell>{item.pulp_created}</TableCell>
+                          <TableCell className="text-xs">
+                            {Object.keys(item.artifacts).join(", ") || "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {rpmPackageId ? (
+                              <Link
+                                href={`/content/packages/${rpmPackageId}`}
+                                className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                              >
+                                View package
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-zinc-500">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </TableWrapper>
 
-            <div className="flex items-center justify-between">
-              <Button type="button" variant="outline" onClick={goPrevious} disabled={!canGoPrevious}>
-                Previous
-              </Button>
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                Page {page} of {totalPages}
-              </span>
-              <Button type="button" variant="outline" onClick={goNext} disabled={!canGoNext}>
-                Next
-              </Button>
-            </div>
+            <ListPagination
+              page={query.page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={loading}
+            />
           </CardContent>
         </Card>
       )}
     </AdminShell>
+  );
+}
+
+function ContentListSuspenseFallback() {
+  const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
+  const { users } = usePulpUsers(hasSession);
+  const { groups } = usePulpGroups(hasSession);
+
+  return (
+    <AdminShell
+      title="Content List"
+      description="View all content records from your connected Pulp server."
+      hasSession={hasSession}
+      sessionUser={sessionUser}
+      isLoading={isLoading}
+      usersCount={users.length}
+      groupsCount={groups.length}
+      error={error}
+      onLogout={logout}
+    >
+      <Card>Loading content list…</Card>
+    </AdminShell>
+  );
+}
+
+export default function ContentListPage() {
+  return (
+    <Suspense fallback={<ContentListSuspenseFallback />}>
+      <ContentListPageContent />
+    </Suspense>
   );
 }

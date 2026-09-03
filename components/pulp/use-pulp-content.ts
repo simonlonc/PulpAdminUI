@@ -1,32 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
 import { pulpContentService } from "@/services/pulp/content-service";
 import { PulpContentItem } from "@/services/pulp/types";
 
-function extractOffset(raw: string | null): number | null {
-  if (!raw) return null;
-  const hrefMatch = raw.match(/href="([^"]+)"/i);
-  const normalized = hrefMatch?.[1] ?? raw;
-
-  try {
-    const url = new URL(normalized);
-    const offset = url.searchParams.get("offset");
-    if (!offset) return null;
-    return Number(offset);
-  } catch {
-    return null;
-  }
-}
-
-export function usePulpContent(enabled: boolean, limit = 50) {
+export function usePulpContent(enabled: boolean, params: URLSearchParams) {
   const { setError } = usePulpAuthContext();
   const [items, setItems] = useState<PulpContentItem[]>([]);
   const [count, setCount] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [nextOffset, setNextOffset] = useState<number | null>(null);
-  const [previousOffset, setPreviousOffset] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const paramsKey = params.toString();
 
   useEffect(() => {
     let active = true;
@@ -35,23 +19,25 @@ export function usePulpContent(enabled: boolean, limit = 50) {
       if (!enabled) {
         setItems([]);
         setCount(0);
-        setOffset(0);
-        setNextOffset(null);
-        setPreviousOffset(null);
         return;
       }
 
+      setLoading(true);
       try {
-        const page = await pulpContentService.list(limit, offset);
-        if (!active) return;
-
-        setItems(page.results);
-        setCount(page.count);
-        setNextOffset(extractOffset(page.next));
-        setPreviousOffset(extractOffset(page.previous));
+        const page = await pulpContentService.list(new URLSearchParams(paramsKey));
+        if (active) {
+          setItems(page.results);
+          setCount(page.count);
+        }
       } catch (error) {
         if (active) {
+          setItems([]);
+          setCount(0);
           setError(error instanceof Error ? error.message : "Failed to load content.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
         }
       }
     }
@@ -61,23 +47,7 @@ export function usePulpContent(enabled: boolean, limit = 50) {
     return () => {
       active = false;
     };
-  }, [enabled, limit, offset, setError]);
+  }, [enabled, paramsKey, setError]);
 
-  const page = useMemo(() => Math.floor(offset / limit) + 1, [offset, limit]);
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(count / limit)), [count, limit]);
-
-  return {
-    contentItems: items,
-    count,
-    page,
-    totalPages,
-    canGoNext: nextOffset !== null,
-    canGoPrevious: previousOffset !== null,
-    goNext: () => {
-      if (nextOffset !== null) setOffset(nextOffset);
-    },
-    goPrevious: () => {
-      if (previousOffset !== null) setOffset(previousOffset);
-    },
-  };
+  return { contentItems: items, count, loading };
 }

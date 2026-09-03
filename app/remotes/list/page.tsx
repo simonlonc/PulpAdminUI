@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
@@ -20,6 +20,10 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { ListPagination } from "@/components/pulp/list-pagination";
+import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
 import {
@@ -158,15 +162,17 @@ function formatIso(iso: string | null): string {
   return d.toLocaleString();
 }
 
-export default function RemotesListPage() {
+function RemotesListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remotes, setRemotes] = useState<RemoteRow[]>([]);
+  const [count, setCount] = useState(0);
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -176,20 +182,24 @@ export default function RemotesListPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [busyHref, setBusyHref] = useState<string | null>(null);
 
+  const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
+
   const load = useCallback(async () => {
     if (!hasSession) return;
     setIsLoadingRemotes(true);
     setError(null);
     try {
-      const list = await pulpRemoteService.list(kind);
-      setRemotes(list);
+      const page = await pulpRemoteService.list(kind, buildPulpListParams(query));
+      setRemotes(page.results);
+      setCount(page.count);
     } catch (e) {
       setRemotes([]);
+      setCount(0);
       setError(e instanceof Error ? e.message : "Failed to load remotes.");
     } finally {
       setIsLoadingRemotes(false);
     }
-  }, [hasSession, kind, setError]);
+  }, [hasSession, kind, query, setError]);
 
   useEffect(() => {
     void load();
@@ -313,9 +323,9 @@ export default function RemotesListPage() {
           <div className="flex flex-col gap-3 border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-800/80 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="mb-0">
               Remotes — {kind.toUpperCase()}
-              {remotes.length > 0 ? (
+              {count > 0 ? (
                 <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
-                  ({remotes.length.toLocaleString()} total)
+                  ({count.toLocaleString()} total)
                 </span>
               ) : null}
             </CardTitle>
@@ -338,7 +348,10 @@ export default function RemotesListPage() {
               <button
                 key={plugin.kind}
                 type="button"
-                onClick={() => setKind(plugin.kind)}
+                onClick={() => {
+                  setKind(plugin.kind);
+                  setPage(1);
+                }}
                 className={cn(
                   "rounded-md border px-3 py-1.5 text-sm",
                   kind === plugin.kind
@@ -351,11 +364,27 @@ export default function RemotesListPage() {
             ))}
           </div>
           <CardContent className="space-y-4 p-5">
+            <ListQueryBar
+              search={query.search}
+              onSearchChange={setSearch}
+              pageSize={query.pageSize}
+              onPageSizeChange={setPageSize}
+              disabled={isLoadingRemotes}
+              q={query.q}
+              onQChange={setQ}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Name"
+                        field="name"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
                     <TableHeaderCell>URL</TableHeaderCell>
                     <TableHeaderCell>Policy</TableHeaderCell>
                     <TableHeaderCell>TLS</TableHeaderCell>
@@ -432,6 +461,12 @@ export default function RemotesListPage() {
                 </TableBody>
               </Table>
             </TableWrapper>
+            <ListPagination
+              page={query.page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={isLoadingRemotes}
+            />
           </CardContent>
         </Card>
       )}
@@ -610,5 +645,35 @@ export default function RemotesListPage() {
         </div>
       ) : null}
     </AdminShell>
+  );
+}
+
+function RemotesListSuspenseFallback() {
+  const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
+  const { users } = usePulpUsers(hasSession);
+  const { groups } = usePulpGroups(hasSession);
+
+  return (
+    <AdminShell
+      title="Remotes"
+      description="Remotes describe an upstream repository to sync content from. Create, edit, or remove remotes here, then sync a repository against one."
+      hasSession={hasSession}
+      sessionUser={sessionUser}
+      isLoading={isLoading}
+      usersCount={users.length}
+      groupsCount={groups.length}
+      error={error}
+      onLogout={logout}
+    >
+      <Card>Loading remote list…</Card>
+    </AdminShell>
+  );
+}
+
+export default function RemotesListPage() {
+  return (
+    <Suspense fallback={<RemotesListSuspenseFallback />}>
+      <RemotesListPageContent />
+    </Suspense>
   );
 }

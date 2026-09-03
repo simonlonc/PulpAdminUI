@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useId, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
@@ -40,6 +40,10 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { ListPagination } from "@/components/pulp/list-pagination";
+import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
 import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
@@ -79,7 +83,7 @@ function rpmDistributionsForRepository(
   );
 }
 
-export default function RepositoriesListPage() {
+function RepositoriesListPageContent() {
   const deleteDialogTitleId = useId();
   const createDialogTitleId = useId();
   const router = useRouter();
@@ -90,6 +94,7 @@ export default function RepositoriesListPage() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [items, setItems] = useState<PulpRepository[]>([]);
@@ -154,7 +159,7 @@ export default function RepositoriesListPage() {
     setIsLoadingRepos(true);
     setError(null);
     try {
-      const page = await pulpRepositoryManagementService.list(kind);
+      const page = await pulpRepositoryManagementService.list(kind, buildPulpListParams(query));
       setItems(page.results);
       setCount(page.count);
       try {
@@ -174,7 +179,7 @@ export default function RepositoriesListPage() {
     } finally {
       setIsLoadingRepos(false);
     }
-  }, [hasSession, kind, setError]);
+  }, [hasSession, kind, query, setError]);
 
   useEffect(() => {
     void load();
@@ -193,7 +198,9 @@ export default function RepositoriesListPage() {
     void (async () => {
       try {
         const lists = await Promise.all(
-          PULP_PLUGINS.map(async (plugin) => [plugin.kind, await pulpRemoteService.list(plugin.kind)] as const)
+          PULP_PLUGINS.map(
+            async (plugin) => [plugin.kind, (await pulpRemoteService.list(plugin.kind)).results] as const
+          )
         );
         setRemotesByKind(
           Object.fromEntries(lists) as Record<PulpPluginKind, PulpRemote[]>
@@ -338,7 +345,7 @@ export default function RepositoriesListPage() {
     void (async () => {
       try {
         const remotes = await pulpRemoteService.list(kind);
-        setRemotesByKind((prev) => ({ ...prev, [kind]: remotes }));
+        setRemotesByKind((prev) => ({ ...prev, [kind]: remotes.results }));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load remotes.");
         setRemotesByKind((prev) => ({ ...prev, [kind]: [] }));
@@ -459,6 +466,8 @@ export default function RepositoriesListPage() {
       ? rpmDistributionsForRepository(distributions, deleteModalRepo.pulp_href)
       : [];
 
+  const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
+
   return (
     <AdminShell
       title="Repositories"
@@ -489,6 +498,7 @@ export default function RepositoriesListPage() {
                     setDistributeResult(null);
                     setSyncResult(null);
                     setKind(plugin.kind);
+                    setPage(1);
                   }}
                   className={cn(
                     "rounded-md border px-3 py-1.5 text-sm",
@@ -622,15 +632,32 @@ export default function RepositoriesListPage() {
               </div>
             ) : null}
 
+            <ListQueryBar
+              search={query.search}
+              onSearchChange={setSearch}
+              pageSize={query.pageSize}
+              onPageSizeChange={setPageSize}
+              disabled={isLoadingRepos}
+              q={query.q}
+              onQChange={setQ}
+            />
+
             <TableWrapper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>
+                      <SortableColumnHeader
+                        label="Name"
+                        field="name"
+                        ordering={query.ordering}
+                        onSort={setOrdering}
+                      />
+                    </TableHeaderCell>
                     <TableHeaderCell>Distribution URL</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
-                  </TableRow>  
-                </TableHead> 
+                  </TableRow>
+                </TableHead>
                 <TableBody>
                   {items.map((repo) => {
                     const distributionUrl = distributionUrlByRepo[repo.pulp_href];
@@ -738,6 +765,12 @@ export default function RepositoriesListPage() {
                 </TableBody>
               </Table>
             </TableWrapper>
+            <ListPagination
+              page={query.page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={isLoadingRepos}
+            />
           </CardContent>
         </Card>
       )}
@@ -1120,5 +1153,35 @@ export default function RepositoriesListPage() {
         </div>
       ) : null}
     </AdminShell>
+  );
+}
+
+function RepositoriesListSuspenseFallback() {
+  const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
+  const { users } = usePulpUsers(hasSession);
+  const { groups } = usePulpGroups(hasSession);
+
+  return (
+    <AdminShell
+      title="Repositories"
+      description="List RPM, Debian, and File repositories; publish, create RPM distributions, inspect content, or remove a repository."
+      hasSession={hasSession}
+      sessionUser={sessionUser}
+      isLoading={isLoading}
+      usersCount={users.length}
+      groupsCount={groups.length}
+      error={error}
+      onLogout={logout}
+    >
+      <Card>Loading repository list…</Card>
+    </AdminShell>
+  );
+}
+
+export default function RepositoriesListPage() {
+  return (
+    <Suspense fallback={<RepositoriesListSuspenseFallback />}>
+      <RepositoriesListPageContent />
+    </Suspense>
   );
 }

@@ -4,8 +4,8 @@ import { PulpContentItem, PulpPaginatedResponse, PulpRpmPackage } from "./types"
 const CONTENT_PATH = "/api/pulp/content";
 
 export const pulpContentService = {
-  async list(limit: number, offset: number): Promise<PulpPaginatedResponse<PulpContentItem>> {
-    const response = await fetch(`${CONTENT_PATH}?limit=${limit}&offset=${offset}`);
+  async list(params: URLSearchParams): Promise<PulpPaginatedResponse<PulpContentItem>> {
+    const response = await fetch(`${CONTENT_PATH}?${params}`);
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
     }
