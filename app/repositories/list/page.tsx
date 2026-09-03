@@ -62,6 +62,9 @@ import {
 const repoCreateTextareaClass =
   "min-h-[4rem] w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
+const selectClassName =
+  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
   const map: Record<string, string> = {};
@@ -97,6 +100,7 @@ function RepositoriesListPageContent() {
   const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
+  const [remoteFilter, setRemoteFilter] = useState("");
   const [items, setItems] = useState<PulpRepository[]>([]);
   const [count, setCount] = useState(0);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -159,7 +163,11 @@ function RepositoriesListPageContent() {
     setIsLoadingRepos(true);
     setError(null);
     try {
-      const page = await pulpRepositoryManagementService.list(kind, buildPulpListParams(query));
+      const listParams = buildPulpListParams(query);
+      if (remoteFilter) {
+        listParams.set("remote", remoteFilter);
+      }
+      const page = await pulpRepositoryManagementService.list(kind, listParams);
       setItems(page.results);
       setCount(page.count);
       try {
@@ -179,11 +187,28 @@ function RepositoriesListPageContent() {
     } finally {
       setIsLoadingRepos(false);
     }
-  }, [hasSession, kind, query, setError]);
+  }, [hasSession, kind, query, remoteFilter, setError]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!hasSession) return;
+    void (async () => {
+      try {
+        const remotes = await pulpRemoteService.list(kind);
+        setRemotesByKind((prev) => ({ ...prev, [kind]: remotes.results }));
+      } catch {
+        // Leave remotes empty; "All remotes" still works.
+      }
+    })();
+  }, [hasSession, kind]);
+
+  function handleRemoteFilterChange(value: string) {
+    setRemoteFilter(value);
+    setPage(1);
+  }
 
   useEffect(() => {
     if (searchParams.get("create") !== "1") return;
@@ -498,6 +523,7 @@ function RepositoriesListPageContent() {
                     setDistributeResult(null);
                     setSyncResult(null);
                     setKind(plugin.kind);
+                    setRemoteFilter("");
                     setPage(1);
                   }}
                   className={cn(
@@ -641,6 +667,23 @@ function RepositoriesListPageContent() {
               q={query.q}
               onQChange={setQ}
             />
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Remote">
+                <select
+                  value={remoteFilter}
+                  onChange={(e) => handleRemoteFilterChange(e.target.value)}
+                  disabled={isLoadingRepos}
+                  className={selectClassName}
+                >
+                  <option value="">All remotes</option>
+                  {remotesByKind[kind].map((remote) => (
+                    <option key={remote.pulp_href} value={remote.pulp_href}>
+                      {remote.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
 
             <TableWrapper>
               <Table>

@@ -307,6 +307,7 @@ export type PulpRpmRepository = {
 export type PulpRepository = {
   name: string;
   pulp_href: string;
+  latest_version_href: string | null;
 };
 
 /** Fields from GET /repositories/rpm/rpm/{id}/ used by the edit UI. */

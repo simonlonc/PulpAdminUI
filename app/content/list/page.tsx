@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpContent } from "@/components/pulp/use-pulp-content";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
+import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { FormField } from "@/components/ui/form-field";
 import {
   Table,
   TableBody,
@@ -22,8 +24,12 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { PULP_PLUGINS, getPulpPlugin } from "@/lib/pulp-plugins";
 
 const PAGE_SIZE = 50;
+
+const selectClassName =
+  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
 function ContentListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
@@ -32,9 +38,32 @@ function ContentListPageContent() {
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
   const { query, params, setPage, setPageSize, setQ } = usePulpListQuery({ pageSize: PAGE_SIZE });
-  const { contentItems, count, loading } = usePulpContent(hasSession, params);
+  const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
+  const [repositoryFilter, setRepositoryFilter] = useState("");
+  const [contentTypeFilter, setContentTypeFilter] = useState("");
+  const requestParams = useMemo(() => {
+    const next = new URLSearchParams(params);
+    if (repositoryFilter) {
+      next.set("repository_version", repositoryFilter);
+    }
+    if (contentTypeFilter) {
+      next.set("pulp_type", contentTypeFilter);
+    }
+    return next;
+  }, [params, repositoryFilter, contentTypeFilter]);
+  const { contentItems, count, loading } = usePulpContent(hasSession, requestParams);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
+
+  function handleRepositoryFilterChange(value: string) {
+    setRepositoryFilter(value);
+    setPage(1);
+  }
+
+  function handleContentTypeFilterChange(value: string) {
+    setContentTypeFilter(value);
+    setPage(1);
+  }
 
   return (
     <AdminShell
@@ -71,6 +100,42 @@ function ContentListPageContent() {
               q={query.q}
               onQChange={setQ}
             />
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Repository">
+                <select
+                  value={repositoryFilter}
+                  onChange={(event) => handleRepositoryFilterChange(event.target.value)}
+                  disabled={loading}
+                  className={selectClassName}
+                >
+                  <option value="">All repositories</option>
+                  {repositoryOptions
+                    /* Repositories that have never been synced have no latest_version_href
+                       to filter content by, so they cannot be offered here. */
+                    .filter((option) => option.latestVersionHref !== null)
+                    .map((option) => (
+                      <option key={option.href} value={option.latestVersionHref ?? undefined}>
+                        {option.name} ({getPulpPlugin(option.kind).label})
+                      </option>
+                    ))}
+                </select>
+              </FormField>
+              <FormField label="Content Type">
+                <select
+                  value={contentTypeFilter}
+                  onChange={(event) => handleContentTypeFilterChange(event.target.value)}
+                  disabled={loading}
+                  className={selectClassName}
+                >
+                  <option value="">All content types</option>
+                  {PULP_PLUGINS.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.contentType}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
             <TableWrapper>
               <Table>
                 <TableHead>

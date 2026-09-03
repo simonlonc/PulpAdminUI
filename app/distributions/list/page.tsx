@@ -1,14 +1,16 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
+import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -22,6 +24,10 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { getPulpPlugin } from "@/lib/pulp-plugins";
+
+const selectClassName =
+  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
 function resolveDistributionUrl(raw: string): string {
   const hrefMatch = raw.match(/href="([^"]+)"/i);
@@ -39,15 +45,29 @@ function DistributionsListPageContent() {
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
   const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
+  const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
+  const [repositoryFilter, setRepositoryFilter] = useState("");
+  const requestParams = useMemo(() => {
+    const next = new URLSearchParams(params);
+    if (repositoryFilter) {
+      next.set("repository", repositoryFilter);
+    }
+    return next;
+  }, [params, repositoryFilter]);
   const { distributions, count, updateDistribution, deleteDistribution } = usePulpDistributions(
     hasSession,
-    params
+    requestParams
   );
   const [editingHref, setEditingHref] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editBasePath, setEditBasePath] = useState("");
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
+
+  function handleRepositoryFilterChange(value: string) {
+    setRepositoryFilter(value);
+    setPage(1);
+  }
 
   function startEdit(href: string, name: string, basePath: string) {
     setEditingHref(href);
@@ -112,6 +132,23 @@ function DistributionsListPageContent() {
               q={query.q}
               onQChange={setQ}
             />
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Repository">
+                <select
+                  value={repositoryFilter}
+                  onChange={(event) => handleRepositoryFilterChange(event.target.value)}
+                  disabled={isLoading}
+                  className={selectClassName}
+                >
+                  <option value="">All repositories</option>
+                  {repositoryOptions.map((option) => (
+                    <option key={option.href} value={option.href}>
+                      {option.name} ({getPulpPlugin(option.kind).label})
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
             <TableWrapper>
               <Table>
                 <TableHead>

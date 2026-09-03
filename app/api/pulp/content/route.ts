@@ -16,8 +16,12 @@ type PulpPaginatedResponse<T> = {
   results: T[];
 };
 
-/** GET /content/ has no name filter of any kind; only pulp_type narrows results. */
-const CONTENT_LIST_PARAMS = ["pulp_type"] as const;
+/**
+ * GET /content/ has no name filter of any kind; only pulp_type and
+ * repository_version narrow results. There is no `repository` param -- the
+ * UI passes a repository's latest_version_href as repository_version instead.
+ */
+const CONTENT_LIST_PARAMS = ["pulp_type", "repository_version"] as const;
 
 export async function GET(request: Request) {
   const authResult = await requirePulpAuth();

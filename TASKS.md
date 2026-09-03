@@ -569,8 +569,8 @@ every "task dispatched" banner already present in the app.
 
 ## Epic C — Search, filtering, and pagination
 
-**Status:** C1-C4 DONE — branch `feat/search-filtering-pagination`, commit `ffcd033`,
-merged into `devel`. C5-C7 (simple finders) are on the same branch.
+**Status:** DONE — branch `feat/search-filtering-pagination`. C1-C4 in commit
+`ffcd033` (merged into `devel`); C5-C7 (simple finders) follow on the same branch.
 Verified against the live 3.116.1 test server.
 **Priority:** P1 — highest day-to-day usability gain.
 **Depends on:** A (ideally), so filters are defined once.
@@ -610,21 +610,30 @@ the `NOT` / `AND` / `OR` syntax (e.g. `state=completed AND name__contains=sync`)
 A malformed expression returns `{"q": ["Syntax error in expression."]}`, which
 `pulpErrorDetailFromBody` already renders as readable text.
 
-### C5. Repository finder: by remote
+### C5. Repository finder: by remote (DONE)
 
 `GET /repositories/{kind}/` accepts `remote` (a remote href). Verified live:
 `?remote=/pulp/api/v3/remotes/rpm/rpm/<id>/` returned exactly the repository bound
 to it. Add a remote dropdown beside the search box on `app/repositories/list/page.tsx`,
 listing the current kind's remotes (the page already loads them for the sync modal).
 
-### C6. Distribution finder: by repository
+Landed: `app/api/pulp/repositories/[kind]/route.ts` forwards `remote` via
+`buildUpstreamListParams(url.searchParams, ["remote"])`; `app/repositories/list/page.tsx`
+gained a "Remote" dropdown that resets to page 1 and clears when the kind tab changes.
+
+### C6. Distribution finder: by repository (DONE)
 
 `GET /distributions/` accepts `repository` (a repository href). Verified live:
 `?repository=/pulp/api/v3/repositories/rpm/rpm/<id>/` returned `epel-10-dist`.
 Add a repository dropdown to `app/distributions/list/page.tsx`. Distributions are
 cross-plugin, so the options come from every kind in the registry.
 
-### C7. Content finder: by repository and type
+Landed: `app/api/pulp/distributions/route.ts` forwards `repository`; new shared hook
+`components/pulp/use-pulp-repository-options.ts` gathers repositories across every
+`PULP_PLUGINS` kind with `Promise.allSettled` (one kind failing does not lose the rest)
+and `app/distributions/list/page.tsx` renders them as `name (Plugin Label)`.
+
+### C7. Content finder: by repository and type (DONE)
 
 `GET /content/` accepts `repository_version` (a version href) and `pulp_type`.
 Verified live: `?repository_version=<latest_version_href>` narrowed to that
@@ -634,6 +643,13 @@ The repository dropdown sends the repository's `latest_version_href`, giving
 "content in repository X". The type dropdown is driven by a new `contentType` field
 on the plugin registry (`rpm.package`, `deb.package`, `file.file`) rather than the
 server's full 40-value enum, most of which is for plugins this app does not manage.
+
+Landed: `CONTENT_LIST_PARAMS` in `app/api/pulp/content/route.ts` now forwards
+`repository_version` alongside `pulp_type`; `app/content/list/page.tsx` has both
+dropdowns, reusing C6's hook (extended with `latestVersionHref`). Repositories that
+have never been synced have no `latest_version_href` and are omitted from the picker.
+Note `GET /content/` rejects a plain `repository` param (`Invalid Filter: 'repository'`),
+which is why the filter is version-based.
 
 ---
 

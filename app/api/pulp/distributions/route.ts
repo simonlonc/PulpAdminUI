@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const qs = buildUpstreamListParams(url.searchParams);
+  const qs = buildUpstreamListParams(url.searchParams, ["repository"]);
 
   const result = await pulpFetch<PulpListResponse<PulpDistribution>>(
     `/distributions/?${qs.toString()}`,
