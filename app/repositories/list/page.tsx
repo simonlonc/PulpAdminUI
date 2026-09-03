@@ -28,6 +28,7 @@ import {
   Pencil,
   RefreshCw,
   Share2,
+  Tag,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
@@ -97,7 +99,8 @@ function RepositoriesListPageContent() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
+    usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remoteFilter, setRemoteFilter] = useState("");
@@ -108,6 +111,7 @@ function RepositoriesListPageContent() {
   const [distributionUrlByRepo, setDistributionUrlByRepo] = useState<Record<string, string>>({});
   const [busyHref, setBusyHref] = useState<string | null>(null);
   const [deleteModalRepo, setDeleteModalRepo] = useState<PulpRepository | null>(null);
+  const [labelsTarget, setLabelsTarget] = useState<PulpRepository | null>(null);
   const [deleteAlsoDistributions, setDeleteAlsoDistributions] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [publishResult, setPublishResult] = useState<{
@@ -666,6 +670,8 @@ function RepositoriesListPageContent() {
               disabled={isLoadingRepos}
               q={query.q}
               onQChange={setQ}
+              labelSelect={query.labelSelect}
+              onLabelSelectChange={setLabelSelect}
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Remote">
@@ -698,6 +704,7 @@ function RepositoriesListPageContent() {
                       />
                     </TableHeaderCell>
                     <TableHeaderCell>Distribution URL</TableHeaderCell>
+                    <TableHeaderCell>Labels</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -720,6 +727,9 @@ function RepositoriesListPageContent() {
                         ) : (
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">—</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <LabelChips labels={repo.pulp_labels} />
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
@@ -760,6 +770,10 @@ function RepositoriesListPageContent() {
                                   <Package className="size-4" />
                                   Content
                                 </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setLabelsTarget(repo)}>
+                                <Tag className="size-4" />
+                                Labels
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {getPulpPlugin(kind).supportsSync ? (
@@ -1194,6 +1208,19 @@ function RepositoriesListPageContent() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {labelsTarget ? (
+        <LabelEditorModal
+          pulpHref={labelsTarget.pulp_href}
+          resourceName={labelsTarget.name}
+          labels={labelsTarget.pulp_labels}
+          onClose={() => setLabelsTarget(null)}
+          onSaved={() => {
+            setLabelsTarget(null);
+            void load();
+          }}
+        />
       ) : null}
     </AdminShell>
   );
