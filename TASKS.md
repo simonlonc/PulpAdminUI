@@ -569,8 +569,9 @@ every "task dispatched" banner already present in the app.
 
 ## Epic C — Search, filtering, and pagination
 
-**Status:** DONE — branch `feat/search-filtering-pagination`, commit `ffcd033`,
-merged into `devel`. Verified against the live 3.116.1 test server.
+**Status:** C1-C4 DONE — branch `feat/search-filtering-pagination`, commit `ffcd033`,
+merged into `devel`. C5-C7 (simple finders) are on the same branch.
+Verified against the live 3.116.1 test server.
 **Priority:** P1 — highest day-to-day usability gain.
 **Depends on:** A (ideally), so filters are defined once.
 
@@ -608,6 +609,33 @@ An advanced filter box on all five lists, collapsed by default, with inline help
 the `NOT` / `AND` / `OR` syntax (e.g. `state=completed AND name__contains=sync`).
 A malformed expression returns `{"q": ["Syntax error in expression."]}`, which
 `pulpErrorDetailFromBody` already renders as readable text.
+
+### C5. Repository finder: by remote
+
+`GET /repositories/{kind}/` accepts `remote` (a remote href). Verified live:
+`?remote=/pulp/api/v3/remotes/rpm/rpm/<id>/` returned exactly the repository bound
+to it. Add a remote dropdown beside the search box on `app/repositories/list/page.tsx`,
+listing the current kind's remotes (the page already loads them for the sync modal).
+
+### C6. Distribution finder: by repository
+
+`GET /distributions/` accepts `repository` (a repository href). Verified live:
+`?repository=/pulp/api/v3/repositories/rpm/rpm/<id>/` returned `epel-10-dist`.
+Add a repository dropdown to `app/distributions/list/page.tsx`. Distributions are
+cross-plugin, so the options come from every kind in the registry.
+
+### C7. Content finder: by repository and type
+
+`GET /content/` accepts `repository_version` (a version href) and `pulp_type`.
+Verified live: `?repository_version=<latest_version_href>` narrowed to that
+repository's content, and `pulp_type=rpm.package` returned 35 units. An invalid type
+answers 400 `{"pulp_type": ["Select a valid choice. ..."]}`.
+The repository dropdown sends the repository's `latest_version_href`, giving
+"content in repository X". The type dropdown is driven by a new `contentType` field
+on the plugin registry (`rpm.package`, `deb.package`, `file.file`) rather than the
+server's full 40-value enum, most of which is for plugins this app does not manage.
+
+---
 
 ---
 
