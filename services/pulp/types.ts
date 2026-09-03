@@ -54,6 +54,20 @@ export type PutPulpRolePayload = {
   permissions: string[];
 };
 
+/** One row of GET {href}list_roles/ — users/groups are usernames/group names, not hrefs. */
+export type PulpObjectRole = {
+  role: string;
+  users: string[];
+  groups: string[];
+};
+
+/** Body for POST {href}add_role/ and POST {href}remove_role/. */
+export type PulpObjectRoleAssignmentPayload = {
+  role: string;
+  users: string[];
+  groups: string[];
+};
+
 /** Worker name from Pulp may include HTML (e.g. mailto links). */
 export type PulpWorker = {
   pulp_href: string;

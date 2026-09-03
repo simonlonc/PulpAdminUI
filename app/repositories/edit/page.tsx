@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
+import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
@@ -199,6 +200,7 @@ function RepositoriesEditInner() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
+  const { ensure: ensurePermissions, can: canOnRepo } = usePulpObjectPermissions();
 
   const [loadedKind, setLoadedKind] = useState<RepoKind | null>(null);
   const [rpm, setRpm] = useState<RepositoryUpdatePayload | null>(null);
@@ -298,6 +300,10 @@ function RepositoriesEditInner() {
       active = false;
     };
   }, [hasSession, pulpHref, setError]);
+
+  useEffect(() => {
+    if (hasSession && pulpHref) ensurePermissions(pulpHref);
+  }, [hasSession, pulpHref, ensurePermissions]);
 
   useEffect(() => {
     if (!hasSession) {
@@ -744,7 +750,7 @@ function RepositoriesEditInner() {
                     </label>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || !canOnRepo(pulpHref, "change")}>
                       {isSubmitting ? "Saving…" : "Save"}
                     </Button>
                     <Link
@@ -843,7 +849,7 @@ function RepositoriesEditInner() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || !canOnRepo(pulpHref, "change")}>
                       {isSubmitting ? "Saving…" : "Save"}
                     </Button>
                     <Link
@@ -946,7 +952,7 @@ function RepositoriesEditInner() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || !canOnRepo(pulpHref, "change")}>
                       {isSubmitting ? "Saving…" : "Save"}
                     </Button>
                     <Link

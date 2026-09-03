@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useCallback, useEffect, useId, useState } from "re
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
+import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   Pencil,
   RefreshCw,
   Share2,
+  ShieldCheck,
   Tag,
   Trash2,
   Upload,
@@ -41,6 +43,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
@@ -101,6 +104,7 @@ function RepositoriesListPageContent() {
   const { groups } = usePulpGroups(hasSession);
   const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
     usePulpListQuery();
+  const { ensure: ensurePermissions, can: canOnRepo } = usePulpObjectPermissions();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remoteFilter, setRemoteFilter] = useState("");
@@ -112,6 +116,7 @@ function RepositoriesListPageContent() {
   const [busyHref, setBusyHref] = useState<string | null>(null);
   const [deleteModalRepo, setDeleteModalRepo] = useState<PulpRepository | null>(null);
   const [labelsTarget, setLabelsTarget] = useState<PulpRepository | null>(null);
+  const [accessTarget, setAccessTarget] = useState<PulpRepository | null>(null);
   const [deleteAlsoDistributions, setDeleteAlsoDistributions] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [publishResult, setPublishResult] = useState<{
@@ -733,7 +738,11 @@ function RepositoriesListPageContent() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
-                          <DropdownMenu>
+                          <DropdownMenu
+                            onOpenChange={(open) => {
+                              if (open) ensurePermissions(repo.pulp_href);
+                            }}
+                          >
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
@@ -745,7 +754,10 @@ function RepositoriesListPageContent() {
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-[11rem]">
-                              <DropdownMenuItem asChild>
+                              <DropdownMenuItem
+                                asChild
+                                disabled={!canOnRepo(repo.pulp_href, "change")}
+                              >
                                 <Link
                                   href={`/repositories/edit?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`}
                                 >
@@ -771,14 +783,21 @@ function RepositoriesListPageContent() {
                                   Content
                                 </Link>
                               </DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => setLabelsTarget(repo)}>
+                              <DropdownMenuItem
+                                disabled={!canOnRepo(repo.pulp_href, "change")}
+                                onSelect={() => setLabelsTarget(repo)}
+                              >
                                 <Tag className="size-4" />
                                 Labels
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setAccessTarget(repo)}>
+                                <ShieldCheck className="size-4" />
+                                Access
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {getPulpPlugin(kind).supportsSync ? (
                                 <DropdownMenuItem
-                                  disabled={busyHref === repo.pulp_href}
+                                  disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync")}
                                   onSelect={() => openSyncModal(repo)}
                                 >
                                   <RefreshCw className="size-4" />
@@ -806,7 +825,7 @@ function RepositoriesListPageContent() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 variant="destructive"
-                                disabled={busyHref === repo.pulp_href}
+                                disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "delete")}
                                 onSelect={() => openDeleteModal(repo)}
                               >
                                 <Trash2 className="size-4" />
@@ -1220,6 +1239,14 @@ function RepositoriesListPageContent() {
             setLabelsTarget(null);
             void load();
           }}
+        />
+      ) : null}
+
+      {accessTarget ? (
+        <AccessPanelModal
+          pulpHref={accessTarget.pulp_href}
+          resourceName={accessTarget.name}
+          onClose={() => setAccessTarget(null)}
         />
       ) : null}
     </AdminShell>
