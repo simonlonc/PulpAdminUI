@@ -25,7 +25,12 @@ import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
-import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import {
+  PULP_PLUGINS,
+  getPulpPlugin,
+  type PulpPluginKind,
+  type PulpRemoteField,
+} from "@/lib/pulp-plugins";
 import {
   PulpRemote,
   PulpRemotePolicy,
@@ -52,10 +57,34 @@ type RemoteFormState = {
   client_cert: string;
   client_key: string;
   download_concurrency: string;
-  distributions: string;
+  /** Plugin-specific fields, keyed by Pulp field name (see PulpPluginDescriptor.extraRemoteFields). */
+  extra: Record<string, string | boolean>;
 };
 
-function emptyRemoteForm(): RemoteFormState {
+/** Blank values for the current kind's extra fields, so every input stays controlled. */
+function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean> {
+  const extra: Record<string, string | boolean> = {};
+  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+    extra[field.name] = field.type === "boolean" ? false : "";
+  }
+  return extra;
+}
+
+function extraFieldsFromRemote(
+  remote: RemoteRow,
+  kind: PulpPluginKind
+): Record<string, string | boolean> {
+  const source = remote as Record<string, unknown>;
+  const extra: Record<string, string | boolean> = {};
+  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+    const value = source[field.name];
+    extra[field.name] =
+      field.type === "boolean" ? Boolean(value) : typeof value === "string" ? value : "";
+  }
+  return extra;
+}
+
+function emptyRemoteForm(kind: PulpPluginKind): RemoteFormState {
   return {
     name: "",
     url: "",
@@ -68,11 +97,11 @@ function emptyRemoteForm(): RemoteFormState {
     client_cert: "",
     client_key: "",
     download_concurrency: "",
-    distributions: "",
+    extra: emptyExtraFields(kind),
   };
 }
 
-function formFromRemote(remote: RemoteRow): RemoteFormState {
+function formFromRemote(remote: RemoteRow, kind: PulpPluginKind): RemoteFormState {
   return {
     name: remote.name,
     url: remote.url,
@@ -87,7 +116,7 @@ function formFromRemote(remote: RemoteRow): RemoteFormState {
     client_key: "",
     download_concurrency:
       remote.download_concurrency === null ? "" : String(remote.download_concurrency),
-    distributions: "distributions" in remote ? remote.distributions ?? "" : "",
+    extra: extraFieldsFromRemote(remote, kind),
   };
 }
 
@@ -101,6 +130,35 @@ function parseConcurrency(value: string): number | null {
   if (t === "") return null;
   const n = Number(t);
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : null;
+}
+
+/** The plugin's extra fields, coerced to the shapes Pulp expects. */
+function extraFieldsPayload(
+  form: RemoteFormState,
+  kind: PulpPluginKind
+): Partial<RemoteCreatePayload> {
+  const payload: Record<string, unknown> = {};
+  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+    const value = form.extra[field.name];
+    payload[field.name] =
+      field.type === "boolean" ? Boolean(value) : trimOrNull(typeof value === "string" ? value : "");
+  }
+  return payload as Partial<RemoteCreatePayload>;
+}
+
+/** The extra fields that must be filled in before the form can be submitted. */
+function missingRequiredExtraField(
+  form: RemoteFormState,
+  kind: PulpPluginKind
+): PulpRemoteField | null {
+  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+    if (!field.required) continue;
+    const value = form.extra[field.name];
+    if (typeof value !== "string" || value.trim() === "") {
+      return field;
+    }
+  }
+  return null;
 }
 
 function formToCreatePayload(
@@ -119,10 +177,8 @@ function formToCreatePayload(
     client_cert: trimOrNull(form.client_cert),
     client_key: trimOrNull(form.client_key),
     download_concurrency: parseConcurrency(form.download_concurrency),
+    ...extraFieldsPayload(form, kind),
   };
-  if (getPulpPlugin(kind).extraRemoteFields.includes("distributions")) {
-    payload.distributions = trimOrNull(form.distributions);
-  }
   return payload;
 }
 
@@ -139,10 +195,8 @@ function formToUpdatePayload(
     ca_cert: trimOrNull(form.ca_cert),
     client_cert: trimOrNull(form.client_cert),
     download_concurrency: parseConcurrency(form.download_concurrency),
+    ...extraFieldsPayload(form, kind),
   };
-  if (getPulpPlugin(kind).extraRemoteFields.includes("distributions")) {
-    payload.distributions = trimOrNull(form.distributions);
-  }
   // Only send secrets when the user typed a new value; blank means "leave unchanged".
   const username = form.username.trim();
   const password = form.password.trim();
@@ -177,7 +231,7 @@ function RemotesListPageContent() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<RemoteRow | null>(null);
-  const [form, setForm] = useState<RemoteFormState>(emptyRemoteForm());
+  const [form, setForm] = useState<RemoteFormState>(emptyRemoteForm("rpm"));
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [busyHref, setBusyHref] = useState<string | null>(null);
@@ -211,9 +265,9 @@ function RemotesListPageContent() {
     if (isSaving) return;
     setCreateOpen(false);
     setEditing(null);
-    setForm(emptyRemoteForm());
+    setForm(emptyRemoteForm(kind));
     setModalError(null);
-  }, [isSaving]);
+  }, [isSaving, kind]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -233,14 +287,14 @@ function RemotesListPageContent() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyRemoteForm());
+    setForm(emptyRemoteForm(kind));
     setModalError(null);
     setCreateOpen(true);
   }
 
   function openEdit(remote: RemoteRow) {
     setCreateOpen(false);
-    setForm(formFromRemote(remote));
+    setForm(formFromRemote(remote, kind));
     setModalError(null);
     setEditing(remote);
   }
@@ -255,6 +309,11 @@ function RemotesListPageContent() {
     }
     if (!form.url.trim()) {
       setModalError("Remote URL is required.");
+      return;
+    }
+    const missingField = missingRequiredExtraField(form, kind);
+    if (missingField) {
+      setModalError(`${missingField.label} is required.`);
       return;
     }
 
@@ -275,7 +334,7 @@ function RemotesListPageContent() {
       }
       setCreateOpen(false);
       setEditing(null);
-      setForm(emptyRemoteForm());
+      setForm(emptyRemoteForm(kind));
       await load();
     } catch (e) {
       setModalError(e instanceof Error ? e.message : "Save failed.");
@@ -548,18 +607,45 @@ function RemotesListPageContent() {
                   }
                 />
               </FormField>
-              {getPulpPlugin(kind).extraRemoteFields.includes("distributions") ? (
-                <FormField label="Distributions (optional)">
-                  <Input
-                    value={form.distributions}
-                    onChange={(event) =>
-                      setForm((f) => ({ ...f, distributions: event.target.value }))
-                    }
-                    className="font-mono"
-                    placeholder="bookworm bookworm-updates"
-                  />
-                </FormField>
-              ) : null}
+              {getPulpPlugin(kind).extraRemoteFields.map((field) =>
+                field.type === "boolean" ? (
+                  <label
+                    key={field.name}
+                    className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.extra[field.name])}
+                      onChange={(event) =>
+                        setForm((f) => ({
+                          ...f,
+                          extra: { ...f.extra, [field.name]: event.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4"
+                    />
+                    {field.label}
+                  </label>
+                ) : (
+                  <FormField
+                    key={field.name}
+                    label={field.required ? field.label : `${field.label} (optional)`}
+                  >
+                    <Input
+                      value={String(form.extra[field.name] ?? "")}
+                      onChange={(event) => {
+                        setModalError(null);
+                        setForm((f) => ({
+                          ...f,
+                          extra: { ...f.extra, [field.name]: event.target.value },
+                        }));
+                      }}
+                      className="font-mono"
+                      placeholder={field.placeholder}
+                    />
+                  </FormField>
+                )
+              )}
               <FormField label="Download policy">
                 <select
                   value={form.policy}
