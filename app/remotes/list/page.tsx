@@ -20,6 +20,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
@@ -222,7 +223,8 @@ function RemotesListPageContent() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery();
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
+    usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remotes, setRemotes] = useState<RemoteRow[]>([]);
@@ -235,6 +237,7 @@ function RemotesListPageContent() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [busyHref, setBusyHref] = useState<string | null>(null);
+  const [labelsTarget, setLabelsTarget] = useState<RemoteRow | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -431,6 +434,8 @@ function RemotesListPageContent() {
               disabled={isLoadingRemotes}
               q={query.q}
               onQChange={setQ}
+              labelSelect={query.labelSelect}
+              onLabelSelectChange={setLabelSelect}
             />
             <TableWrapper>
               <Table>
@@ -448,19 +453,20 @@ function RemotesListPageContent() {
                     <TableHeaderCell>Policy</TableHeaderCell>
                     <TableHeaderCell>TLS</TableHeaderCell>
                     <TableHeaderCell>Updated</TableHeaderCell>
+                    <TableHeaderCell>Labels</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {isLoadingRemotes && remotes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-zinc-500">
+                      <TableCell colSpan={7} className="text-zinc-500">
                         Loading remotes…
                       </TableCell>
                     </TableRow>
                   ) : !isLoadingRemotes && remotes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-zinc-500">
+                      <TableCell colSpan={7} className="text-zinc-500">
                         No {kind.toUpperCase()} remotes yet.
                       </TableCell>
                     </TableRow>
@@ -492,6 +498,9 @@ function RemotesListPageContent() {
                         <TableCell className="whitespace-nowrap text-sm">
                           {formatIso(remote.pulp_last_updated ?? remote.pulp_created)}
                         </TableCell>
+                        <TableCell>
+                          <LabelChips labels={remote.pulp_labels} />
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -502,6 +511,15 @@ function RemotesListPageContent() {
                               disabled={isLoading || busyHref === remote.pulp_href}
                             >
                               Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="px-3 py-1.5 text-xs"
+                              onClick={() => setLabelsTarget(remote)}
+                              disabled={isLoading || busyHref === remote.pulp_href}
+                            >
+                              Labels
                             </Button>
                             <Button
                               type="button"
@@ -729,6 +747,19 @@ function RemotesListPageContent() {
             </form>
           </div>
         </div>
+      ) : null}
+
+      {labelsTarget ? (
+        <LabelEditorModal
+          pulpHref={labelsTarget.pulp_href}
+          resourceName={labelsTarget.name}
+          labels={labelsTarget.pulp_labels}
+          onClose={() => setLabelsTarget(null)}
+          onSaved={() => {
+            setLabelsTarget(null);
+            void load();
+          }}
+        />
       ) : null}
     </AdminShell>
   );
