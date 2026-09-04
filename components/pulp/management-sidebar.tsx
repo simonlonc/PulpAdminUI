@@ -24,6 +24,7 @@ type NavIconName =
   | "users"
   | "groups"
   | "roles"
+  | "contentGuards"
   | "content"
   | "distributions"
   | "remotes"
@@ -67,6 +68,12 @@ const navSections = [
     items: [
       { href: "/groups/list", label: "Groups", hint: "Manage team groups", icon: "groups" },
       { href: "/roles/list", label: "Roles", hint: "RBAC roles and permissions", icon: "roles" },
+      {
+        href: "/content-guards/list",
+        label: "Content guards",
+        hint: "Control who may download published content",
+        icon: "contentGuards",
+      },
     ] satisfies NavItem[],
   },
   {
@@ -243,6 +250,22 @@ function SidebarIcon({ name }: { name: NavIconName }) {
         >
           <path d="M12 3.5 6 6v5c0 3.2 2.2 6 6 6.5 3.8-.5 6-3.3 6-6.5V6l-6-2.5Z" />
           <path d="M9.5 12.5v4.2a2.5 2.5 0 0 0 5 0v-4.2" />
+        </svg>
+      );
+    case "contentGuards":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <path d="M12 3.5 6 6v5c0 3.2 2.2 6 6 6.5 3.8-.5 6-3.3 6-6.5V6l-6-2.5Z" />
+          <circle cx="12" cy="10.2" r="1.5" />
+          <path d="M12 11.7 11.1 15.5h1.8L12 11.7Z" />
         </svg>
       );
     case "content":
