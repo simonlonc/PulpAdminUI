@@ -1,10 +1,10 @@
 import type {
-  PulpRpmRepositoryVersion,
-  PulpRpmRepositoryVersionContentKind,
-  PulpRpmRepositoryVersionContentSummary,
+  PulpRepositoryVersion,
+  PulpRepositoryVersionContentKind,
+  PulpRepositoryVersionContentSummary,
 } from "@/services/pulp/types";
 
-function parseKindEntry(v: unknown): PulpRpmRepositoryVersionContentKind | null {
+function parseKindEntry(v: unknown): PulpRepositoryVersionContentKind | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   const count = typeof o.count === "number" ? o.count : 0;
@@ -12,8 +12,8 @@ function parseKindEntry(v: unknown): PulpRpmRepositoryVersionContentKind | null 
   return { count, href };
 }
 
-function parseBucket(v: unknown): Record<string, PulpRpmRepositoryVersionContentKind> {
-  const out: Record<string, PulpRpmRepositoryVersionContentKind> = {};
+function parseBucket(v: unknown): Record<string, PulpRepositoryVersionContentKind> {
+  const out: Record<string, PulpRepositoryVersionContentKind> = {};
   if (!v || typeof v !== "object") return out;
   for (const [key, val] of Object.entries(v as Record<string, unknown>)) {
     const parsed = parseKindEntry(val);
@@ -24,7 +24,7 @@ function parseBucket(v: unknown): Record<string, PulpRpmRepositoryVersionContent
   return out;
 }
 
-function parseContentSummary(raw: unknown): PulpRpmRepositoryVersionContentSummary {
+function parseContentSummary(raw: unknown): PulpRepositoryVersionContentSummary {
   if (!raw || typeof raw !== "object") {
     return { added: {}, removed: {}, present: {} };
   }
@@ -36,7 +36,7 @@ function parseContentSummary(raw: unknown): PulpRpmRepositoryVersionContentSumma
   };
 }
 
-export function mapPulpRpmRepositoryVersion(row: Record<string, unknown>): PulpRpmRepositoryVersion {
+export function mapPulpRepositoryVersion(row: Record<string, unknown>): PulpRepositoryVersion {
   const base =
     row.base_version === null || typeof row.base_version === "string" ? row.base_version : null;
 
@@ -50,6 +50,11 @@ export function mapPulpRpmRepositoryVersion(row: Record<string, unknown>): PulpR
   };
 }
 
-export function isRpmRepositoryVersionInstancePath(apiPath: string): boolean {
-  return /\/repositories\/rpm\/rpm\/[^/]+\/versions\/\d+\/?$/.test(apiPath);
+/** True when apiPath is `{repositoryPath}{uuid}/versions/{number}/` for the given plugin. */
+export function isRepositoryVersionInstancePath(apiPath: string, repositoryPath: string): boolean {
+  if (!apiPath.startsWith(repositoryPath)) {
+    return false;
+  }
+  const rest = apiPath.slice(repositoryPath.length);
+  return /^[^/]+\/versions\/\d+\/?$/.test(rest);
 }

@@ -134,6 +134,12 @@ const navSections = [
         icon: "orphans",
       },
       {
+        href: "/repositories/reclaim",
+        label: "Reclaim space",
+        hint: "Free disk space used by repository artifacts while keeping metadata",
+        icon: "repos",
+      },
+      {
         href: "/tasks/purge",
         label: "Task purge",
         hint: "Delete finished task records from the database",

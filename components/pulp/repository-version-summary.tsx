@@ -1,12 +1,12 @@
 import type {
-  PulpRpmRepositoryVersion,
-  PulpRpmRepositoryVersionContentKind,
+  PulpRepositoryVersion,
+  PulpRepositoryVersionContentKind,
 } from "@/services/pulp/types";
 
 function SummaryBucket({
   bucket,
 }: {
-  bucket: Record<string, PulpRpmRepositoryVersionContentKind>;
+  bucket: Record<string, PulpRepositoryVersionContentKind>;
 }) {
   const keys = Object.keys(bucket);
   if (keys.length === 0) {
@@ -25,7 +25,7 @@ function SummaryBucket({
   );
 }
 
-export function RpmRepositoryVersionSummary({ version }: { version: PulpRpmRepositoryVersion }) {
+export function RepositoryVersionSummary({ version }: { version: PulpRepositoryVersion }) {
   const s = version.content_summary;
   return (
     <div className="grid min-w-[12rem] gap-3 sm:grid-cols-3">
