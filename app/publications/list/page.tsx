@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpPublications } from "@/components/pulp/use-pulp-publications";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
@@ -23,7 +24,7 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
-import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { type PulpPluginDescriptor, type PulpPluginKind } from "@/lib/pulp-plugins";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
@@ -39,8 +40,11 @@ const PULP_TYPE_BY_KIND: Partial<Record<PulpPluginKind, string>> = {
   gem: "gem.gem",
 };
 
-function publicationKindFromHref(href: string): PulpPluginKind | null {
-  for (const plugin of PULP_PLUGINS) {
+function publicationKindFromHref(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): PulpPluginKind | null {
+  for (const plugin of plugins) {
     if (plugin.publicationPath && href.includes(plugin.publicationPath)) {
       return plugin.kind;
     }
@@ -51,6 +55,7 @@ function publicationKindFromHref(href: string): PulpPluginKind | null {
 function PublicationsListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -144,7 +149,7 @@ function PublicationsListPageContent() {
                   <option value="">All repositories</option>
                   {repositoryOptions.map((option) => (
                     <option key={option.href} value={option.href}>
-                      {option.name} ({getPulpPlugin(option.kind).label})
+                      {option.name} ({getPlugin(option.kind).label})
                     </option>
                   ))}
                 </select>
@@ -157,7 +162,7 @@ function PublicationsListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All types</option>
-                  {PULP_PLUGINS.filter((plugin) => PULP_TYPE_BY_KIND[plugin.kind]).map((plugin) => (
+                  {plugins.filter((plugin) => PULP_TYPE_BY_KIND[plugin.kind]).map((plugin) => (
                     <option key={plugin.kind} value={PULP_TYPE_BY_KIND[plugin.kind]}>
                       {plugin.label}
                     </option>
@@ -192,7 +197,7 @@ function PublicationsListPageContent() {
                     </TableRow>
                   ) : (
                     publications.map((publication) => {
-                      const kind = publicationKindFromHref(publication.pulp_href);
+                      const kind = publicationKindFromHref(plugins, publication.pulp_href);
                       const repositoryName = publication.repository
                         ? repositoryNameByHref.get(publication.repository) ?? publication.repository
                         : "-";
@@ -202,7 +207,7 @@ function PublicationsListPageContent() {
                           <TableCell className="font-mono text-xs">
                             {publication.repository_version}
                           </TableCell>
-                          <TableCell>{kind ? getPulpPlugin(kind).label : "Unknown"}</TableCell>
+                          <TableCell>{kind ? getPlugin(kind).label : "Unknown"}</TableCell>
                           <TableCell>{publication.pulp_created}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">

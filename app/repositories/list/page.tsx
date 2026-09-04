@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useId, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -49,7 +50,7 @@ import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
@@ -99,6 +100,7 @@ function RepositoriesListPageContent() {
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -223,20 +225,15 @@ function RepositoriesListPageContent() {
     setPage(1);
   }
 
-  useEffect(() => {
-    if (searchParams.get("create") !== "1") return;
-    setCreateKind(kind);
-    setCreateModalOpen(true);
-    loadCreateRemotes();
-    router.replace("/repositories/list", { scroll: false });
-  }, [searchParams, router, kind]);
-
-  function loadCreateRemotes() {
+  // Memoized because it now closes over the registry from context rather than a module
+  // const, which makes it a real dependency of the create=1 effect below. Declared before
+  // that effect so the dependency array is not evaluated before initialization.
+  const loadCreateRemotes = useCallback(() => {
     setIsLoadingRemotes(true);
     void (async () => {
       try {
         const lists = await Promise.all(
-          PULP_PLUGINS.map(
+          plugins.map(
             async (plugin) => [plugin.kind, (await pulpRemoteService.list(plugin.kind)).results] as const
           )
         );
@@ -249,7 +246,15 @@ function RepositoriesListPageContent() {
         setIsLoadingRemotes(false);
       }
     })();
-  }
+  }, [plugins]);
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") return;
+    setCreateKind(kind);
+    setCreateModalOpen(true);
+    loadCreateRemotes();
+    router.replace("/repositories/list", { scroll: false });
+  }, [searchParams, router, kind, loadCreateRemotes]);
 
   function openCreateModal() {
     setCreateKind(kind);
@@ -297,7 +302,7 @@ function RepositoriesListPageContent() {
     setIsCreating(true);
     setCreateResult(null);
     try {
-      const extraRepoFields = getPulpPlugin(createKind).extraRepoFields;
+      const extraRepoFields = getPlugin(createKind).extraRepoFields;
       const payload: RepositoryCreatePayload = {
         pulp_labels: {},
         name: trimmed,
@@ -413,7 +418,7 @@ function RepositoriesListPageContent() {
     try {
       const result = await pulpRepositoryManagementService.sync(
         kind,
-        getPulpPlugin(kind).syncFlavor === "sync_policy"
+        getPlugin(kind).syncFlavor === "sync_policy"
           ? {
               pulp_href: repo.pulp_href,
               remote: syncRemoteHref,
@@ -440,7 +445,7 @@ function RepositoriesListPageContent() {
 
   function openDeleteModal(repo: PulpRepository) {
     setDeleteModalRepo(repo);
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
     setDeleteAlsoDistributions(linked.length > 0);
   }
 
@@ -474,7 +479,7 @@ function RepositoriesListPageContent() {
     const repo = deleteModalRepo;
     if (!repo) return;
 
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
     setBusyHref(repo.pulp_href);
     setError(null);
     setIsDeleting(true);
@@ -501,7 +506,7 @@ function RepositoriesListPageContent() {
   }
 
   const deleteModalLinked = deleteModalRepo
-    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPulpPlugin(kind).distributionPath)
+    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPlugin(kind).distributionPath)
     : [];
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
@@ -523,7 +528,7 @@ function RepositoriesListPageContent() {
       ) : (
         <Card>
           <CardTitle>
-            Repositories ({count}) — {getPulpPlugin(kind).label}
+            Repositories ({count}) — {getPlugin(kind).label}
           </CardTitle>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -541,7 +546,7 @@ function RepositoriesListPageContent() {
                   disabled={isLoadingRepos}
                   className={selectClassName}
                 >
-                  {PULP_PLUGINS.map((plugin) => (
+                  {plugins.map((plugin) => (
                     <option key={plugin.kind} value={plugin.kind}>
                       {plugin.label}
                     </option>
@@ -600,7 +605,7 @@ function RepositoriesListPageContent() {
             {distributeResult ? (
               <div className="rounded-lg border border-sky-300/80 bg-sky-50/90 p-4 text-sm dark:border-sky-800 dark:bg-sky-950/35">
                 <p className="font-medium text-sky-900 dark:text-sky-100">
-                  {getPulpPlugin(kind).label} distribution created for “{distributeResult.repoName}”
+                  {getPlugin(kind).label} distribution created for “{distributeResult.repoName}”
                 </p>
                 <p className="mt-1 text-sky-800 dark:text-sky-200/90">
                   <span className="font-medium">Distribution name:</span> {distributeResult.name}
@@ -796,7 +801,7 @@ function RepositoriesListPageContent() {
                                 Access
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              {getPulpPlugin(kind).supportsSync ? (
+                              {getPlugin(kind).supportsSync ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync")}
                                   onSelect={() => openSyncModal(repo)}
@@ -805,7 +810,7 @@ function RepositoriesListPageContent() {
                                   Sync
                                 </DropdownMenuItem>
                               ) : null}
-                              {getPulpPlugin(kind).supportsPublish ? (
+                              {getPlugin(kind).supportsPublish ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href}
                                   onSelect={() => void handlePublish(repo)}
@@ -917,7 +922,7 @@ function RepositoriesListPageContent() {
                   disabled={isCreating}
                   className={selectClassName}
                 >
-                  {PULP_PLUGINS.map((plugin) => (
+                  {plugins.map((plugin) => (
                     <option key={plugin.kind} value={plugin.kind}>
                       {plugin.label}
                     </option>
@@ -1071,7 +1076,7 @@ function RepositoriesListPageContent() {
                 />
                 <span>
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                    Also delete linked {getPulpPlugin(kind).label} distribution
+                    Also delete linked {getPlugin(kind).label} distribution
                     {deleteModalLinked.length > 1 ? "s" : ""}
                   </span>
                   <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
@@ -1081,7 +1086,7 @@ function RepositoriesListPageContent() {
               </label>
             ) : (
               <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                No {getPulpPlugin(kind).label} distribution in the list is linked to this repository.
+                No {getPlugin(kind).label} distribution in the list is linked to this repository.
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
@@ -1160,7 +1165,7 @@ function RepositoriesListPageContent() {
                   </span>
                 ) : null}
               </FormField>
-              {getPulpPlugin(kind).syncFlavor === "sync_policy" ? (
+              {getPlugin(kind).syncFlavor === "sync_policy" ? (
                 <FormField label="Sync policy">
                   <select
                     value={syncPolicy}
@@ -1191,7 +1196,7 @@ function RepositoriesListPageContent() {
               )}
               {/* The core RepositorySyncURL has no optimize field and rejects it, so the
                   families on it get no checkbox (see PulpSyncFlavor "mirror_only"). */}
-              {getPulpPlugin(kind).syncFlavor === "mirror_only" ? null : (
+              {getPlugin(kind).syncFlavor === "mirror_only" ? null : (
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
                   <input
                     type="checkbox"

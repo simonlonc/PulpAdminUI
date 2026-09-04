@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
-import { PULP_PLUGINS, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { usePulpPluginsContext } from "./plugins-context";
+import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 
 export type PulpRepositoryOption = {
@@ -20,6 +21,7 @@ export type PulpRepositoryOption = {
  */
 export function usePulpRepositoryOptions(enabled: boolean) {
   const { setError } = usePulpAuthContext();
+  const { plugins } = usePulpPluginsContext();
   const [repositoryOptions, setRepositoryOptions] = useState<PulpRepositoryOption[]>([]);
 
   useEffect(() => {
@@ -32,13 +34,13 @@ export function usePulpRepositoryOptions(enabled: boolean) {
       }
 
       const settled = await Promise.allSettled(
-        PULP_PLUGINS.map((plugin) => pulpRepositoryManagementService.list(plugin.kind))
+        plugins.map((plugin) => pulpRepositoryManagementService.list(plugin.kind))
       );
       if (!active) return;
 
       const nextOptions: PulpRepositoryOption[] = [];
       settled.forEach((result, index) => {
-        const plugin = PULP_PLUGINS[index];
+        const plugin = plugins[index];
         if (result.status === "fulfilled") {
           for (const repo of result.value.results) {
             nextOptions.push({
@@ -66,7 +68,7 @@ export function usePulpRepositoryOptions(enabled: boolean) {
     return () => {
       active = false;
     };
-  }, [enabled, setError]);
+  }, [enabled, setError, plugins]);
 
   return { repositoryOptions };
 }

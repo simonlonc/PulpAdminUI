@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { RepositoryVersionSummary } from "@/components/pulp/repository-version-summary";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -14,7 +15,6 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { CheckboxField } from "@/components/ui/form-field";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
-import { getPulpPlugin, isPulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import type { PulpRepositoryVersion, RepositoryVersionRepairResult } from "@/services/pulp/types";
 
@@ -23,8 +23,9 @@ function RepositoryVersionInner() {
   const searchParams = useSearchParams();
   const pulpHref = searchParams.get("pulp_href")?.trim() ?? "";
   const kindParam = searchParams.get("kind");
-  const kind = isPulpPluginKind(kindParam) ? kindParam : "rpm";
-  const plugin = getPulpPlugin(kind);
+  const { getPlugin, isPluginKind } = usePulpPluginsContext();
+  const kind = isPluginKind(kindParam) ? kindParam : "rpm";
+  const plugin = getPlugin(kind);
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();

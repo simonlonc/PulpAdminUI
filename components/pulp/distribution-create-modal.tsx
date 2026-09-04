@@ -6,9 +6,10 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { usePulpRepositoryOptions } from "./use-pulp-repository-options";
 import { usePulpPublicationOptions } from "./use-pulp-publication-options";
+import { usePulpPluginsContext } from "./plugins-context";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { PulpContentGuard } from "@/services/pulp/types";
 
 const selectClassName =
@@ -24,12 +25,13 @@ export type DistributionCreateModalProps = {
 export function DistributionCreateModal({ onClose, onCreated }: DistributionCreateModalProps) {
   const { repositoryOptions } = usePulpRepositoryOptions(true);
   const { publicationOptions } = usePulpPublicationOptions(true);
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const [contentGuards, setContentGuards] = useState<PulpContentGuard[]>([]);
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const titleId = useId();
 
-  const [kind, setKind] = useState<PulpPluginKind>(PULP_PLUGINS[0].kind);
+  const [kind, setKind] = useState<PulpPluginKind>(plugins[0].kind);
   const [name, setName] = useState("");
   const [basePath, setBasePath] = useState("");
   const [binding, setBinding] = useState<Binding>("none");
@@ -162,7 +164,7 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
               disabled={isSaving}
               className={selectClassName}
             >
-              {PULP_PLUGINS.map((plugin) => (
+              {plugins.map((plugin) => (
                 <option key={plugin.kind} value={plugin.kind}>
                   {plugin.label}
                 </option>
@@ -202,7 +204,7 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
                 <option value="">Select a repository</option>
                 {repositoryOptions.map((option) => (
                   <option key={option.href} value={option.href}>
-                    {option.name} ({getPulpPlugin(option.kind).label})
+                    {option.name} ({getPlugin(option.kind).label})
                   </option>
                 ))}
               </select>
