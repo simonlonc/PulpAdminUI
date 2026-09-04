@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
-import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
+import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
@@ -144,10 +145,11 @@ function assignSecretIfPresent(
 
 /** Resolve the {kind} segment to a plugin descriptor, or a 400 response when unknown. */
 async function resolvePlugin(
-  params: Promise<{ kind: string }>
+  params: Promise<{ kind: string }>,
+  auth: PulpAuth
 ): Promise<{ ok: true; plugin: PulpPluginDescriptor } | { ok: false; response: Response }> {
   const { kind } = await params;
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return {
       ok: false,
@@ -163,7 +165,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     return authResult.response;
   }
 
-  const pluginResult = await resolvePlugin(params);
+  const pluginResult = await resolvePlugin(params, authResult.auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -194,7 +196,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     return authResult.response;
   }
 
-  const pluginResult = await resolvePlugin(params);
+  const pluginResult = await resolvePlugin(params, authResult.auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -250,7 +252,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
     return authResult.response;
   }
 
-  const pluginResult = await resolvePlugin(params);
+  const pluginResult = await resolvePlugin(params, authResult.auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -362,7 +364,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
     return authResult.response;
   }
 
-  const pluginResult = await resolvePlugin(params);
+  const pluginResult = await resolvePlugin(params, authResult.auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }

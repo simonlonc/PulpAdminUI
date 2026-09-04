@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { findPluginForRepositoryHref } from "@/lib/pulp-plugins";
+import { findPluginForRepositoryHrefIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../_server";
 
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     return Response.json({ detail }, { status });
   }
 
-  const plugin = findPluginForRepositoryHref(basePath);
+  const plugin = findPluginForRepositoryHrefIn(await getPulpPluginRegistry(authResult.auth), basePath);
 
   if (plugin) {
     const repoResult = await pulpFetch<Record<string, unknown>>(basePath, authResult.auth);

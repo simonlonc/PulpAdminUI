@@ -1,4 +1,4 @@
-import { PULP_PLUGINS } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 
 export async function GET() {
@@ -7,5 +7,5 @@ export async function GET() {
     return authResult.response;
   }
 
-  return Response.json(PULP_PLUGINS);
+  return Response.json(await getPulpPluginRegistry(authResult.auth));
 }
