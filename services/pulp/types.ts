@@ -205,7 +205,28 @@ export type PulpDistribution = {
   base_url: string;
   name: string;
   repository: string | null;
+  content_guard: string | null;
   pulp_labels: Record<string, string>;
+};
+
+/** Detail row from GET {distribution_href}. The generic list serializer omits `publication`. */
+export type PulpDistributionDetail = PulpDistribution & {
+  publication: string | null;
+};
+
+/** Row from GET /contentguards/, the generic cross-type content-guard list. Read-only until Epic I adds CRUD. */
+export type PulpContentGuard = {
+  pulp_href: string;
+  name: string;
+  description: string | null;
+};
+
+/** Row from GET /publications/, the generic cross-plugin publication list. No PATCH; DELETE is synchronous. */
+export type PulpPublication = {
+  pulp_href: string;
+  pulp_created: string;
+  repository_version: string;
+  repository: string | null;
 };
 
 /** Download policy for a remote, shared by every plugin family. */
