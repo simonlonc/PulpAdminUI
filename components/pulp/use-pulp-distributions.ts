@@ -18,7 +18,7 @@ export function usePulpDistributions(enabled: boolean, params: URLSearchParams) 
       return;
     }
 
-    const page = await pulpDistributionService.listPaged(new URLSearchParams(paramsKey));
+    const page = await pulpDistributionService.list(new URLSearchParams(paramsKey));
     setDistributions(page.results);
     setCount(page.count);
   }, [enabled, paramsKey]);
@@ -70,7 +70,7 @@ export function usePulpDistributions(enabled: boolean, params: URLSearchParams) 
       }
 
       try {
-        const page = await pulpDistributionService.listPaged(new URLSearchParams(paramsKey));
+        const page = await pulpDistributionService.list(new URLSearchParams(paramsKey));
         if (active) {
           setDistributions(page.results);
           setCount(page.count);

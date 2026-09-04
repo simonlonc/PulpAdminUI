@@ -6,14 +6,15 @@ import {
   toBasicAuthHeader,
   type PulpAuth,
 } from "@/lib/pulp";
+import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
+  hrefFromCreatedResource,
   extractNextApiPath,
   normalizePulpHrefToApiPath,
   readDetail,
   TaskRefResponse,
-  TaskResponse,
   toPulpHrefPath,
   waitForTask,
 } from "@/app/api/pulp/repositories/_server";
@@ -24,7 +25,7 @@ type CreateBody = {
   base_path?: string;
 };
 
-type PulpRpmDistribution = {
+type PulpDistribution = {
   pulp_href: string;
   base_url: string;
   base_path: string;
@@ -32,33 +33,21 @@ type PulpRpmDistribution = {
   repository: string | null;
 };
 
-function firstCreatedResourceHref(task: TaskResponse): string | null {
-  const cr = task.created_resources;
-  if (!cr?.length) return null;
-  const first = cr[0];
-  if (typeof first === "string") return first;
-  if (first && typeof first === "object") {
-    const o = first as Record<string, unknown>;
-    const h = o.pulp_href ?? o.href;
-    if (typeof h === "string") return h;
-  }
-  return null;
-}
-
-function isRpmRepositoryPath(path: string): boolean {
-  return path.includes("/repositories/rpm/rpm/");
+function isPluginRepositoryPath(plugin: PulpPluginDescriptor, path: string): boolean {
+  return path.includes(plugin.repositoryPath);
 }
 
 function repoRefKey(href: string): string {
   return normalizePulpHrefToApiPath(href).replace(/\/+$/, "");
 }
 
-type RpmDistListPage = {
+type DistListPage = {
   next: string | null;
   results: Array<{ pulp_href: string; repository: string | null }>;
 };
 
-async function findFirstLinkedRpmDistributionHref(
+async function findFirstLinkedDistributionHref(
+  plugin: PulpPluginDescriptor,
   repoHref: string,
   auth: PulpAuth
 ): Promise<
@@ -66,10 +55,10 @@ async function findFirstLinkedRpmDistributionHref(
   | { ok: false; status: number; detail: string }
 > {
   const want = repoRefKey(repoHref);
-  let listPath: string | null = "/distributions/rpm/rpm/?limit=200";
+  let listPath: string | null = `${plugin.distributionPath}?limit=200`;
 
   while (listPath) {
-    const pageResult = await pulpFetch<RpmDistListPage>(listPath, auth);
+    const pageResult = await pulpFetch<DistListPage>(listPath, auth);
     if (!pageResult.ok) {
       return { ok: false, status: pageResult.status, detail: pageResult.detail };
     }
@@ -97,7 +86,7 @@ async function finalizeDistributionWrite(
   try {
     if (taskHref) {
       const task = await waitForTask(taskHref, authHeader);
-      hrefOut = firstCreatedResourceHref(task) ?? hrefOut;
+      hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
     }
   } catch (error) {
     return Response.json(
@@ -118,7 +107,7 @@ async function finalizeDistributionWrite(
       cache: "no-store",
     });
     if (detailRes.ok) {
-      const dist = (await detailRes.json()) as PulpRpmDistribution;
+      const dist = (await detailRes.json()) as PulpDistribution;
       baseUrl = dist.base_url ?? baseUrl;
       distName = dist.name ?? distName;
       basePathOut = dist.base_path ?? basePathOut;
@@ -134,10 +123,16 @@ async function finalizeDistributionWrite(
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown distribution kind: ${kind}` }, { status: 400 });
   }
 
   const body = (await request.json()) as CreateBody;
@@ -156,9 +151,11 @@ export async function POST(request: Request) {
   }
 
   const apiPath = normalizePulpHrefToApiPath(repoHref);
-  if (!isRpmRepositoryPath(apiPath)) {
+  if (!isPluginRepositoryPath(plugin, apiPath)) {
     return Response.json(
-      { detail: "Only RPM repository hrefs can be bound to an RPM distribution." },
+      {
+        detail: `Only ${plugin.label} repository hrefs can be bound to ${plugin.article} ${plugin.label} distribution.`,
+      },
       { status: 400 }
     );
   }
@@ -169,7 +166,7 @@ export async function POST(request: Request) {
 
   const repositoryField = toPulpHrefPath(repoHref);
 
-  const linked = await findFirstLinkedRpmDistributionHref(repoHref, authResult.auth);
+  const linked = await findFirstLinkedDistributionHref(plugin, repoHref, authResult.auth);
   if (!linked.ok) {
     if (linked.status === 401 || linked.status === 403) {
       const cookieStore = await cookies();
@@ -212,7 +209,7 @@ export async function POST(request: Request) {
     return finalizeDistributionWrite(authHeader, linked.pulp_href, name, basePath, taskHref);
   }
 
-  const createResponse = await fetch(getPulpApiUrl("/distributions/rpm/rpm/"), {
+  const createResponse = await fetch(getPulpApiUrl(plugin.distributionPath), {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -231,7 +228,7 @@ export async function POST(request: Request) {
     return Response.json({ detail: await readDetail(createResponse) }, { status: createResponse.status });
   }
 
-  const raw = (await createResponse.json()) as TaskRefResponse & Partial<PulpRpmDistribution>;
+  const raw = (await createResponse.json()) as TaskRefResponse & Partial<PulpDistribution>;
   const pulpHref = raw.pulp_href ?? raw.href ?? null;
 
   return finalizeDistributionWrite(authHeader, pulpHref, name, basePath, raw.task ?? null);

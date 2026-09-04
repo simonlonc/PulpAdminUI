@@ -81,13 +81,14 @@ function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Rec
   return map;
 }
 
-/** Distributions this UI can delete via `/api/pulp/distributions/[id]` (RPM only). */
-function rpmDistributionsForRepository(
+/** Distributions of the given kind, linked to this repository, deletable via `/api/pulp/distributions/[id]`. */
+function distributionsForRepository(
   distributions: PulpDistribution[],
-  repoPulpHref: string
+  repoPulpHref: string,
+  distributionPath: string
 ): PulpDistribution[] {
   return distributions.filter(
-    (d) => d.repository === repoPulpHref && /\/distributions\/rpm\/rpm\/[^/]+\/?$/.test(d.pulp_href)
+    (d) => d.repository === repoPulpHref && d.pulp_href.includes(distributionPath)
   );
 }
 
@@ -180,9 +181,9 @@ function RepositoriesListPageContent() {
       setItems(page.results);
       setCount(page.count);
       try {
-        const distList = await pulpDistributionService.list();
-        setDistributions(distList);
-        setDistributionUrlByRepo(distributionUrlByRepositoryHref(distList));
+        const distPage = await pulpDistributionService.list(new URLSearchParams({ limit: "1000" }));
+        setDistributions(distPage.results);
+        setDistributionUrlByRepo(distributionUrlByRepositoryHref(distPage.results));
       } catch {
         setDistributions([]);
         setDistributionUrlByRepo({});
@@ -347,7 +348,8 @@ function RepositoriesListPageContent() {
     setDistributeResult(null);
     setSyncResult(null);
     try {
-      const result = await pulpDistributionService.createRpmDistributionForRepository(
+      const result = await pulpDistributionService.createForRepository(
+        kind,
         repo.pulp_href,
         repo.name
       );
@@ -435,7 +437,7 @@ function RepositoriesListPageContent() {
 
   function openDeleteModal(repo: PulpRepository) {
     setDeleteModalRepo(repo);
-    const linked = rpmDistributionsForRepository(distributions, repo.pulp_href);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
     setDeleteAlsoDistributions(linked.length > 0);
   }
 
@@ -469,12 +471,12 @@ function RepositoriesListPageContent() {
     const repo = deleteModalRepo;
     if (!repo) return;
 
-    const linked = rpmDistributionsForRepository(distributions, repo.pulp_href);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
     setBusyHref(repo.pulp_href);
     setError(null);
     setIsDeleting(true);
     try {
-      if (deleteAlsoDistributions && kind === "rpm" && linked.length > 0) {
+      if (deleteAlsoDistributions && linked.length > 0) {
         for (const d of linked) {
           const removed = await pulpDistributionService.remove(d.pulp_href);
           if (!removed.ok) {
@@ -495,17 +497,16 @@ function RepositoriesListPageContent() {
     }
   }
 
-  const deleteModalLinked =
-    deleteModalRepo && kind === "rpm"
-      ? rpmDistributionsForRepository(distributions, deleteModalRepo.pulp_href)
-      : [];
+  const deleteModalLinked = deleteModalRepo
+    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPulpPlugin(kind).distributionPath)
+    : [];
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
   return (
     <AdminShell
       title="Repositories"
-      description="List RPM, Debian, and File repositories; publish, create RPM distributions, inspect content, or remove a repository."
+      description="List RPM, Debian, and File repositories; publish, create distributions, inspect content, or remove a repository."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingRepos || isDeleting || isCreating}
@@ -597,7 +598,7 @@ function RepositoriesListPageContent() {
             {distributeResult ? (
               <div className="rounded-lg border border-sky-300/80 bg-sky-50/90 p-4 text-sm dark:border-sky-800 dark:bg-sky-950/35">
                 <p className="font-medium text-sky-900 dark:text-sky-100">
-                  RPM distribution created for “{distributeResult.repoName}”
+                  {getPulpPlugin(kind).label} distribution created for “{distributeResult.repoName}”
                 </p>
                 <p className="mt-1 text-sky-800 dark:text-sky-200/90">
                   <span className="font-medium">Distribution name:</span> {distributeResult.name}
@@ -813,15 +814,13 @@ function RepositoriesListPageContent() {
                                   Publish
                                 </DropdownMenuItem>
                               ) : null}
-                              {kind === "rpm" ? (
-                                <DropdownMenuItem
-                                  disabled={busyHref === repo.pulp_href}
-                                  onSelect={() => void handleDistribute(repo)}
-                                >
-                                  <Share2 className="size-4" />
-                                  Distribute
-                                </DropdownMenuItem>
-                              ) : null}
+                              <DropdownMenuItem
+                                disabled={busyHref === repo.pulp_href}
+                                onSelect={() => void handleDistribute(repo)}
+                              >
+                                <Share2 className="size-4" />
+                                Distribute
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 variant="destructive"
@@ -1065,36 +1064,28 @@ function RepositoriesListPageContent() {
                 {deleteModalRepo.pulp_href}
               </span>
             </p>
-            {kind === "rpm" ? (
-              deleteModalLinked.length > 0 ? (
-                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 shrink-0"
-                    checked={deleteAlsoDistributions}
-                    disabled={isDeleting}
-                    onChange={(e) => setDeleteAlsoDistributions(e.target.checked)}
-                  />
-                  <span>
-                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                      Also delete linked RPM distribution
-                      {deleteModalLinked.length > 1 ? "s" : ""}
-                    </span>
-                    <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
-                      {deleteModalLinked.map((d) => d.name).join(", ")}
-                    </span>
+            {deleteModalLinked.length > 0 ? (
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  checked={deleteAlsoDistributions}
+                  disabled={isDeleting}
+                  onChange={(e) => setDeleteAlsoDistributions(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                    Also delete linked {getPulpPlugin(kind).label} distribution
+                    {deleteModalLinked.length > 1 ? "s" : ""}
                   </span>
-                </label>
-              ) : (
-                <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  No RPM distribution in the list is linked to this repository.
-                </p>
-              )
+                  <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
+                    {deleteModalLinked.map((d) => d.name).join(", ")}
+                  </span>
+                </span>
+              </label>
             ) : (
               <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                {kind === "deb"
-                  ? "Debian repositories: only the repository will be removed (this app does not delete APT distributions from here)."
-                  : "File repositories: only the repository will be removed from this flow."}
+                No {getPulpPlugin(kind).label} distribution in the list is linked to this repository.
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
@@ -1261,7 +1252,7 @@ function RepositoriesListSuspenseFallback() {
   return (
     <AdminShell
       title="Repositories"
-      description="List RPM, Debian, and File repositories; publish, create RPM distributions, inspect content, or remove a repository."
+      description="List RPM, Debian, and File repositories; publish, create distributions, inspect content, or remove a repository."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}

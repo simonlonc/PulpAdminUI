@@ -454,7 +454,8 @@ function RepositoriesEditInner() {
           { id: distLineId, label: "Distribute — create or update RPM distribution", phase: "running" },
         ]);
         try {
-          const distributed = await pulpDistributionService.createRpmDistributionForRepository(
+          const distributed = await pulpDistributionService.createForRepository(
+            loadedKind,
             pulpHref,
             result.name
           );
