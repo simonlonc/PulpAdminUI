@@ -36,7 +36,7 @@ function encodeDistributionRef(pulpHref: string): string | null {
 }
 
 export const pulpDistributionService = {
-  /** Repository-ensure flow: posts to [kind]/create, which patches a distribution already
+  /** Repository-ensure flow: posts to create/[kind], which patches a distribution already
    * linked to the repository or creates one. Used by createForRepository below. */
   async create(
     kind: PulpPluginKind,
@@ -46,7 +46,7 @@ export const pulpDistributionService = {
       base_path: string;
     }
   ): Promise<CreateDistributionResult> {
-    const response = await fetch(`/api/pulp/distributions/${kind}/create`, {
+    const response = await fetch(`/api/pulp/distributions/create/${kind}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
