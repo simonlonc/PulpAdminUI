@@ -24,7 +24,7 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
-import { PULP_PLUGINS, getPulpPlugin } from "@/lib/pulp-plugins";
+import { PULP_PLUGINS, findContentForHref, getPulpPlugin } from "@/lib/pulp-plugins";
 
 const PAGE_SIZE = 50;
 
@@ -162,6 +162,7 @@ function ContentListPageContent() {
                   ) : (
                     contentItems.map((item) => {
                       const rpmPackageId = extractRpmPackageContentId(item.pulp_href);
+                      const contentMatch = rpmPackageId ? null : findContentForHref(item.pulp_href);
                       return (
                         <TableRow key={item.pulp_href}>
                           <TableCell className="font-mono text-xs">{item.pulp_href}</TableCell>
@@ -176,6 +177,13 @@ function ContentListPageContent() {
                                 className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                               >
                                 View package
+                              </Link>
+                            ) : contentMatch ? (
+                              <Link
+                                href={`/content/${contentMatch.kind}/${contentMatch.id}`}
+                                className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                              >
+                                View content
                               </Link>
                             ) : (
                               <span className="text-xs text-zinc-500">-</span>
