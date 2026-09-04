@@ -28,7 +28,7 @@ type PulpPluginsContextValue = {
   getPlugin: (kind: PulpPluginKind) => PulpPluginDescriptor;
   findPlugin: (kind: string) => PulpPluginDescriptor | null;
   isPluginKind: (value: unknown) => value is PulpPluginKind;
-  findContentForHref: (href: string) => { kind: PulpPluginKind; id: string } | null;
+  findContentForHref: (href: string) => { kind: PulpPluginKind; path: string; id: string } | null;
   findPluginForRepositoryHref: (href: string) => PulpPluginDescriptor | null;
 };
 
@@ -77,7 +77,7 @@ export function PulpPluginsProvider({ children }: { children: ReactNode }) {
   );
 
   const findContentForHref = useCallback(
-    (href: string): { kind: PulpPluginKind; id: string } | null =>
+    (href: string): { kind: PulpPluginKind; path: string; id: string } | null =>
       findContentForHrefIn(plugins, href),
     [plugins]
   );

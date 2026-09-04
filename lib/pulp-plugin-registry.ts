@@ -8,7 +8,11 @@
  */
 
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { PULP_PLUGINS, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import {
+  PULP_PLUGINS,
+  type PulpContentEndpoint,
+  type PulpPluginDescriptor,
+} from "@/lib/pulp-plugins";
 import { derivePulpPlugins } from "@/lib/pulp-plugin-derive";
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -18,11 +22,32 @@ let cachedAt = 0;
 let inFlight: Promise<readonly PulpPluginDescriptor[]> | null = null;
 
 /**
+ * Merges the two content endpoint lists by path: the curated endpoints first, in curated order
+ * (so the family's default is the one a human picked), each spread over the derived endpoint of
+ * the same path, then the derived endpoints no curated entry names, in their derived order. A
+ * wholesale replacement would cost rpm the ten endpoints only derivation knows about.
+ */
+function mergeContentEndpoints(
+  derived: readonly PulpContentEndpoint[],
+  curated: readonly PulpContentEndpoint[]
+): readonly PulpContentEndpoint[] {
+  const derivedByPath = new Map(derived.map((endpoint) => [endpoint.path, endpoint]));
+  const curatedPaths = new Set(curated.map((endpoint) => endpoint.path));
+
+  return [
+    ...curated.map((endpoint) => ({ ...derivedByPath.get(endpoint.path), ...endpoint })),
+    ...derived.filter((endpoint) => !curatedPaths.has(endpoint.path)),
+  ];
+}
+
+/**
  * Merges a derived family with the curated entry of the same kind, curated fields winning, so a
  * curated descriptor that omits an optional field still lets the derived value through. Ordered
  * with the curated kinds first (in PULP_PLUGINS order, so pages that default to "rpm" keep it
  * first), then the remaining derived kinds sorted by kind. A curated kind the server does not
  * have is dropped, since the registry describes the connected server.
+ *
+ * contentEndpoints is the one key not merged by replacement -- see mergeContentEndpoints.
  */
 function mergeRegistry(derived: readonly PulpPluginDescriptor[]): readonly PulpPluginDescriptor[] {
   const derivedByKind = new Map(derived.map((plugin) => [plugin.kind, plugin]));
@@ -32,7 +57,11 @@ function mergeRegistry(derived: readonly PulpPluginDescriptor[]): readonly PulpP
   for (const curated of PULP_PLUGINS) {
     const base = derivedByKind.get(curated.kind);
     if (!base) continue;
-    merged.push({ ...base, ...curated });
+    merged.push({
+      ...base,
+      ...curated,
+      contentEndpoints: mergeContentEndpoints(base.contentEndpoints, curated.contentEndpoints),
+    });
     usedKinds.add(curated.kind);
   }
 

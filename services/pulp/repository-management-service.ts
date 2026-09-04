@@ -116,9 +116,13 @@ export const pulpRepositoryManagementService = {
     return (await response.json()) as RepositoryPublishResult;
   },
 
-  async listRepositoryContent(pulpHref: string): Promise<RepositoryContentListResult> {
+  async listRepositoryContent(
+    pulpHref: string,
+    contentPath?: string
+  ): Promise<RepositoryContentListResult> {
+    const contentPathQuery = contentPath ? `&content_path=${encodeURIComponent(contentPath)}` : "";
     const response = await fetch(
-      `/api/pulp/repositories/content?pulp_href=${encodeURIComponent(pulpHref)}`
+      `/api/pulp/repositories/content?pulp_href=${encodeURIComponent(pulpHref)}${contentPathQuery}`
     );
     if (!response.ok) throw new Error(await readApiDetail(response));
     return (await response.json()) as RepositoryContentListResult;

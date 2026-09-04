@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
@@ -40,13 +40,19 @@ function collectionValue(value: unknown[] | Record<string, unknown>): string {
   return size === 0 ? "empty" : `${size} ${size === 1 ? "entry" : "entries"}`;
 }
 
-export default function ContentUnitDetailPage() {
+function ContentUnitDetailInner() {
   const params = useParams<{ kind: string; id: string }>();
+  const searchParams = useSearchParams();
   const kindParam = params?.kind ?? "";
   const id = params?.id ?? "";
+  const path = searchParams.get("path")?.trim() ?? "";
   const { isPluginKind, findPlugin } = usePulpPluginsContext();
   const kind = isPluginKind(kindParam) ? kindParam : null;
   const plugin = kind ? findPlugin(kind) : null;
+  /* Same fallback as the detail route: an absent or unrecognised path is the family's first
+     endpoint, so a link written before the family had several still resolves. */
+  const endpoint =
+    plugin?.contentEndpoints.find((e) => e.path === path) ?? plugin?.contentEndpoints[0] ?? null;
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
@@ -65,7 +71,7 @@ export default function ContentUnitDetailPage() {
     setIsLoadingUnit(true);
     setError(null);
     try {
-      const data = await pulpContentService.getContentUnit(kind, id);
+      const data = await pulpContentService.getContentUnit(kind, id, path);
       setUnit(data);
     } catch (e) {
       setUnit(null);
@@ -73,19 +79,19 @@ export default function ContentUnitDetailPage() {
     } finally {
       setIsLoadingUnit(false);
     }
-  }, [hasSession, kind, id, setError]);
+  }, [hasSession, kind, id, path, setError]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const shownKeys = new Set<string>(["pulp_href", "artifact"]);
-  if (plugin) {
-    for (const field of plugin.contentFields) {
+  if (endpoint) {
+    for (const field of endpoint.fields) {
       shownKeys.add(field.name);
     }
-    if (plugin.contentSizeField) {
-      shownKeys.add(plugin.contentSizeField);
+    if (endpoint.sizeField) {
+      shownKeys.add(endpoint.sizeField);
     }
   }
   const otherFields = unit
@@ -119,7 +125,7 @@ export default function ContentUnitDetailPage() {
             <CardTitle>{id}</CardTitle>
             <CardContent className="space-y-3 text-sm">
               <div className="grid gap-3 sm:grid-cols-2">
-                {plugin.contentFields.map((field) => (
+                {endpoint?.fields.map((field) => (
                   <div key={field.name}>
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                       {field.label}
@@ -127,10 +133,10 @@ export default function ContentUnitDetailPage() {
                     <p className="break-all">{scalarValue(unit[field.name])}</p>
                   </div>
                 ))}
-                {plugin.contentSizeField ? (
+                {endpoint?.sizeField ? (
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Size</p>
-                    <p>{formatBytes(unit[plugin.contentSizeField])}</p>
+                    <p>{formatBytes(unit[endpoint.sizeField])}</p>
                   </div>
                 ) : null}
               </div>
@@ -190,5 +196,13 @@ export default function ContentUnitDetailPage() {
         <Card>Loading…</Card>
       )}
     </AdminShell>
+  );
+}
+
+export default function ContentUnitDetailPage() {
+  return (
+    <Suspense fallback={<Card className="p-6">Loading…</Card>}>
+      <ContentUnitDetailInner />
+    </Suspense>
   );
 }

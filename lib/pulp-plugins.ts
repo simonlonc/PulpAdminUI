@@ -67,6 +67,22 @@ export type PulpContentField = {
   label: string;
 };
 
+/** One of a plugin's content-listing endpoints, with the columns to show for it. */
+export type PulpContentEndpoint = {
+  /** Content list/detail endpoint, e.g. "/content/rpm/packages/". */
+  path: string;
+  /** Display name for the content-type selector. */
+  label: string;
+  /** The `pulp_type` for filtering GET /content/. Empty when it could not be determined. */
+  contentType: string;
+  /** Columns shown when browsing this endpoint, in display order. */
+  fields: readonly PulpContentField[];
+  /** Byte-size field on the content unit, when it has one. */
+  sizeField?: string;
+  /** Set when this endpoint cannot serve a `fields=` query (gem 0.8.0 answers 500). */
+  fieldsQueryUnsupported?: true;
+};
+
 export type PulpPluginDescriptor = {
   kind: PulpPluginKind;
   /** Display name used in page headings, tabs and messages. */
@@ -81,19 +97,8 @@ export type PulpPluginDescriptor = {
   publicationPath: string | null;
   /** Distribution list/create endpoint for this plugin. */
   distributionPath: string;
-  /** The `pulp_type` of this plugin's primary content unit, for filtering GET /content/. */
-  contentType: string;
-  /** Per-plugin content-listing endpoint for this plugin's primary content unit. */
-  contentPath: string;
-  /** Columns shown when browsing a repository's content, in display order. */
-  contentFields: readonly PulpContentField[];
-  /** Byte-size field on the content unit, when it has one (used for the content list's size total). */
-  contentSizeField?: string;
-  /**
-   * Set when the plugin's content endpoint cannot serve a `fields=` query. gem 0.8.0 answers
-   * 500 to any `fields=` value on /content/gem/gem/, so its rows are fetched in full.
-   */
-  contentFieldsQueryUnsupported?: true;
+  /** The family's content endpoints, the first being the one the UI shows by default. */
+  contentEndpoints: readonly PulpContentEndpoint[];
   supportsPublish: boolean;
   supportsSync: boolean;
   /**
@@ -122,16 +127,21 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/",
     publicationPath: "/publications/rpm/rpm/",
     distributionPath: "/distributions/rpm/rpm/",
-    contentType: "rpm.package",
-    contentPath: "/content/rpm/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "epoch", label: "Epoch" },
-      { name: "version", label: "Version" },
-      { name: "release", label: "Release" },
-      { name: "arch", label: "Arch" },
+    contentEndpoints: [
+      {
+        path: "/content/rpm/packages/",
+        label: "Packages",
+        contentType: "rpm.package",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "epoch", label: "Epoch" },
+          { name: "version", label: "Version" },
+          { name: "release", label: "Release" },
+          { name: "arch", label: "Arch" },
+        ],
+        sizeField: "size_package",
+      },
     ],
-    contentSizeField: "size_package",
     supportsPublish: true,
     supportsSync: true,
     syncFields: [
@@ -176,13 +186,18 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "http://deb.debian.org/debian",
     publicationPath: "/publications/deb/apt/",
     distributionPath: "/distributions/deb/apt/",
-    contentType: "deb.package",
-    contentPath: "/content/deb/packages/",
-    contentFields: [
-      { name: "package", label: "Package" },
-      { name: "version", label: "Version" },
-      { name: "architecture", label: "Architecture" },
-      { name: "relative_path", label: "Relative path" },
+    contentEndpoints: [
+      {
+        path: "/content/deb/packages/",
+        label: "Packages",
+        contentType: "deb.package",
+        fields: [
+          { name: "package", label: "Package" },
+          { name: "version", label: "Version" },
+          { name: "architecture", label: "Architecture" },
+          { name: "relative_path", label: "Relative path" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
@@ -242,11 +257,16 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://example.com/path/to/PULP_MANIFEST",
     publicationPath: "/publications/file/file/",
     distributionPath: "/distributions/file/file/",
-    contentType: "file.file",
-    contentPath: "/content/file/files/",
-    contentFields: [
-      { name: "relative_path", label: "Relative path" },
-      { name: "sha256", label: "SHA256" },
+    contentEndpoints: [
+      {
+        path: "/content/file/files/",
+        label: "Files",
+        contentType: "file.file",
+        fields: [
+          { name: "relative_path", label: "Relative path" },
+          { name: "sha256", label: "SHA256" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
@@ -276,15 +296,20 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://pypi.org/",
     publicationPath: "/publications/python/pypi/",
     distributionPath: "/distributions/python/pypi/",
-    contentType: "python.python",
-    contentPath: "/content/python/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "filename", label: "Filename" },
-      { name: "packagetype", label: "Package type" },
+    contentEndpoints: [
+      {
+        path: "/content/python/packages/",
+        label: "Packages",
+        contentType: "python.python",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "filename", label: "Filename" },
+          { name: "packagetype", label: "Package type" },
+        ],
+        sizeField: "size",
+      },
     ],
-    contentSizeField: "size",
     supportsPublish: true,
     supportsSync: true,
     syncFields: [
@@ -349,12 +374,17 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://registry.npmjs.org/",
     publicationPath: null,
     distributionPath: "/distributions/npm/npm/",
-    contentType: "npm.package",
-    contentPath: "/content/npm/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "relative_path", label: "Relative path" },
+    contentEndpoints: [
+      {
+        path: "/content/npm/packages/",
+        label: "Packages",
+        contentType: "npm.package",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "relative_path", label: "Relative path" },
+        ],
+      },
     ],
     supportsPublish: false,
     supportsSync: true,
@@ -378,14 +408,19 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://rubygems.org/",
     publicationPath: "/publications/gem/gem/",
     distributionPath: "/distributions/gem/gem/",
-    contentType: "gem.gem",
-    contentPath: "/content/gem/gem/",
-    contentFieldsQueryUnsupported: true,
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "platform", label: "Platform" },
-      { name: "prerelease", label: "Prerelease" },
+    contentEndpoints: [
+      {
+        path: "/content/gem/gem/",
+        label: "Gems",
+        contentType: "gem.gem",
+        fieldsQueryUnsupported: true,
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "platform", label: "Platform" },
+          { name: "prerelease", label: "Prerelease" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
@@ -423,13 +458,18 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://repo1.maven.org/maven2/",
     publicationPath: null,
     distributionPath: "/distributions/maven/maven/",
-    contentType: "maven.artifact",
-    contentPath: "/content/maven/artifact/",
-    contentFields: [
-      { name: "group_id", label: "Group ID" },
-      { name: "artifact_id", label: "Artifact ID" },
-      { name: "version", label: "Version" },
-      { name: "filename", label: "Filename" },
+    contentEndpoints: [
+      {
+        path: "/content/maven/artifact/",
+        label: "Artifacts",
+        contentType: "maven.artifact",
+        fields: [
+          { name: "group_id", label: "Group ID" },
+          { name: "artifact_id", label: "Artifact ID" },
+          { name: "version", label: "Version" },
+          { name: "filename", label: "Filename" },
+        ],
+      },
     ],
     supportsPublish: false,
     supportsSync: false,
@@ -473,19 +513,21 @@ export function findPluginForRepositoryHrefIn(
 }
 
 /**
- * Kind and id extracted from a content unit href (relative API path or absolute URL) whose path
- * matches a plugin's contentPath, or null when no plugin's contentPath matches.
+ * Kind, endpoint path and id extracted from a content unit href (relative API path or absolute
+ * URL) whose path matches one of a plugin's content endpoints, or null when none matches.
  */
 export function findContentForHrefIn(
   plugins: readonly PulpPluginDescriptor[],
   href: string
-): { kind: PulpPluginKind; id: string } | null {
+): { kind: PulpPluginKind; path: string; id: string } | null {
   for (const plugin of plugins) {
-    const index = href.indexOf(plugin.contentPath);
-    if (index === -1) continue;
-    const id = href.slice(index + plugin.contentPath.length).replace(/\/+$/, "").split("/")[0];
-    if (id) {
-      return { kind: plugin.kind, id };
+    for (const endpoint of plugin.contentEndpoints) {
+      const index = href.indexOf(endpoint.path);
+      if (index === -1) continue;
+      const id = href.slice(index + endpoint.path.length).replace(/\/+$/, "").split("/")[0];
+      if (id) {
+        return { kind: plugin.kind, path: endpoint.path, id };
+      }
     }
   }
   return null;
@@ -521,10 +563,12 @@ export function findPluginForRepositoryHref(href: string): PulpPluginDescriptor 
 }
 
 /**
- * Kind and id extracted from a content unit href (relative API path or absolute URL) whose path
- * matches a plugin's contentPath, or null when no plugin's contentPath matches.
+ * Kind, endpoint path and id extracted from a content unit href (relative API path or absolute
+ * URL) whose path matches one of a plugin's content endpoints, or null when none matches.
  */
-export function findContentForHref(href: string): { kind: PulpPluginKind; id: string } | null {
+export function findContentForHref(
+  href: string
+): { kind: PulpPluginKind; path: string; id: string } | null {
   return findContentForHrefIn(PULP_PLUGINS, href);
 }
 
