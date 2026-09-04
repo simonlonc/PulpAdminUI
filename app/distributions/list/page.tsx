@@ -6,6 +6,7 @@ import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
+import { usePulpContentGuardOptions } from "@/components/pulp/use-pulp-content-guard-options";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
@@ -52,6 +53,7 @@ function DistributionsListPageContent() {
   const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
     usePulpListQuery();
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
+  const { contentGuardOptions } = usePulpContentGuardOptions(hasSession);
   const [repositoryFilter, setRepositoryFilter] = useState("");
   const requestParams = useMemo(() => {
     const next = new URLSearchParams(params);
@@ -74,6 +76,14 @@ function DistributionsListPageContent() {
     }
     return map;
   }, [repositoryOptions]);
+
+  const contentGuardNameByHref = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const option of contentGuardOptions) {
+      map.set(option.href, option.name);
+    }
+    return map;
+  }, [contentGuardOptions]);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -163,6 +173,7 @@ function DistributionsListPageContent() {
                     <TableHeaderCell>Base Path</TableHeaderCell>
                     <TableHeaderCell>Base URL</TableHeaderCell>
                     <TableHeaderCell>Bound to</TableHeaderCell>
+                    <TableHeaderCell>Content guard</TableHeaderCell>
                     <TableHeaderCell>Created</TableHeaderCell>
                     <TableHeaderCell>Labels</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
@@ -171,7 +182,7 @@ function DistributionsListPageContent() {
                 <TableBody>
                   {distributions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-zinc-500">
+                      <TableCell colSpan={8} className="text-zinc-500">
                         No distributions found.
                       </TableCell>
                     </TableRow>
@@ -180,6 +191,10 @@ function DistributionsListPageContent() {
                       const url = resolveDistributionUrl(distribution.base_url);
                       const boundTo = distribution.repository
                         ? repositoryNameByHref.get(distribution.repository) ?? distribution.repository
+                        : "-";
+                      const contentGuard = distribution.content_guard
+                        ? contentGuardNameByHref.get(distribution.content_guard) ??
+                          distribution.content_guard
                         : "-";
                       return (
                         <TableRow key={distribution.pulp_href}>
@@ -196,6 +211,7 @@ function DistributionsListPageContent() {
                             </a>
                           </TableCell>
                           <TableCell className="font-mono text-xs">{boundTo}</TableCell>
+                          <TableCell>{contentGuard}</TableCell>
                           <TableCell>{distribution.pulp_created}</TableCell>
                           <TableCell>
                             <LabelChips labels={distribution.pulp_labels} />
