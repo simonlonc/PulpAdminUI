@@ -1,13 +1,18 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { findPulpPlugin } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import type { PulpRpmRepositoryVersion } from "@/services/pulp/types";
-import { mapPulpRpmRepositoryVersion } from "../rpm-version-map";
+import type { PulpRepositoryVersion } from "@/services/pulp/types";
+import { mapPulpRepositoryVersion } from "../../repository-version-map";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../../_server";
 
-function resolveVersionsListPath(apiPath: string): string | { error: string } {
-  if (!apiPath.includes("/repositories/rpm/rpm/")) {
-    return { error: "Only RPM repository hrefs are supported." };
+function resolveVersionsListPath(
+  apiPath: string,
+  repositoryPath: string,
+  label: string
+): string | { error: string } {
+  if (!apiPath.includes(repositoryPath)) {
+    return { error: `Only ${label} repository hrefs are supported.` };
   }
 
   if (/\/versions\/\d+\/?$/.test(apiPath)) {
@@ -22,10 +27,16 @@ function resolveVersionsListPath(apiPath: string): string | { error: string } {
   return `${base}versions/`;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
   const url = new URL(request.url);
@@ -42,12 +53,12 @@ export async function GET(request: Request) {
   }
 
   const apiPath = normalizePulpHrefToApiPath(decodedHref);
-  const resolved = resolveVersionsListPath(apiPath);
+  const resolved = resolveVersionsListPath(apiPath, plugin.repositoryPath, plugin.label);
   if (typeof resolved !== "string") {
     return Response.json({ detail: resolved.error }, { status: 400 });
   }
 
-  const allResults: PulpRpmRepositoryVersion[] = [];
+  const allResults: PulpRepositoryVersion[] = [];
   let nextPath: string | null = resolved;
 
   while (nextPath) {
@@ -64,7 +75,7 @@ export async function GET(request: Request) {
     }
 
     for (const row of result.data.results) {
-      allResults.push(mapPulpRpmRepositoryVersion(row));
+      allResults.push(mapPulpRepositoryVersion(row));
     }
     nextPath = extractNextApiPath(result.data.next);
   }
