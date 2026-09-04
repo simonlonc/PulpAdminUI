@@ -1,12 +1,14 @@
 import { readApiDetail } from "./http";
+import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   PulpDistribution,
+  PulpDistributionDetail,
   PulpPaginatedResponse,
   ServiceResult,
   UpdatePulpDistributionPayload,
 } from "./types";
 
-export type CreateRpmDistributionResult = {
+export type CreateDistributionResult = {
   name: string;
   pulp_href: string | null;
   base_url: string | null;
@@ -14,8 +16,12 @@ export type CreateRpmDistributionResult = {
   task: string | null;
 };
 
-type PulpListResponse<T> = {
-  results: T[];
+/** Result of the plain POST /api/pulp/distributions create (already awaited server-side). */
+export type CreatedDistribution = {
+  pulp_href: string | null;
+  name: string;
+  base_path: string;
+  base_url: string | null;
 };
 
 const DISTRIBUTIONS_PATH = "/api/pulp/distributions";
@@ -30,12 +36,17 @@ function encodeDistributionRef(pulpHref: string): string | null {
 }
 
 export const pulpDistributionService = {
-  async createRpmDistribution(payload: {
-    repository: string;
-    name: string;
-    base_path: string;
-  }): Promise<CreateRpmDistributionResult> {
-    const response = await fetch("/api/pulp/distributions/rpm/create", {
+  /** Repository-ensure flow: posts to [kind]/create, which patches a distribution already
+   * linked to the repository or creates one. Used by createForRepository below. */
+  async create(
+    kind: PulpPluginKind,
+    payload: {
+      repository: string;
+      name: string;
+      base_path: string;
+    }
+  ): Promise<CreateDistributionResult> {
+    const response = await fetch(`/api/pulp/distributions/${kind}/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -43,43 +54,72 @@ export const pulpDistributionService = {
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
     }
-    return (await response.json()) as CreateRpmDistributionResult;
+    return (await response.json()) as CreateDistributionResult;
   },
 
   /**
-   * Ensures an RPM distribution for the repository: updates name/base_path if one is already
+   * Ensures a distribution for the repository: updates name/base_path if one is already
    * linked, otherwise creates it (`«name»-dist` / base_path = repo name).
    */
-  async createRpmDistributionForRepository(
+  async createForRepository(
+    kind: PulpPluginKind,
     repositoryPulpHref: string,
     repositoryName: string
-  ): Promise<CreateRpmDistributionResult> {
-    return pulpDistributionService.createRpmDistribution({
+  ): Promise<CreateDistributionResult> {
+    return pulpDistributionService.create(kind, {
       repository: repositoryPulpHref,
       name: `${repositoryName}-dist`,
       base_path: repositoryName,
     });
   },
 
-  /** Used by app/repositories/list/page.tsx to look up distributions by repository href. */
-  async list(): Promise<PulpDistribution[]> {
-    const response = await fetch(DISTRIBUTIONS_PATH);
-    if (!response.ok) {
-      throw new Error(await readApiDetail(response));
-    }
-
-    const payload = (await response.json()) as PulpListResponse<PulpDistribution>;
-    return payload.results;
-  },
-
-  /** Paginated variant for app/distributions/list/page.tsx, driven by usePulpListQuery. */
-  async listPaged(params: URLSearchParams): Promise<PulpPaginatedResponse<PulpDistribution>> {
-    const response = await fetch(`${DISTRIBUTIONS_PATH}?${params}`);
+  /** Used by app/repositories/list/page.tsx and app/distributions/list/page.tsx. */
+  async list(params?: URLSearchParams): Promise<PulpPaginatedResponse<PulpDistribution>> {
+    const qs = params?.toString();
+    const response = await fetch(`${DISTRIBUTIONS_PATH}${qs ? `?${qs}` : ""}`);
     if (!response.ok) {
       throw new Error(await readApiDetail(response));
     }
 
     return (await response.json()) as PulpPaginatedResponse<PulpDistribution>;
+  },
+
+  /** Detail GET for the distribution edit modal — the only way to see the current `publication`. */
+  async get(pulpHref: string): Promise<PulpDistributionDetail> {
+    const encodedRef = encodeDistributionRef(pulpHref);
+    if (!encodedRef) {
+      throw new Error("Invalid distribution identifier.");
+    }
+
+    const response = await fetch(`${DISTRIBUTIONS_PATH}/${encodedRef}`);
+    if (!response.ok) {
+      throw new Error(await readApiDetail(response));
+    }
+
+    return (await response.json()) as PulpDistributionDetail;
+  },
+
+  /** Plain create for the distributions page's "New distribution" modal: always creates a
+   * distribution for `kind`, bound to a repository, a publication, or neither. */
+  async createDistribution(
+    kind: PulpPluginKind,
+    payload: {
+      name: string;
+      base_path: string;
+      repository?: string | null;
+      publication?: string | null;
+      content_guard?: string | null;
+    }
+  ): Promise<CreatedDistribution> {
+    const response = await fetch(DISTRIBUTIONS_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, ...payload }),
+    });
+    if (!response.ok) {
+      throw new Error(await readApiDetail(response));
+    }
+    return (await response.json()) as CreatedDistribution;
   },
 
   async update(

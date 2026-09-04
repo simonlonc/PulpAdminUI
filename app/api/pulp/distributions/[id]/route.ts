@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
 import { requirePulpAuth } from "../../_helpers";
+import { waitForTask } from "@/app/api/pulp/repositories/_server";
 
 type PulpDistribution = {
   pulp_href: string;
@@ -50,6 +51,35 @@ function resolveDistributionPath(encodedRef: string): string | null {
   return normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`;
 }
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authResult = await requirePulpAuth();
+  if (!authResult.ok) {
+    return authResult.response;
+  }
+
+  const { id } = await params;
+  const distributionPath = resolveDistributionPath(id);
+  if (!distributionPath) {
+    return Response.json({ detail: "Invalid distribution identifier." }, { status: 400 });
+  }
+
+  const result = await pulpFetch<PulpDistribution>(distributionPath, authResult.auth);
+
+  if (!result.ok) {
+    if (result.status === 401 || result.status === 403) {
+      const cookieStore = await cookies();
+      cookieStore.delete(PULP_AUTH_COOKIE);
+    }
+
+    return Response.json({ detail: result.detail }, { status: result.status });
+  }
+
+  return Response.json(result.data);
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -93,7 +123,7 @@ export async function PATCH(
     );
   }
 
-  const result = await pulpFetch<PulpDistribution>(
+  const result = await pulpFetch<PulpDistribution & { task?: string }>(
     distributionPath,
     authResult.auth,
     {
@@ -109,6 +139,26 @@ export async function PATCH(
     }
 
     return Response.json({ detail: result.detail }, { status: result.status });
+  }
+
+  // A 202 response body is just {"task": "<href>"}, not the updated distribution, so the
+  // caller would otherwise refresh against stale data. Wait for the task, then re-fetch.
+  if (result.status === 202 && result.data.task) {
+    const authHeader = toBasicAuthHeader(authResult.auth);
+    try {
+      await waitForTask(result.data.task, authHeader);
+    } catch (error) {
+      return Response.json(
+        { detail: error instanceof Error ? error.message : "Distribution task failed." },
+        { status: 500 }
+      );
+    }
+
+    const refreshed = await pulpFetch<PulpDistribution>(distributionPath, authResult.auth);
+    if (!refreshed.ok) {
+      return Response.json({ detail: refreshed.detail }, { status: refreshed.status });
+    }
+    return Response.json(refreshed.data);
   }
 
   return Response.json(result.data);
@@ -129,7 +179,7 @@ export async function DELETE(
     return Response.json({ detail: "Invalid distribution identifier." }, { status: 400 });
   }
 
-  const result = await pulpFetch(distributionPath, authResult.auth, {
+  const result = await pulpFetch<{ task?: string }>(distributionPath, authResult.auth, {
     method: "DELETE",
   });
 
@@ -140,6 +190,18 @@ export async function DELETE(
     }
 
     return Response.json({ detail: result.detail }, { status: result.status });
+  }
+
+  if (result.status === 202 && result.data.task) {
+    const authHeader = toBasicAuthHeader(authResult.auth);
+    try {
+      await waitForTask(result.data.task, authHeader);
+    } catch (error) {
+      return Response.json(
+        { detail: error instanceof Error ? error.message : "Distribution task failed." },
+        { status: 500 }
+      );
+    }
   }
 
   return Response.json({ ok: true });
