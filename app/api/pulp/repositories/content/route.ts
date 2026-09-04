@@ -1,15 +1,10 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { findPluginForRepositoryHref } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../_server";
 
 type ContentRow = Record<string, unknown>;
-
-const RPM_PACKAGE_FIELDS = "pulp_href,pulp_created,name,epoch,version,release,arch,size_package";
-
-function isRpmRepositoryPath(path: string): boolean {
-  return path.includes("/repositories/rpm/rpm/");
-}
 
 function numOrNull(value: unknown): number | null {
   return typeof value === "number" && !Number.isNaN(value) ? value : null;
@@ -64,7 +59,9 @@ export async function GET(request: Request) {
     return Response.json({ detail }, { status });
   }
 
-  if (isRpmRepositoryPath(basePath)) {
+  const plugin = findPluginForRepositoryHref(basePath);
+
+  if (plugin) {
     const repoResult = await pulpFetch<Record<string, unknown>>(basePath, authResult.auth);
     if (!repoResult.ok) {
       return unauthorizeAndRespond(repoResult.status, repoResult.detail);
@@ -75,18 +72,28 @@ export async function GET(request: Request) {
       return Response.json({ count: 0, totalSizeBytes: 0, results: [] });
     }
 
-    const packagesPath = `/content/rpm/packages/?repository_version=${encodeURIComponent(
-      latestVersionHref
-    )}&limit=100&fields=${RPM_PACKAGE_FIELDS}`;
+    const fields = ["pulp_href", "pulp_created", ...plugin.contentFields.map((f) => f.name)];
+    if (plugin.contentSizeField) {
+      fields.push(plugin.contentSizeField);
+    }
 
-    const pages = await loadAllPages(packagesPath, authResult.auth);
+    const fieldsQuery = plugin.contentFieldsQueryUnsupported ? "" : `&fields=${fields.join(",")}`;
+    const contentPath = `${plugin.contentPath}?repository_version=${encodeURIComponent(
+      latestVersionHref
+    )}&limit=100${fieldsQuery}`;
+
+    const pages = await loadAllPages(contentPath, authResult.auth);
     if (!pages.ok) {
       return unauthorizeAndRespond(pages.status, pages.detail);
     }
 
-    let totalSizeBytes = 0;
-    for (const row of pages.rows) {
-      totalSizeBytes += numOrNull(row.size_package) ?? 0;
+    let totalSizeBytes: number | null = null;
+    if (plugin.contentSizeField) {
+      const sizeField = plugin.contentSizeField;
+      totalSizeBytes = 0;
+      for (const row of pages.rows) {
+        totalSizeBytes += numOrNull(row[sizeField]) ?? 0;
+      }
     }
 
     return Response.json({

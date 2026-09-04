@@ -11,6 +11,7 @@ import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { formatBytes } from "@/lib/format-bytes";
+import { findContentForHref, findPluginForRepositoryHref } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import {
   Table,
@@ -75,6 +76,8 @@ function RepositoryContentInner() {
     };
   }, [hasSession, pulpHref, setError]);
 
+  const plugin = pulpHref ? findPluginForRepositoryHref(pulpHref) : null;
+
   function rowLabel(row: Record<string, unknown>): string {
     const name = row.name;
     if (typeof name === "string") return name;
@@ -86,6 +89,12 @@ function RepositoryContentInner() {
   function rowHref(row: Record<string, unknown>): string | null {
     const href = row.pulp_href;
     return typeof href === "string" ? href : null;
+  }
+
+  function fieldValue(value: unknown): string {
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "boolean") return value ? "true" : "false";
+    return String(value);
   }
 
   return (
@@ -124,7 +133,13 @@ function RepositoryContentInner() {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableHeaderCell>Label</TableHeaderCell>
+                      {plugin ? (
+                        plugin.contentFields.map((field) => (
+                          <TableHeaderCell key={field.name}>{field.label}</TableHeaderCell>
+                        ))
+                      ) : (
+                        <TableHeaderCell>Label</TableHeaderCell>
+                      )}
                       <TableHeaderCell>Pulp href</TableHeaderCell>
                       {totalSizeBytes !== null ? (
                         <TableHeaderCell className="text-right">Size</TableHeaderCell>
@@ -136,13 +151,22 @@ function RepositoryContentInner() {
                     {rows.map((row, idx) => {
                       const href = rowHref(row);
                       const pkgId = href ? extractRpmPackageContentId(href) : null;
+                      const contentMatch = href && !pkgId ? findContentForHref(href) : null;
                       return (
                         <TableRow key={href ?? String(idx)}>
-                          <TableCell className="max-w-xs truncate text-sm">{rowLabel(row)}</TableCell>
+                          {plugin ? (
+                            plugin.contentFields.map((field) => (
+                              <TableCell key={field.name} className="max-w-xs truncate text-sm">
+                                {fieldValue(row[field.name])}
+                              </TableCell>
+                            ))
+                          ) : (
+                            <TableCell className="max-w-xs truncate text-sm">{rowLabel(row)}</TableCell>
+                          )}
                           <TableCell className="max-w-md truncate font-mono text-xs">{href ?? "-"}</TableCell>
                           {totalSizeBytes !== null ? (
                             <TableCell className="text-right text-sm">
-                              {formatBytes(row.size_package)}
+                              {formatBytes(plugin?.contentSizeField ? row[plugin.contentSizeField] : null)}
                             </TableCell>
                           ) : null}
                           <TableCell className="text-right">
@@ -152,6 +176,13 @@ function RepositoryContentInner() {
                                 className="inline-flex rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                               >
                                 RPM review
+                              </Link>
+                            ) : contentMatch ? (
+                              <Link
+                                href={`/content/${contentMatch.kind}/${contentMatch.id}`}
+                                className="inline-flex rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                              >
+                                Review
                               </Link>
                             ) : href ? (
                               <Link

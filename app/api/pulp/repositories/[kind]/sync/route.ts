@@ -63,7 +63,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   const headers = authHeaders(authHeader);
   headers.set("Content-Type", "application/json");
 
-  // rpm uses the sync_policy enum; every other family uses the generic RepositorySyncURL mirror flag.
+  // rpm uses the sync_policy enum; deb and file take mirror plus optimize; the families on the
+  // core RepositorySyncURL (python, npm, gem) take mirror alone and reject optimize.
+  const mirrorPayload = {
+    remote: toPulpHrefPath(remoteHref),
+    mirror: body.mirror === undefined ? false : Boolean(body.mirror),
+  };
   const payload =
     plugin.syncFlavor === "sync_policy"
       ? {
@@ -71,11 +76,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
           sync_policy: normalizeSyncPolicy(body.sync_policy),
           optimize: body.optimize === undefined ? true : Boolean(body.optimize),
         }
-      : {
-          remote: toPulpHrefPath(remoteHref),
-          mirror: body.mirror === undefined ? false : Boolean(body.mirror),
-          optimize: body.optimize === undefined ? true : Boolean(body.optimize),
-        };
+      : plugin.syncFlavor === "mirror_only"
+        ? mirrorPayload
+        : {
+            ...mirrorPayload,
+            optimize: body.optimize === undefined ? true : Boolean(body.optimize),
+          };
 
   const syncResponse = await fetch(getPulpApiUrl(syncApiPath), {
     method: "POST",
