@@ -7,7 +7,7 @@
  * expected shape. derivePulpPlugins() returns whatever families it could derive, possibly none.
  */
 
-import type { PulpContentField, PulpPluginDescriptor, PulpRemoteField, PulpSyncFlavor } from "@/lib/pulp-plugins";
+import type { PulpContentField, PulpPluginDescriptor, PulpRemoteField, PulpSyncField } from "@/lib/pulp-plugins";
 
 const API_PREFIX = "/pulp/api/v3";
 
@@ -213,6 +213,67 @@ function buildExtraRemoteFields(
   return fields;
 }
 
+/** Enum values of a string enum schema, resolving a `$ref` and a wrapping `allOf`. */
+function resolveStringEnum(schemas: SchemaRecord, prop: unknown): readonly string[] | undefined {
+  const record = asRecord(prop);
+  if (!record) return undefined;
+  const refName = schemaRefName(record.$ref);
+  if (refName) return resolveStringEnum(schemas, schemas[refName]);
+  if (Array.isArray(record.allOf)) {
+    for (const entry of record.allOf) {
+      const values = resolveStringEnum(schemas, entry);
+      if (values) return values;
+    }
+    return undefined;
+  }
+  const values = asStringArray(record.enum);
+  if (values.length === 0) return undefined;
+  return record.type === undefined || record.type === "string" ? values : undefined;
+}
+
+/**
+ * The sync request body's writable properties, in schema declaration order. `remote` is skipped
+ * because the sync modal has its own remote picker, and `mirror` is skipped when the same schema
+ * declares `sync_policy` -- the spec marks it deprecated and Pulp treats the two as alternatives.
+ * A property that maps to no control is skipped for the same reason `policy` is excluded from the
+ * derived remote fields: a free-text box posting a value the server rejects is worse than nothing.
+ */
+function buildSyncFields(
+  paths: SchemaRecord,
+  schemas: SchemaRecord,
+  syncPath: string
+): PulpSyncField[] {
+  const properties = schemaProperties(postRequestSchema(paths, schemas, syncPath));
+  const hasSyncPolicy = "sync_policy" in properties;
+  const fields: PulpSyncField[] = [];
+  for (const [name, prop] of Object.entries(properties)) {
+    if (name === "remote") continue;
+    if (name === "mirror" && hasSyncPolicy) continue;
+    const record = asRecord(prop);
+    const label = humanise(name);
+    const type = propType(prop);
+    if (type === "boolean") {
+      const value = typeof record?.default === "boolean" ? record.default : false;
+      fields.push({ name, type: "boolean", label, default: value });
+      continue;
+    }
+    const options = resolveStringEnum(schemas, prop);
+    if (options) {
+      const field: PulpSyncField = { name, type: "enum", label, options };
+      if (typeof record?.default === "string") field.default = record.default;
+      fields.push(field);
+      continue;
+    }
+    if (type === "array") {
+      const itemOptions = resolveStringEnum(schemas, record?.items);
+      if (itemOptions) {
+        fields.push({ name, type: "string_list", label, options: itemOptions });
+      }
+    }
+  }
+  return fields;
+}
+
 function buildExtraRepoFields(
   paths: SchemaRecord,
   schemas: SchemaRecord,
@@ -354,12 +415,7 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
 
     const syncKey = `{${app}_${type.replaceAll("-", "_")}_repository_href}sync/`;
     const supportsSync = syncKey in paths;
-    let syncFlavor: PulpSyncFlavor = "mirror_only";
-    if (supportsSync) {
-      const syncProps = schemaProperties(postRequestSchema(paths, schemas, syncKey));
-      if ("sync_policy" in syncProps) syncFlavor = "sync_policy";
-      else if ("optimize" in syncProps) syncFlavor = "mirror";
-    }
+    const syncFields = supportsSync ? buildSyncFields(paths, schemas, syncKey) : [];
 
     const itemSchema = getResponseItemSchema(paths, schemas, chosenContent.path);
     const label = humanise(kind);
@@ -378,7 +434,7 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
       contentFields: buildContentFields(itemSchema),
       supportsPublish: publicationPath !== null,
       supportsSync,
-      syncFlavor,
+      syncFields,
       extraRemoteFields: buildExtraRemoteFields(paths, schemas, remotePath, remoteExcluded),
       extraRepoFields: buildExtraRepoFields(paths, schemas, repo.path, repoExcluded),
     };

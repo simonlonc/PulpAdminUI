@@ -375,21 +375,15 @@ export type RemoteUpdatePayload = {
   provenance?: boolean;
 };
 
-/** RPM sync strategy (POST .../repositories/rpm/rpm/{id}/sync/). */
-export type RpmSyncPolicy = "additive" | "mirror_complete" | "mirror_content_only";
-
 /**
- * Sync body sent to /api/pulp/repositories/{kind}/sync.
- * rpm sends sync_policy; every other family sends mirror (see PulpPluginDescriptor.syncFlavor).
+ * Sync body sent to /api/pulp/repositories/{kind}/sync. The route keeps only the names the
+ * plugin declares (see PulpPluginDescriptor.syncFields) and drops the rest.
  */
 export type RepositorySyncPayload = {
   pulp_href: string;
   remote: string;
-  optimize: boolean;
-  /** rpm only. */
-  sync_policy?: RpmSyncPolicy;
-  /** deb, file. */
-  mirror?: boolean;
+  /** Values for the plugin's declared sync fields, keyed by Pulp field name. */
+  fields: Record<string, boolean | string | readonly string[]>;
 };
 
 export type RepositorySyncResult = {

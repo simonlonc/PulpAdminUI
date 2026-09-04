@@ -11,22 +11,11 @@ import {
   toPulpHrefPath,
 } from "../../_server";
 
-const RPM_SYNC_POLICIES = ["additive", "mirror_complete", "mirror_content_only"] as const;
-
 type SyncBody = {
   pulp_href?: string;
   remote?: string;
-  sync_policy?: string;
-  mirror?: boolean;
-  optimize?: boolean;
+  fields?: Record<string, unknown>;
 };
-
-function normalizeSyncPolicy(value: unknown): (typeof RPM_SYNC_POLICIES)[number] {
-  if (typeof value === "string" && (RPM_SYNC_POLICIES as readonly string[]).includes(value)) {
-    return value as (typeof RPM_SYNC_POLICIES)[number];
-  }
-  return "additive";
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
@@ -64,25 +53,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   const headers = authHeaders(authHeader);
   headers.set("Content-Type", "application/json");
 
-  // rpm uses the sync_policy enum; deb and file take mirror plus optimize; the families on the
-  // core RepositorySyncURL (python, npm, gem) take mirror alone and reject optimize.
-  const mirrorPayload = {
-    remote: toPulpHrefPath(remoteHref),
-    mirror: body.mirror === undefined ? false : Boolean(body.mirror),
-  };
-  const payload =
-    plugin.syncFlavor === "sync_policy"
-      ? {
-          remote: toPulpHrefPath(remoteHref),
-          sync_policy: normalizeSyncPolicy(body.sync_policy),
-          optimize: body.optimize === undefined ? true : Boolean(body.optimize),
-        }
-      : plugin.syncFlavor === "mirror_only"
-        ? mirrorPayload
-        : {
-            ...mirrorPayload,
-            optimize: body.optimize === undefined ? true : Boolean(body.optimize),
-          };
+  // The body carries exactly the fields this plugin's sync schema declares, coerced by type; a
+  // name the plugin does not declare is dropped rather than forwarded for the server to reject.
+  const sent = body.fields ?? {};
+  const payload: Record<string, unknown> = { remote: toPulpHrefPath(remoteHref) };
+  for (const field of plugin.syncFields) {
+    const value = sent[field.name];
+    if (field.type === "boolean") {
+      payload[field.name] = value === undefined ? (field.default ?? false) : Boolean(value);
+      continue;
+    }
+    const options = field.options ?? [];
+    if (options.length === 0) continue;
+    if (field.type === "enum") {
+      payload[field.name] =
+        typeof value === "string" && options.includes(value) ? value : (field.default ?? options[0]);
+      continue;
+    }
+    // string_list: an empty selection is the schema default, so leave the field out entirely.
+    const selected = Array.isArray(value)
+      ? value.filter((v): v is string => typeof v === "string" && options.includes(v))
+      : [];
+    if (selected.length > 0) payload[field.name] = selected;
+  }
 
   const syncResponse = await fetch(getPulpApiUrl(syncApiPath), {
     method: "POST",
