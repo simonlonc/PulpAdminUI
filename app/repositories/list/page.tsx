@@ -766,16 +766,14 @@ function RepositoriesListPageContent() {
                                   Edit
                                 </Link>
                               </DropdownMenuItem>
-                              {kind === "rpm" ? (
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/repositories/versions?pulp_href=${encodeURIComponent(repo.pulp_href)}`}
-                                  >
-                                    <GitBranch className="size-4" />
-                                    Versions
-                                  </Link>
-                                </DropdownMenuItem>
-                              ) : null}
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/repositories/versions?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`}
+                                >
+                                  <GitBranch className="size-4" />
+                                  Versions
+                                </Link>
+                              </DropdownMenuItem>
                               <DropdownMenuItem asChild>
                                 <Link
                                   href={`/repositories/content?pulp_href=${encodeURIComponent(repo.pulp_href)}`}

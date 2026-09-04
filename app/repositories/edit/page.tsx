@@ -573,7 +573,7 @@ function RepositoriesEditInner() {
                   {loadedKind === "rpm" && pulpHref ? (
                     <div className="pt-2">
                       <Link
-                        href={`/repositories/versions?pulp_href=${encodeURIComponent(pulpHref)}`}
+                        href={`/repositories/versions?kind=${loadedKind}&pulp_href=${encodeURIComponent(pulpHref)}`}
                         className="inline-flex rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                       >
                         Version history
