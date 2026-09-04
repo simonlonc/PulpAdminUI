@@ -50,7 +50,7 @@ import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { type PulpPluginKind } from "@/lib/pulp-plugins";
+import { type PulpPluginKind, type PulpSyncField } from "@/lib/pulp-plugins";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
@@ -60,7 +60,6 @@ import {
   PulpDistribution,
   PulpRemote,
   PulpRepository,
-  RpmSyncPolicy,
   type RepositoryCreatePayload,
 } from "@/services/pulp/types";
 
@@ -69,6 +68,24 @@ const repoCreateTextareaClass =
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+
+/** Initial sync modal values: each field's `default`, else false, the first option, or []. */
+function defaultSyncFieldValues(
+  fields: readonly PulpSyncField[]
+): Record<string, boolean | string | string[]> {
+  const values: Record<string, boolean | string | string[]> = {};
+  for (const field of fields) {
+    if (field.type === "boolean") {
+      values[field.name] = field.default === undefined ? false : Boolean(field.default);
+    } else if (field.type === "enum") {
+      values[field.name] =
+        typeof field.default === "string" ? field.default : (field.options?.[0] ?? "");
+    } else {
+      values[field.name] = [];
+    }
+  }
+  return values;
+}
 
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
@@ -147,9 +164,9 @@ function RepositoriesListPageContent() {
   });
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
   const [syncRemoteHref, setSyncRemoteHref] = useState("");
-  const [syncPolicy, setSyncPolicy] = useState<RpmSyncPolicy>("additive");
-  const [syncMirror, setSyncMirror] = useState(false);
-  const [syncOptimize, setSyncOptimize] = useState(true);
+  const [syncFieldValues, setSyncFieldValues] = useState<
+    Record<string, boolean | string | string[]>
+  >({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ repoName: string; task: string | null } | null>(
     null
@@ -380,9 +397,7 @@ function RepositoriesListPageContent() {
   function openSyncModal(repo: PulpRepository) {
     setSyncModalRepo(repo);
     setSyncRemoteHref("");
-    setSyncPolicy("additive");
-    setSyncMirror(false);
-    setSyncOptimize(true);
+    setSyncFieldValues(defaultSyncFieldValues(getPlugin(kind).syncFields));
     setSyncResult(null);
     setError(null);
     setIsLoadingRemotes(true);
@@ -416,22 +431,11 @@ function RepositoriesListPageContent() {
     setError(null);
     setSyncResult(null);
     try {
-      const result = await pulpRepositoryManagementService.sync(
-        kind,
-        getPlugin(kind).syncFlavor === "sync_policy"
-          ? {
-              pulp_href: repo.pulp_href,
-              remote: syncRemoteHref,
-              sync_policy: syncPolicy,
-              optimize: syncOptimize,
-            }
-          : {
-              pulp_href: repo.pulp_href,
-              remote: syncRemoteHref,
-              mirror: syncMirror,
-              optimize: syncOptimize,
-            }
-      );
+      const result = await pulpRepositoryManagementService.sync(kind, {
+        pulp_href: repo.pulp_href,
+        remote: syncRemoteHref,
+        fields: syncFieldValues,
+      });
       setSyncResult({ repoName: repo.name, task: result.task });
       setSyncModalRepo(null);
       await load();
@@ -1165,49 +1169,74 @@ function RepositoriesListPageContent() {
                   </span>
                 ) : null}
               </FormField>
-              {getPlugin(kind).syncFlavor === "sync_policy" ? (
-                <FormField label="Sync policy">
-                  <select
-                    value={syncPolicy}
-                    onChange={(e) => setSyncPolicy(e.target.value as RpmSyncPolicy)}
-                    disabled={isSyncing}
-                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-                  >
-                    <option value="additive">additive — add new content, keep existing</option>
-                    <option value="mirror_complete">
-                      mirror_complete — match remote exactly (metadata + content)
-                    </option>
-                    <option value="mirror_content_only">
-                      mirror_content_only — match remote content, regenerate metadata
-                    </option>
-                  </select>
-                </FormField>
-              ) : (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0"
-                    checked={syncMirror}
-                    disabled={isSyncing}
-                    onChange={(e) => setSyncMirror(e.target.checked)}
-                  />
-                  Mirror (match remote exactly, removing content not present upstream)
-                </label>
-              )}
-              {/* The core RepositorySyncURL has no optimize field and rejects it, so the
-                  families on it get no checkbox (see PulpSyncFlavor "mirror_only"). */}
-              {getPlugin(kind).syncFlavor === "mirror_only" ? null : (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0"
-                    checked={syncOptimize}
-                    disabled={isSyncing}
-                    onChange={(e) => setSyncOptimize(e.target.checked)}
-                  />
-                  Optimize (skip sync if nothing upstream changed)
-                </label>
-              )}
+              {getPlugin(kind).syncFields.map((field) => {
+                const value = syncFieldValues[field.name];
+                const options = field.options ?? [];
+                if (field.type === "boolean") {
+                  return (
+                    <label
+                      key={field.name}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0"
+                        checked={Boolean(value)}
+                        disabled={isSyncing}
+                        onChange={(e) =>
+                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.checked }))
+                        }
+                      />
+                      {field.label}
+                    </label>
+                  );
+                }
+                if (field.type === "enum") {
+                  return (
+                    <FormField key={field.name} label={field.label}>
+                      <select
+                        value={typeof value === "string" ? value : ""}
+                        onChange={(e) =>
+                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                        }
+                        disabled={isSyncing}
+                        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+                      >
+                        {options.map((option) => (
+                          <option key={option} value={option}>
+                            {field.optionLabels?.[option] ?? option}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  );
+                }
+                const selected = Array.isArray(value) ? value : [];
+                return (
+                  <FormField key={field.name} label={field.label}>
+                    <select
+                      multiple
+                      value={selected}
+                      onChange={(event) => {
+                        const values = Array.from(
+                          event.target.selectedOptions,
+                          (option) => option.value
+                        );
+                        setSyncFieldValues((prev) => ({ ...prev, [field.name]: values }));
+                      }}
+                      disabled={isSyncing}
+                      className={selectClassName}
+                      size={Math.min(options.length, 6)}
+                    >
+                      {options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                );
+              })}
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={isSyncing} onClick={closeSyncModal}>

@@ -11,9 +11,6 @@
  * gem 0.8.0 and maven 0.25.1.
  */
 
-/** Sync request body accepted by a repository's sync/ endpoint. */
-export type PulpSyncFlavor = "sync_policy" | "mirror" | "mirror_only";
-
 /**
  * A writable remote field a plugin adds beyond the common set.
  *
@@ -35,6 +32,26 @@ export type PulpRemoteField = {
   placeholder?: string;
   /** "string_list" only: render a multi-select of these values instead of a textarea. */
   options?: readonly string[];
+};
+
+/**
+ * A writable property of a plugin's sync request body.
+ *
+ * The sync route coerces the value by `type` and the sync modal renders one control per
+ * field, so a family's sync body needs no per-kind branches.
+ */
+export type PulpSyncField = {
+  /** Pulp field name, sent verbatim in the sync request body. */
+  name: string;
+  /** "enum": a single choice from `options`. "string_list": zero or more of them. */
+  type: "boolean" | "enum" | "string_list";
+  label: string;
+  /** Initial control value. Falls back to false, the first option, and [] by type. */
+  default?: boolean | string;
+  /** "enum" and "string_list": the values the server accepts. */
+  options?: readonly string[];
+  /** "enum" only: display text per option, for values that need explaining. */
+  optionLabels?: Readonly<Record<string, string>>;
 };
 
 /**
@@ -85,12 +102,10 @@ export type PulpPluginDescriptor = {
    */
   publicationDefaults?: Record<string, unknown>;
   /**
-   * "sync_policy": { remote, sync_policy, optimize } (rpm).
-   * "mirror": { remote, mirror, optimize } (deb's AptRepositorySyncURL, file's FileRepositorySyncURL).
-   * "mirror_only": { remote, mirror } -- the core RepositorySyncURL, which rejects `optimize`
-   * with "Unexpected field" (python, npm, gem; maven has no sync endpoint at all).
+   * The sync endpoint's writable properties beyond `remote`, in the order the schema declares
+   * them. Empty when the family cannot sync.
    */
-  syncFlavor: PulpSyncFlavor;
+  syncFields: readonly PulpSyncField[];
   /** Writable remote fields beyond the common set. */
   extraRemoteFields: readonly PulpRemoteField[];
   /** Writable repository fields beyond the common set, in Pulp field-name form. */
@@ -119,7 +134,27 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     contentSizeField: "size_package",
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "sync_policy",
+    syncFields: [
+      {
+        name: "sync_policy",
+        type: "enum",
+        label: "Sync policy",
+        default: "additive",
+        options: ["additive", "mirror_complete", "mirror_content_only"],
+        optionLabels: {
+          additive: "additive — add new content, keep existing",
+          mirror_complete: "mirror_complete — match remote exactly (metadata + content)",
+          mirror_content_only: "mirror_content_only — match remote content, regenerate metadata",
+        },
+      },
+      { name: "skip_types", type: "string_list", label: "Skip types", options: ["srpm", "treeinfo"] },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: [
       "autopublish",
@@ -152,7 +187,20 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     supportsPublish: true,
     supportsSync: true,
     publicationDefaults: { simple: true },
-    syncFlavor: "mirror",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [
       {
         name: "distributions",
@@ -202,7 +250,20 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     ],
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: ["autopublish", "manifest"],
   },
@@ -226,7 +287,14 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     contentSizeField: "size",
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [
       {
         name: "includes",
@@ -290,7 +358,14 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     ],
     supportsPublish: false,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: [],
   },
@@ -314,7 +389,14 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     ],
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [
       { name: "prereleases", type: "boolean", label: "Sync pre-releases" },
       {
@@ -351,7 +433,7 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     ],
     supportsPublish: false,
     supportsSync: false,
-    syncFlavor: "mirror_only",
+    syncFields: [],
     extraRemoteFields: [],
     extraRepoFields: [],
   },
