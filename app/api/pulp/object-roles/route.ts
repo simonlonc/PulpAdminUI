@@ -4,11 +4,12 @@ import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "@/app/api/pulp/repositories/_server";
 import { PulpObjectRole, PulpObjectRoleAssignmentPayload } from "@/services/pulp/types";
 
-/** Resource kinds Pulp's list_roles/add_role/remove_role endpoints exist on (Epic E scope). */
+/** Resource kinds Pulp's list_roles/add_role/remove_role endpoints exist on. */
 const ALLOWED_OBJECT_ROLE_PATH_PREFIXES = [
   "/repositories/",
   "/remotes/",
   "/distributions/",
+  "/contentguards/",
 ] as const;
 
 type ObjectRoleAssignmentBody = {

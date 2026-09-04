@@ -217,11 +217,49 @@ export type PulpDistributionDetail = PulpDistribution & {
   publication: string | null;
 };
 
-/** Row from GET /contentguards/, the generic cross-type content-guard list. Read-only until Epic I adds CRUD. */
+/**
+ * UI-facing content-guard type discriminator; also the `pulp_type` filter value on
+ * GET /contentguards/. See services/pulp/content-guard-kinds.ts for the create-path/label
+ * mapping and for deriving a guard's kind from its pulp_href, since the generic list response
+ * below carries no pulp_type field.
+ */
+export type PulpContentGuardKind =
+  | "certguard.rhsm"
+  | "certguard.x509"
+  | "core.composite"
+  | "core.content_redirect"
+  | "core.header"
+  | "core.rbac";
+
+/** Row from GET /contentguards/, the generic cross-type content-guard list. */
 export type PulpContentGuard = {
   pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
   name: string;
   description: string | null;
+};
+
+/**
+ * Detail row from GET {guard_href}, carrying the per-type writable fields the generic list
+ * omits. Fields not applicable to the guard's actual kind are absent.
+ */
+export type PulpContentGuardDetail = PulpContentGuard & {
+  /** core/header only. */
+  header_name?: string;
+  /** core/header only. */
+  header_value?: string;
+  /** core/header only. */
+  jq_filter?: string | null;
+  /** certguard/x509 and certguard/rhsm only. */
+  ca_certificate?: string;
+  /** core/composite only: hrefs of the guards it delegates to. */
+  guards?: string[];
+  /** core/rbac only, read-only: derived from the guard's role assignments. */
+  users?: { username: string; pulp_href: string; prn: string }[];
+  /** core/rbac only, read-only: derived from the guard's role assignments. */
+  groups?: { name: string; pulp_href: string; prn: string }[];
 };
 
 /** Row from GET /publications/, the generic cross-plugin publication list. No PATCH; DELETE is synchronous. */
@@ -640,6 +678,31 @@ export type UpdatePulpDistributionPayload = {
   repository?: string | null;
   publication?: string | null;
   content_guard?: string | null;
+};
+
+/**
+ * POST /api/pulp/contentguards — dispatches on `kind` to the matching upstream create path.
+ * Fields not applicable to `kind` are ignored by the route.
+ */
+export type CreatePulpContentGuardPayload = {
+  kind: PulpContentGuardKind;
+  name: string;
+  description?: string | null;
+  header_name?: string;
+  header_value?: string;
+  jq_filter?: string | null;
+  ca_certificate?: string;
+  guards?: string[];
+};
+
+export type UpdatePulpContentGuardPayload = {
+  name?: string;
+  description?: string | null;
+  header_name?: string;
+  header_value?: string;
+  jq_filter?: string | null;
+  ca_certificate?: string;
+  guards?: string[];
 };
 
 export type CreatePulpUserPayload = {
