@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { findPulpPlugin } from "@/lib/pulp-plugins";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
@@ -8,16 +9,22 @@ import {
   TaskRefResponse,
   waitForTask,
 } from "../../_server";
-import { isRpmRepositoryVersionInstancePath, mapPulpRpmRepositoryVersion } from "../rpm-version-map";
+import { isRepositoryVersionInstancePath, mapPulpRepositoryVersion } from "../../repository-version-map";
 
 type DeleteBody = {
   pulp_href?: string;
 };
 
-export async function GET(request: Request) {
+export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
   const url = new URL(request.url);
@@ -34,9 +41,11 @@ export async function GET(request: Request) {
   }
 
   const apiPath = normalizePulpHrefToApiPath(decodedHref);
-  if (!isRpmRepositoryVersionInstancePath(apiPath)) {
+  if (!isRepositoryVersionInstancePath(apiPath, plugin.repositoryPath)) {
     return Response.json(
-      { detail: "pulp_href must be a single RPM repository version (…/versions/{number}/)." },
+      {
+        detail: `pulp_href must be a single ${plugin.label} repository version (…/versions/{number}/).`,
+      },
       { status: 400 }
     );
   }
@@ -57,13 +66,19 @@ export async function GET(request: Request) {
   }
 
   const row = (await detailResponse.json()) as Record<string, unknown>;
-  return Response.json(mapPulpRpmRepositoryVersion(row));
+  return Response.json(mapPulpRepositoryVersion(row));
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const authResult = await requirePulpAuth();
   if (!authResult.ok) {
     return authResult.response;
+  }
+
+  const { kind } = await params;
+  const plugin = findPulpPlugin(kind);
+  if (!plugin) {
+    return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
   const body = (await request.json()) as DeleteBody;
@@ -73,9 +88,11 @@ export async function DELETE(request: Request) {
   }
 
   const apiPath = normalizePulpHrefToApiPath(pulpHref);
-  if (!isRpmRepositoryVersionInstancePath(apiPath)) {
+  if (!isRepositoryVersionInstancePath(apiPath, plugin.repositoryPath)) {
     return Response.json(
-      { detail: "pulp_href must be a single RPM repository version (…/versions/{number}/)." },
+      {
+        detail: `pulp_href must be a single ${plugin.label} repository version (…/versions/{number}/).`,
+      },
       { status: 400 }
     );
   }

@@ -188,6 +188,9 @@ export type PulpOrphanCleanupResult = {
   progress_reports: PulpTaskProgressReport[];
 };
 
+/** Same shape as PulpOrphanCleanupResult (task/state/progress_reports from waitForTask); aliased rather than duplicated. */
+export type PulpReclaimSpaceResult = PulpOrphanCleanupResult;
+
 export type PulpTaskSchedule = {
   pulp_href: string;
   pulp_created: string;
@@ -480,31 +483,48 @@ export type RepositoryCreatePayload = {
 };
 
 /** Per-type counts in repository version content_summary (e.g. rpm.package). */
-export type PulpRpmRepositoryVersionContentKind = {
+export type PulpRepositoryVersionContentKind = {
   count: number;
   href: string;
 };
 
-export type PulpRpmRepositoryVersionContentSummary = {
-  added: Record<string, PulpRpmRepositoryVersionContentKind>;
-  removed: Record<string, PulpRpmRepositoryVersionContentKind>;
-  present: Record<string, PulpRpmRepositoryVersionContentKind>;
+export type PulpRepositoryVersionContentSummary = {
+  added: Record<string, PulpRepositoryVersionContentKind>;
+  removed: Record<string, PulpRepositoryVersionContentKind>;
+  present: Record<string, PulpRepositoryVersionContentKind>;
 };
 
-/** Row from GET .../repositories/rpm/rpm/{uuid}/versions/ */
-export type PulpRpmRepositoryVersion = {
+/** Row from GET .../repositories/{plugin}/{plugin}/{uuid}/versions/ */
+export type PulpRepositoryVersion = {
   pulp_href: string;
   pulp_created: string;
   number: number;
   repository: string;
   base_version: string | null;
-  content_summary: PulpRpmRepositoryVersionContentSummary;
+  content_summary: PulpRepositoryVersionContentSummary;
 };
 
-export type RpmRepositoryVersionsListResult = {
+export type RepositoryVersionsListResult = {
   count: number;
-  results: PulpRpmRepositoryVersion[];
+  results: PulpRepositoryVersion[];
 };
+
+/** Result of POST .../versions/{n}/repair/ */
+export type RepositoryVersionRepairResult = {
+  task: string;
+  state: string;
+};
+
+/** Body of POST {repository_href}modify/ (RepositoryAddRemoveContent). */
+export type RepositoryModifyPayload = {
+  add_content_units?: string[];
+  remove_content_units?: string[];
+  base_version?: string;
+  overwrite?: boolean;
+};
+
+/** Result of POST {repository_href}modify/ - same {task, state} shape as a version repair. */
+export type RepositoryModifyResult = RepositoryVersionRepairResult;
 
 export type PulpRpmPackage = {
   pulp_href: string;
