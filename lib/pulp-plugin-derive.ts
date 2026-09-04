@@ -7,7 +7,13 @@
  * expected shape. derivePulpPlugins() returns whatever families it could derive, possibly none.
  */
 
-import type { PulpContentField, PulpPluginDescriptor, PulpRemoteField, PulpSyncField } from "@/lib/pulp-plugins";
+import type {
+  PulpContentEndpoint,
+  PulpContentField,
+  PulpPluginDescriptor,
+  PulpRemoteField,
+  PulpSyncField,
+} from "@/lib/pulp-plugins";
 
 const API_PREFIX = "/pulp/api/v3";
 
@@ -107,13 +113,6 @@ function pickPath(
   if (byApp) return byApp.path;
   const sorted = [...candidates].sort((a, b) => a.type.localeCompare(b.type));
   return sorted[0].path;
-}
-
-function chooseContentCandidate(
-  candidates: { type: string; path: string }[]
-): { type: string; path: string } | null {
-  if (candidates.length === 0) return null;
-  return [...candidates].sort((a, b) => a.type.localeCompare(b.type))[0];
 }
 
 /** The POST request body schema for a path, resolved through its $ref. */
@@ -292,7 +291,7 @@ function buildExtraRepoFields(
  * rpm.UpdateRecord -> rpm.advisory does not follow any derivable rule). So this only derives a
  * contentType when it is unambiguous: exactly one content list path for the app, and exactly
  * one enum entry starting with `${app}.`. Otherwise it is left as "" -- callers must handle
- * an empty contentType (see H9).
+ * an empty contentType.
  */
 function deriveContentType(app: string, contentCandidates: unknown[], typeEnum: string[]): string {
   if (contentCandidates.length !== 1) return "";
@@ -335,6 +334,39 @@ function buildContentFields(itemSchema: SchemaRecord | null): PulpContentField[]
   return picked.map((name) => ({ name, label: humanise(name) }));
 }
 
+/**
+ * One endpoint per content list path of the app, sorted by path. The first is frequently not the
+ * one a human would pick -- rpm has 11 and sorting puts advisories before packages -- which is
+ * expected: the curated overlay in PULP_PLUGINS reorders the ones it names.
+ *
+ * fieldsQueryUnsupported is never set here: it records a server bug, which only the curated tier
+ * can know about.
+ */
+function buildContentEndpoints(
+  paths: SchemaRecord,
+  schemas: SchemaRecord,
+  app: string,
+  candidates: { type: string; path: string }[],
+  typeEnum: string[]
+): PulpContentEndpoint[] {
+  const contentType = deriveContentType(app, candidates, typeEnum);
+  return [...candidates]
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((candidate) => {
+      const itemSchema = getResponseItemSchema(paths, schemas, candidate.path);
+      const endpoint: PulpContentEndpoint = {
+        path: stripPrefix(candidate.path),
+        label: humanise(candidate.type),
+        contentType,
+        fields: buildContentFields(itemSchema),
+      };
+      if ("size" in schemaProperties(itemSchema)) {
+        endpoint.sizeField = "size";
+      }
+      return endpoint;
+    });
+}
+
 function stripPrefix(path: string): string {
   return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
 }
@@ -345,9 +377,9 @@ function stripPrefix(path: string): string {
  *
  * Families that this cannot derive well enough to be useful (no post operation on the
  * repository, no remote, no distribution) are skipped rather than included half-built. contentType
- * is frequently left "" and contentPath frequently picks the wrong endpoint for multi-endpoint
- * apps (see deriveContentType and the contentPath comment below) -- the curated overlay in
- * PULP_PLUGINS exists precisely to correct what cannot be derived reliably.
+ * is frequently left "" and the content endpoints come out in an order no human would pick (see
+ * deriveContentType and buildContentEndpoints) -- the curated overlay in PULP_PLUGINS exists
+ * precisely to correct what cannot be derived reliably.
  */
 export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
   const root = asRecord(spec);
@@ -406,18 +438,13 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
     const publicationPath = pickPath(publicationCandidates, type, app);
 
     const contentCandidates = contentByApp.get(app) ?? [];
-    // The app's content list paths sorted by type segment, first one. This is frequently the
-    // wrong choice for a multi-endpoint app: rpm has 11 and sorting first gives advisories
-    // rather than packages. Expected -- the curated overlay wins for those, and H9 turns this
-    // into a list instead of a single guess.
-    const chosenContent = chooseContentCandidate(contentCandidates);
-    if (!chosenContent) continue;
+    const contentEndpoints = buildContentEndpoints(paths, schemas, app, contentCandidates, typeEnum);
+    if (contentEndpoints.length === 0) continue;
 
     const syncKey = `{${app}_${type.replaceAll("-", "_")}_repository_href}sync/`;
     const supportsSync = syncKey in paths;
     const syncFields = supportsSync ? buildSyncFields(paths, schemas, syncKey) : [];
 
-    const itemSchema = getResponseItemSchema(paths, schemas, chosenContent.path);
     const label = humanise(kind);
 
     const descriptor: PulpPluginDescriptor = {
@@ -429,18 +456,13 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
       remoteUrlPlaceholder: "https://",
       publicationPath: publicationPath ? stripPrefix(publicationPath) : null,
       distributionPath: stripPrefix(distributionPath),
-      contentType: deriveContentType(app, contentCandidates, typeEnum),
-      contentPath: stripPrefix(chosenContent.path),
-      contentFields: buildContentFields(itemSchema),
+      contentEndpoints,
       supportsPublish: publicationPath !== null,
       supportsSync,
       syncFields,
       extraRemoteFields: buildExtraRemoteFields(paths, schemas, remotePath, remoteExcluded),
       extraRepoFields: buildExtraRepoFields(paths, schemas, repo.path, repoExcluded),
     };
-    if ("size" in schemaProperties(itemSchema)) {
-      descriptor.contentSizeField = "size";
-    }
     families.push(descriptor);
   }
 

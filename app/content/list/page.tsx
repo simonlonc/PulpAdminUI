@@ -129,15 +129,20 @@ function ContentListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All content types</option>
-                  {plugins
-                    /* A derived family whose pulp_type could not be determined has
+                  {plugins.flatMap((plugin) => {
+                    /* A derived endpoint whose pulp_type could not be determined has
                        contentType === "", indistinguishable from "All content types". */
-                    .filter((plugin) => plugin.contentType !== "")
-                    .map((plugin) => (
-                      <option key={plugin.kind} value={plugin.contentType}>
-                        {plugin.label}
+                    const endpoints = plugin.contentEndpoints.filter(
+                      (endpoint) => endpoint.contentType !== ""
+                    );
+                    return endpoints.map((endpoint) => (
+                      <option key={`${plugin.kind}:${endpoint.path}`} value={endpoint.contentType}>
+                        {endpoints.length > 1
+                          ? `${plugin.label} / ${endpoint.label}`
+                          : plugin.label}
                       </option>
-                    ))}
+                    ));
+                  })}
                 </select>
               </FormField>
             </div>
@@ -185,7 +190,7 @@ function ContentListPageContent() {
                               </Link>
                             ) : contentMatch ? (
                               <Link
-                                href={`/content/${contentMatch.kind}/${contentMatch.id}`}
+                                href={`/content/${contentMatch.kind}/${contentMatch.id}?path=${encodeURIComponent(contentMatch.path)}`}
                                 className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                               >
                                 View content
