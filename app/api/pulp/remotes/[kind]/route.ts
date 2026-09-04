@@ -53,6 +53,27 @@ function isRemoteApiPath(plugin: PulpPluginDescriptor, path: string): boolean {
   return path.includes(plugin.remotePath);
 }
 
+/** Parses a "string_list" field. Pulp rejects null for these array fields, so blank is []. */
+function parseStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === "string" && v.trim() !== "");
+}
+
+/** Parses an "integer" field, or null when blank/absent. */
+function parseNullableInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+/** Parses a "json" field: a JSON object, or null when blank/absent. Throws on invalid JSON. */
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  return JSON.parse(value) as Record<string, unknown>;
+}
+
 /**
  * Copy the plugin's extra remote fields out of the request body.
  * `onlySupplied` skips fields the caller omitted, which is what PATCH needs so an
@@ -71,6 +92,33 @@ function assignExtraRemoteFields(
     }
     if (field.type === "boolean") {
       target[field.name] = Boolean(source[field.name]);
+      continue;
+    }
+    if (field.type === "string_list") {
+      const list = parseStringList(source[field.name]);
+      if (field.required && list.length === 0) {
+        return Response.json({ detail: `${field.label} is required.` }, { status: 400 });
+      }
+      target[field.name] = list;
+      continue;
+    }
+    if (field.type === "integer") {
+      // Pulp rejects null here, so a blank value leaves the field out and its default stands.
+      const parsed = parseNullableInteger(source[field.name]);
+      if (parsed !== null) {
+        target[field.name] = parsed;
+      }
+      continue;
+    }
+    if (field.type === "json") {
+      try {
+        target[field.name] = parseJsonObject(source[field.name]);
+      } catch {
+        return Response.json(
+          { detail: `${field.label} must be valid JSON.` },
+          { status: 400 }
+        );
+      }
       continue;
     }
     const value = trimOrNull(source[field.name]);

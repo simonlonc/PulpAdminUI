@@ -47,6 +47,9 @@ const REMOTE_POLICIES: PulpRemotePolicy[] = ["immediate", "on_demand", "streamed
 const selectClassName =
   "w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
+const textareaClassName =
+  "min-h-[4rem] w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm font-mono dark:border-zinc-700";
+
 type RemoteFormState = {
   name: string;
   url: string;
@@ -59,15 +62,19 @@ type RemoteFormState = {
   client_cert: string;
   client_key: string;
   download_concurrency: string;
-  /** Plugin-specific fields, keyed by Pulp field name (see PulpPluginDescriptor.extraRemoteFields). */
-  extra: Record<string, string | boolean>;
+  /**
+   * Plugin-specific fields, keyed by Pulp field name (see PulpPluginDescriptor.extraRemoteFields).
+   * "string_list" fields are held as string[]; "string", "integer" and "json" fields are held
+   * as the raw text typed into their input, parsed when the payload is built.
+   */
+  extra: Record<string, string | boolean | string[]>;
 };
 
 /** Blank values for the current kind's extra fields, so every input stays controlled. */
-function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean> {
-  const extra: Record<string, string | boolean> = {};
+function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean | string[]> {
+  const extra: Record<string, string | boolean | string[]> = {};
   for (const field of getPulpPlugin(kind).extraRemoteFields) {
-    extra[field.name] = field.type === "boolean" ? false : "";
+    extra[field.name] = field.type === "boolean" ? false : field.type === "string_list" ? [] : "";
   }
   return extra;
 }
@@ -75,13 +82,22 @@ function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean
 function extraFieldsFromRemote(
   remote: RemoteRow,
   kind: PulpPluginKind
-): Record<string, string | boolean> {
+): Record<string, string | boolean | string[]> {
   const source = remote as Record<string, unknown>;
-  const extra: Record<string, string | boolean> = {};
+  const extra: Record<string, string | boolean | string[]> = {};
   for (const field of getPulpPlugin(kind).extraRemoteFields) {
     const value = source[field.name];
-    extra[field.name] =
-      field.type === "boolean" ? Boolean(value) : typeof value === "string" ? value : "";
+    if (field.type === "boolean") {
+      extra[field.name] = Boolean(value);
+    } else if (field.type === "string_list") {
+      extra[field.name] = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    } else if (field.type === "json") {
+      extra[field.name] = value && typeof value === "object" ? JSON.stringify(value, null, 2) : "";
+    } else if (field.type === "integer") {
+      extra[field.name] = typeof value === "number" ? String(value) : "";
+    } else {
+      extra[field.name] = typeof value === "string" ? value : "";
+    }
   }
   return extra;
 }
@@ -134,7 +150,15 @@ function parseConcurrency(value: string): number | null {
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : null;
 }
 
-/** The plugin's extra fields, coerced to the shapes Pulp expects. */
+/** Parses an "integer" extra field. Unlike download concurrency, 0 is a valid value here. */
+function parseNullableInteger(value: string): number | null {
+  const t = value.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+/** The plugin's extra fields, coerced to the shapes Pulp expects. Assumes JSON fields already validated. */
 function extraFieldsPayload(
   form: RemoteFormState,
   kind: PulpPluginKind
@@ -142,8 +166,23 @@ function extraFieldsPayload(
   const payload: Record<string, unknown> = {};
   for (const field of getPulpPlugin(kind).extraRemoteFields) {
     const value = form.extra[field.name];
-    payload[field.name] =
-      field.type === "boolean" ? Boolean(value) : trimOrNull(typeof value === "string" ? value : "");
+    if (field.type === "boolean") {
+      payload[field.name] = Boolean(value);
+    } else if (field.type === "string_list") {
+      // Pulp rejects null for these array fields; an empty array is how they are cleared.
+      payload[field.name] = Array.isArray(value) ? value.filter((v) => v.trim() !== "") : [];
+    } else if (field.type === "integer") {
+      // Null is rejected too, so a blank input leaves the field out and Pulp's default stands.
+      const parsed = parseNullableInteger(typeof value === "string" ? value : "");
+      if (parsed !== null) {
+        payload[field.name] = parsed;
+      }
+    } else if (field.type === "json") {
+      const text = typeof value === "string" ? value.trim() : "";
+      payload[field.name] = text === "" ? null : JSON.parse(text);
+    } else {
+      payload[field.name] = trimOrNull(typeof value === "string" ? value : "");
+    }
   }
   return payload as Partial<RemoteCreatePayload>;
 }
@@ -156,7 +195,30 @@ function missingRequiredExtraField(
   for (const field of getPulpPlugin(kind).extraRemoteFields) {
     if (!field.required) continue;
     const value = form.extra[field.name];
+    if (field.type === "boolean") continue;
+    if (field.type === "string_list") {
+      if (!Array.isArray(value) || value.filter((v) => v.trim() !== "").length === 0) {
+        return field;
+      }
+      continue;
+    }
     if (typeof value !== "string" || value.trim() === "") {
+      return field;
+    }
+  }
+  return null;
+}
+
+/** The first "json" extra field whose typed text is not valid JSON, or null when all are valid. */
+function invalidJsonExtraField(form: RemoteFormState, kind: PulpPluginKind): PulpRemoteField | null {
+  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+    if (field.type !== "json") continue;
+    const value = form.extra[field.name];
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text === "") continue;
+    try {
+      JSON.parse(text);
+    } catch {
       return field;
     }
   }
@@ -319,6 +381,11 @@ function RemotesListPageContent() {
     const missingField = missingRequiredExtraField(form, kind);
     if (missingField) {
       setModalError(`${missingField.label} is required.`);
+      return;
+    }
+    const invalidJsonField = invalidJsonExtraField(form, kind);
+    if (invalidJsonField) {
+      setModalError(`${invalidJsonField.label} must be valid JSON.`);
       return;
     }
 
@@ -627,39 +694,102 @@ function RemotesListPageContent() {
                     setForm((f) => ({ ...f, url: event.target.value }));
                   }}
                   className="font-mono"
-                  placeholder={
-                    kind === "rpm"
-                      ? "https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/"
-                      : kind === "deb"
-                        ? "http://deb.debian.org/debian"
-                        : "https://example.com/path/to/PULP_MANIFEST"
-                  }
+                  placeholder={getPulpPlugin(kind).remoteUrlPlaceholder}
                 />
               </FormField>
-              {getPulpPlugin(kind).extraRemoteFields.map((field) =>
-                field.type === "boolean" ? (
-                  <label
-                    key={field.name}
-                    className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(form.extra[field.name])}
-                      onChange={(event) =>
-                        setForm((f) => ({
-                          ...f,
-                          extra: { ...f.extra, [field.name]: event.target.checked },
-                        }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    {field.label}
-                  </label>
-                ) : (
-                  <FormField
-                    key={field.name}
-                    label={field.required ? field.label : `${field.label} (optional)`}
-                  >
+              {getPulpPlugin(kind).extraRemoteFields.map((field) => {
+                const fieldLabel = field.required ? field.label : `${field.label} (optional)`;
+                if (field.type === "boolean") {
+                  return (
+                    <label
+                      key={field.name}
+                      className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.extra[field.name])}
+                        onChange={(event) =>
+                          setForm((f) => ({
+                            ...f,
+                            extra: { ...f.extra, [field.name]: event.target.checked },
+                          }))
+                        }
+                        className="h-4 w-4"
+                      />
+                      {field.label}
+                    </label>
+                  );
+                }
+                if (field.type === "string_list" && field.options) {
+                  const selected = Array.isArray(form.extra[field.name])
+                    ? (form.extra[field.name] as string[])
+                    : [];
+                  return (
+                    <FormField key={field.name} label={fieldLabel}>
+                      <select
+                        multiple
+                        value={selected}
+                        onChange={(event) => {
+                          setModalError(null);
+                          const values = Array.from(
+                            event.target.selectedOptions,
+                            (option) => option.value
+                          );
+                          setForm((f) => ({ ...f, extra: { ...f.extra, [field.name]: values } }));
+                        }}
+                        className={selectClassName}
+                        size={Math.min(field.options.length, 6)}
+                      >
+                        {field.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  );
+                }
+                if (field.type === "string_list") {
+                  const lines = Array.isArray(form.extra[field.name])
+                    ? (form.extra[field.name] as string[]).join("\n")
+                    : "";
+                  return (
+                    <FormField key={field.name} label={fieldLabel}>
+                      <textarea
+                        value={lines}
+                        onChange={(event) => {
+                          setModalError(null);
+                          const values = event.target.value.split("\n");
+                          setForm((f) => ({ ...f, extra: { ...f.extra, [field.name]: values } }));
+                        }}
+                        className={textareaClassName}
+                        rows={3}
+                        placeholder={field.placeholder}
+                      />
+                    </FormField>
+                  );
+                }
+                if (field.type === "json") {
+                  return (
+                    <FormField key={field.name} label={fieldLabel}>
+                      <textarea
+                        value={String(form.extra[field.name] ?? "")}
+                        onChange={(event) => {
+                          setModalError(null);
+                          setForm((f) => ({
+                            ...f,
+                            extra: { ...f.extra, [field.name]: event.target.value },
+                          }));
+                        }}
+                        className={textareaClassName}
+                        rows={3}
+                        placeholder={field.placeholder}
+                      />
+                    </FormField>
+                  );
+                }
+                return (
+                  <FormField key={field.name} label={fieldLabel}>
                     <Input
                       value={String(form.extra[field.name] ?? "")}
                       onChange={(event) => {
@@ -670,11 +800,12 @@ function RemotesListPageContent() {
                         }));
                       }}
                       className="font-mono"
+                      inputMode={field.type === "integer" ? "numeric" : undefined}
                       placeholder={field.placeholder}
                     />
                   </FormField>
-                )
-              )}
+                );
+              })}
               <FormField label="Download policy">
                 <select
                   value={form.policy}
