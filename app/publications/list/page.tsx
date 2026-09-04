@@ -31,10 +31,12 @@ const selectClassName =
 /** GET /publications/ has no `name`/`pulp_label_select` filters and no `type` field on its rows, so
  * type is derived from the href (which embeds the plugin path, e.g. /publications/rpm/rpm/<id>/)
  * and the `pulp_type` filter value is looked up here rather than added to PULP_PLUGINS. */
-const PULP_TYPE_BY_KIND: Record<PulpPluginKind, string> = {
+const PULP_TYPE_BY_KIND: Partial<Record<PulpPluginKind, string>> = {
   rpm: "rpm.rpm",
   deb: "deb.apt-publication",
   file: "file.file",
+  python: "python.python",
+  gem: "gem.gem",
 };
 
 function publicationKindFromHref(href: string): PulpPluginKind | null {
@@ -155,7 +157,7 @@ function PublicationsListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All types</option>
-                  {PULP_PLUGINS.map((plugin) => (
+                  {PULP_PLUGINS.filter((plugin) => PULP_TYPE_BY_KIND[plugin.kind]).map((plugin) => (
                     <option key={plugin.kind} value={PULP_TYPE_BY_KIND[plugin.kind]}>
                       {plugin.label}
                     </option>

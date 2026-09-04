@@ -269,6 +269,20 @@ export type PulpRemote = {
   gpgkey?: string | null;
   /** Debian APT only. */
   ignore_missing_package_indices?: boolean;
+  /** Python: package names (or name/version specs) to sync. Gem: a name-to-version-requirement map. */
+  includes?: string[] | Record<string, string> | null;
+  /** Python: package names (or name/version specs) to exclude. Gem: a name-to-version-requirement map. */
+  excludes?: string[] | Record<string, string> | null;
+  /** Python and Gem only. */
+  prereleases?: boolean;
+  /** Python only: distribution types to sync, e.g. sdist, bdist_wheel. */
+  package_types?: string[] | null;
+  /** Python only: number of latest package versions to keep; 0 keeps all. */
+  keep_latest_packages?: number | null;
+  /** Python only: platforms to exclude from sync. */
+  exclude_platforms?: string[] | null;
+  /** Python only: whether to also sync PEP 740 provenance files. */
+  provenance?: boolean;
 };
 
 /** POST .../remotes/{plugin}/{type}/ — matches the Pulp remote create body. */
@@ -300,6 +314,20 @@ export type RemoteCreatePayload = {
   gpgkey?: string | null;
   /** Debian APT only. */
   ignore_missing_package_indices?: boolean;
+  /** Python: package names (or name/version specs) to sync. Gem: a name-to-version-requirement map. */
+  includes?: string[] | Record<string, string> | null;
+  /** Python: package names (or name/version specs) to exclude. Gem: a name-to-version-requirement map. */
+  excludes?: string[] | Record<string, string> | null;
+  /** Python and Gem only. */
+  prereleases?: boolean;
+  /** Python only. */
+  package_types?: string[] | null;
+  /** Python only. */
+  keep_latest_packages?: number | null;
+  /** Python only. */
+  exclude_platforms?: string[] | null;
+  /** Python only. */
+  provenance?: boolean;
 };
 
 /** PATCH .../remotes/{plugin}/{type}/{id}/ — all fields optional. Omitted secrets are left unchanged. */
@@ -331,6 +359,20 @@ export type RemoteUpdatePayload = {
   gpgkey?: string | null;
   /** Debian APT only. */
   ignore_missing_package_indices?: boolean;
+  /** Python: package names (or name/version specs) to sync. Gem: a name-to-version-requirement map. */
+  includes?: string[] | Record<string, string> | null;
+  /** Python: package names (or name/version specs) to exclude. Gem: a name-to-version-requirement map. */
+  excludes?: string[] | Record<string, string> | null;
+  /** Python and Gem only. */
+  prereleases?: boolean;
+  /** Python only. */
+  package_types?: string[] | null;
+  /** Python only. */
+  keep_latest_packages?: number | null;
+  /** Python only. */
+  exclude_platforms?: string[] | null;
+  /** Python only. */
+  provenance?: boolean;
 };
 
 /** RPM sync strategy (POST .../repositories/rpm/rpm/{id}/sync/). */

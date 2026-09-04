@@ -139,6 +139,10 @@ function RepositoriesListPageContent() {
     rpm: [],
     deb: [],
     file: [],
+    python: [],
+    npm: [],
+    gem: [],
+    maven: [],
   });
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
   const [syncRemoteHref, setSyncRemoteHref] = useState("");
@@ -1191,16 +1195,20 @@ function RepositoriesListPageContent() {
                   Mirror (match remote exactly, removing content not present upstream)
                 </label>
               )}
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 shrink-0"
-                  checked={syncOptimize}
-                  disabled={isSyncing}
-                  onChange={(e) => setSyncOptimize(e.target.checked)}
-                />
-                Optimize (skip sync if nothing upstream changed)
-              </label>
+              {/* The core RepositorySyncURL has no optimize field and rejects it, so the
+                  families on it get no checkbox (see PulpSyncFlavor "mirror_only"). */}
+              {getPulpPlugin(kind).syncFlavor === "mirror_only" ? null : (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0"
+                    checked={syncOptimize}
+                    disabled={isSyncing}
+                    onChange={(e) => setSyncOptimize(e.target.checked)}
+                  />
+                  Optimize (skip sync if nothing upstream changed)
+                </label>
+              )}
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={isSyncing} onClick={closeSyncModal}>
