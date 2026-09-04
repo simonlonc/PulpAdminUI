@@ -129,11 +129,15 @@ function ContentListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All content types</option>
-                  {plugins.map((plugin) => (
-                    <option key={plugin.kind} value={plugin.contentType}>
-                      {plugin.label}
-                    </option>
-                  ))}
+                  {plugins
+                    /* A derived family whose pulp_type could not be determined has
+                       contentType === "", indistinguishable from "All content types". */
+                    .filter((plugin) => plugin.contentType !== "")
+                    .map((plugin) => (
+                      <option key={plugin.kind} value={plugin.contentType}>
+                        {plugin.label}
+                      </option>
+                    ))}
                 </select>
               </FormField>
             </div>

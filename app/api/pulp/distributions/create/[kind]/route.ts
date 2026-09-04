@@ -6,7 +6,8 @@ import {
   toBasicAuthHeader,
   type PulpAuth,
 } from "@/lib/pulp";
-import { findPulpPlugin, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
@@ -130,7 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   }
 
   const { kind } = await params;
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown distribution kind: ${kind}` }, { status: 400 });
   }

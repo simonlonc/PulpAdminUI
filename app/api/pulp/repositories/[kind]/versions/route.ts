@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { findPulpPlugin } from "@/lib/pulp-plugins";
+import { findPulpPluginIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRepositoryVersion } from "@/services/pulp/types";
 import { mapPulpRepositoryVersion } from "../../repository-version-map";
@@ -34,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   }
 
   const { kind } = await params;
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }

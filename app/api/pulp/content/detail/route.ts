@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { findPulpPlugin } from "@/lib/pulp-plugins";
+import { findPulpPluginIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 
 export async function GET(request: Request) {
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     return Response.json({ detail: "kind and id are required." }, { status: 400 });
   }
 
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
   if (!plugin) {
     return Response.json({ detail: "Unknown content kind." }, { status: 400 });
   }

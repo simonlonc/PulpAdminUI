@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
-import { findPulpPlugin } from "@/lib/pulp-plugins";
+import { findPulpPluginIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
   authHeaders,
@@ -22,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   }
 
   const { kind } = await params;
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -76,7 +77,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
   }
 
   const { kind } = await params;
-  const plugin = findPulpPlugin(kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
