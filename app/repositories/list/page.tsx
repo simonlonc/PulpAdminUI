@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useId, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,7 +50,7 @@ import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { PULP_PLUGINS, getPulpPlugin, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { type PulpPluginKind, type PulpSyncField } from "@/lib/pulp-plugins";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
@@ -60,7 +60,6 @@ import {
   PulpDistribution,
   PulpRemote,
   PulpRepository,
-  RpmSyncPolicy,
   type RepositoryCreatePayload,
 } from "@/services/pulp/types";
 
@@ -69,6 +68,24 @@ const repoCreateTextareaClass =
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+
+/** Initial sync modal values: each field's `default`, else false, the first option, or []. */
+function defaultSyncFieldValues(
+  fields: readonly PulpSyncField[]
+): Record<string, boolean | string | string[]> {
+  const values: Record<string, boolean | string | string[]> = {};
+  for (const field of fields) {
+    if (field.type === "boolean") {
+      values[field.name] = field.default === undefined ? false : Boolean(field.default);
+    } else if (field.type === "enum") {
+      values[field.name] =
+        typeof field.default === "string" ? field.default : (field.options?.[0] ?? "");
+    } else {
+      values[field.name] = [];
+    }
+  }
+  return values;
+}
 
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
@@ -100,6 +117,7 @@ function RepositoriesListPageContent() {
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -146,9 +164,9 @@ function RepositoriesListPageContent() {
   });
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
   const [syncRemoteHref, setSyncRemoteHref] = useState("");
-  const [syncPolicy, setSyncPolicy] = useState<RpmSyncPolicy>("additive");
-  const [syncMirror, setSyncMirror] = useState(false);
-  const [syncOptimize, setSyncOptimize] = useState(true);
+  const [syncFieldValues, setSyncFieldValues] = useState<
+    Record<string, boolean | string | string[]>
+  >({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ repoName: string; task: string | null } | null>(
     null
@@ -224,20 +242,15 @@ function RepositoriesListPageContent() {
     setPage(1);
   }
 
-  useEffect(() => {
-    if (searchParams.get("create") !== "1") return;
-    setCreateKind(kind);
-    setCreateModalOpen(true);
-    loadCreateRemotes();
-    router.replace("/repositories/list", { scroll: false });
-  }, [searchParams, router, kind]);
-
-  function loadCreateRemotes() {
+  // Memoized because it now closes over the registry from context rather than a module
+  // const, which makes it a real dependency of the create=1 effect below. Declared before
+  // that effect so the dependency array is not evaluated before initialization.
+  const loadCreateRemotes = useCallback(() => {
     setIsLoadingRemotes(true);
     void (async () => {
       try {
         const lists = await Promise.all(
-          PULP_PLUGINS.map(
+          plugins.map(
             async (plugin) => [plugin.kind, (await pulpRemoteService.list(plugin.kind)).results] as const
           )
         );
@@ -250,7 +263,15 @@ function RepositoriesListPageContent() {
         setIsLoadingRemotes(false);
       }
     })();
-  }
+  }, [plugins]);
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") return;
+    setCreateKind(kind);
+    setCreateModalOpen(true);
+    loadCreateRemotes();
+    router.replace("/repositories/list", { scroll: false });
+  }, [searchParams, router, kind, loadCreateRemotes]);
 
   function openCreateModal() {
     setCreateKind(kind);
@@ -298,7 +319,7 @@ function RepositoriesListPageContent() {
     setIsCreating(true);
     setCreateResult(null);
     try {
-      const extraRepoFields = getPulpPlugin(createKind).extraRepoFields;
+      const extraRepoFields = getPlugin(createKind).extraRepoFields;
       const payload: RepositoryCreatePayload = {
         pulp_labels: {},
         name: trimmed,
@@ -376,9 +397,7 @@ function RepositoriesListPageContent() {
   function openSyncModal(repo: PulpRepository) {
     setSyncModalRepo(repo);
     setSyncRemoteHref("");
-    setSyncPolicy("additive");
-    setSyncMirror(false);
-    setSyncOptimize(true);
+    setSyncFieldValues(defaultSyncFieldValues(getPlugin(kind).syncFields));
     setSyncResult(null);
     setError(null);
     setIsLoadingRemotes(true);
@@ -412,22 +431,11 @@ function RepositoriesListPageContent() {
     setError(null);
     setSyncResult(null);
     try {
-      const result = await pulpRepositoryManagementService.sync(
-        kind,
-        getPulpPlugin(kind).syncFlavor === "sync_policy"
-          ? {
-              pulp_href: repo.pulp_href,
-              remote: syncRemoteHref,
-              sync_policy: syncPolicy,
-              optimize: syncOptimize,
-            }
-          : {
-              pulp_href: repo.pulp_href,
-              remote: syncRemoteHref,
-              mirror: syncMirror,
-              optimize: syncOptimize,
-            }
-      );
+      const result = await pulpRepositoryManagementService.sync(kind, {
+        pulp_href: repo.pulp_href,
+        remote: syncRemoteHref,
+        fields: syncFieldValues,
+      });
       setSyncResult({ repoName: repo.name, task: result.task });
       setSyncModalRepo(null);
       await load();
@@ -441,7 +449,7 @@ function RepositoriesListPageContent() {
 
   function openDeleteModal(repo: PulpRepository) {
     setDeleteModalRepo(repo);
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
     setDeleteAlsoDistributions(linked.length > 0);
   }
 
@@ -475,7 +483,7 @@ function RepositoriesListPageContent() {
     const repo = deleteModalRepo;
     if (!repo) return;
 
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPulpPlugin(kind).distributionPath);
+    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
     setBusyHref(repo.pulp_href);
     setError(null);
     setIsDeleting(true);
@@ -502,7 +510,7 @@ function RepositoriesListPageContent() {
   }
 
   const deleteModalLinked = deleteModalRepo
-    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPulpPlugin(kind).distributionPath)
+    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPlugin(kind).distributionPath)
     : [];
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
@@ -524,32 +532,31 @@ function RepositoriesListPageContent() {
       ) : (
         <Card>
           <CardTitle>
-            Repositories ({count}) — {kind.toUpperCase()}
+            Repositories ({count}) — {getPlugin(kind).label}
           </CardTitle>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {PULP_PLUGINS.map((plugin) => (
-                <button
-                  key={plugin.kind}
-                  type="button"
-                  onClick={() => {
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Type">
+                <select
+                  value={kind}
+                  onChange={(event) => {
                     setPublishResult(null);
                     setDistributeResult(null);
                     setSyncResult(null);
-                    setKind(plugin.kind);
+                    setKind(event.target.value as PulpPluginKind);
                     setRemoteFilter("");
                     setPage(1);
                   }}
-                  className={cn(
-                    "rounded-md border px-3 py-1.5 text-sm",
-                    kind === plugin.kind
-                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                      : "border-zinc-300 dark:border-zinc-700"
-                  )}
+                  disabled={isLoadingRepos}
+                  className={selectClassName}
                 >
-                  {plugin.kind.toUpperCase()}
-                </button>
-              ))}
+                  {plugins.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.kind}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <Button
                 type="button"
                 variant="outline"
@@ -602,7 +609,7 @@ function RepositoriesListPageContent() {
             {distributeResult ? (
               <div className="rounded-lg border border-sky-300/80 bg-sky-50/90 p-4 text-sm dark:border-sky-800 dark:bg-sky-950/35">
                 <p className="font-medium text-sky-900 dark:text-sky-100">
-                  {getPulpPlugin(kind).label} distribution created for “{distributeResult.repoName}”
+                  {getPlugin(kind).label} distribution created for “{distributeResult.repoName}”
                 </p>
                 <p className="mt-1 text-sky-800 dark:text-sky-200/90">
                   <span className="font-medium">Distribution name:</span> {distributeResult.name}
@@ -798,7 +805,7 @@ function RepositoriesListPageContent() {
                                 Access
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              {getPulpPlugin(kind).supportsSync ? (
+                              {getPlugin(kind).supportsSync ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync")}
                                   onSelect={() => openSyncModal(repo)}
@@ -807,7 +814,7 @@ function RepositoriesListPageContent() {
                                   Sync
                                 </DropdownMenuItem>
                               ) : null}
-                              {getPulpPlugin(kind).supportsPublish ? (
+                              {getPlugin(kind).supportsPublish ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href}
                                   onSelect={() => void handlePublish(repo)}
@@ -912,24 +919,20 @@ function RepositoriesListPageContent() {
             </div>
 
             <form className="mt-4 flex flex-col gap-4" onSubmit={(e) => void handleCreateSubmit(e)}>
-              <div className="flex flex-wrap gap-2">
-                {PULP_PLUGINS.map((plugin) => (
-                  <button
-                    key={plugin.kind}
-                    type="button"
-                    onClick={() => setCreateKind(plugin.kind)}
-                    disabled={isCreating}
-                    className={cn(
-                      "rounded-md border px-3 py-1.5 text-sm disabled:opacity-50",
-                      createKind === plugin.kind
-                        ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                        : "border-zinc-300 dark:border-zinc-700"
-                    )}
-                  >
-                    {plugin.kind.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+              <FormField label="Type">
+                <select
+                  value={createKind}
+                  onChange={(event) => setCreateKind(event.target.value as PulpPluginKind)}
+                  disabled={isCreating}
+                  className={selectClassName}
+                >
+                  {plugins.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.kind}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <FormField label="Name">
                 <Input
                   value={createName}
@@ -1077,7 +1080,7 @@ function RepositoriesListPageContent() {
                 />
                 <span>
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                    Also delete linked {getPulpPlugin(kind).label} distribution
+                    Also delete linked {getPlugin(kind).label} distribution
                     {deleteModalLinked.length > 1 ? "s" : ""}
                   </span>
                   <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
@@ -1087,7 +1090,7 @@ function RepositoriesListPageContent() {
               </label>
             ) : (
               <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                No {getPulpPlugin(kind).label} distribution in the list is linked to this repository.
+                No {getPlugin(kind).label} distribution in the list is linked to this repository.
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
@@ -1166,49 +1169,74 @@ function RepositoriesListPageContent() {
                   </span>
                 ) : null}
               </FormField>
-              {getPulpPlugin(kind).syncFlavor === "sync_policy" ? (
-                <FormField label="Sync policy">
-                  <select
-                    value={syncPolicy}
-                    onChange={(e) => setSyncPolicy(e.target.value as RpmSyncPolicy)}
-                    disabled={isSyncing}
-                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-                  >
-                    <option value="additive">additive — add new content, keep existing</option>
-                    <option value="mirror_complete">
-                      mirror_complete — match remote exactly (metadata + content)
-                    </option>
-                    <option value="mirror_content_only">
-                      mirror_content_only — match remote content, regenerate metadata
-                    </option>
-                  </select>
-                </FormField>
-              ) : (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0"
-                    checked={syncMirror}
-                    disabled={isSyncing}
-                    onChange={(e) => setSyncMirror(e.target.checked)}
-                  />
-                  Mirror (match remote exactly, removing content not present upstream)
-                </label>
-              )}
-              {/* The core RepositorySyncURL has no optimize field and rejects it, so the
-                  families on it get no checkbox (see PulpSyncFlavor "mirror_only"). */}
-              {getPulpPlugin(kind).syncFlavor === "mirror_only" ? null : (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0"
-                    checked={syncOptimize}
-                    disabled={isSyncing}
-                    onChange={(e) => setSyncOptimize(e.target.checked)}
-                  />
-                  Optimize (skip sync if nothing upstream changed)
-                </label>
-              )}
+              {getPlugin(kind).syncFields.map((field) => {
+                const value = syncFieldValues[field.name];
+                const options = field.options ?? [];
+                if (field.type === "boolean") {
+                  return (
+                    <label
+                      key={field.name}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0"
+                        checked={Boolean(value)}
+                        disabled={isSyncing}
+                        onChange={(e) =>
+                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.checked }))
+                        }
+                      />
+                      {field.label}
+                    </label>
+                  );
+                }
+                if (field.type === "enum") {
+                  return (
+                    <FormField key={field.name} label={field.label}>
+                      <select
+                        value={typeof value === "string" ? value : ""}
+                        onChange={(e) =>
+                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                        }
+                        disabled={isSyncing}
+                        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+                      >
+                        {options.map((option) => (
+                          <option key={option} value={option}>
+                            {field.optionLabels?.[option] ?? option}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  );
+                }
+                const selected = Array.isArray(value) ? value : [];
+                return (
+                  <FormField key={field.name} label={field.label}>
+                    <select
+                      multiple
+                      value={selected}
+                      onChange={(event) => {
+                        const values = Array.from(
+                          event.target.selectedOptions,
+                          (option) => option.value
+                        );
+                        setSyncFieldValues((prev) => ({ ...prev, [field.name]: values }));
+                      }}
+                      disabled={isSyncing}
+                      className={selectClassName}
+                      size={Math.min(options.length, 6)}
+                    >
+                      {options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                );
+              })}
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={isSyncing} onClick={closeSyncModal}>

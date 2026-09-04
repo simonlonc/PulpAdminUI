@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { findPluginForRepositoryHref } from "@/lib/pulp-plugins";
+import { findPluginForRepositoryHrefIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../_server";
 
@@ -59,9 +60,19 @@ export async function GET(request: Request) {
     return Response.json({ detail }, { status });
   }
 
-  const plugin = findPluginForRepositoryHref(basePath);
+  const plugin = findPluginForRepositoryHrefIn(await getPulpPluginRegistry(authResult.auth), basePath);
 
   if (plugin) {
+    // content_path names which of the family's endpoints to list; anything unrecognised falls
+    // back to the first, the one the descriptor treats as the family's default.
+    const requestedContentPath = url.searchParams.get("content_path")?.trim();
+    const endpoint =
+      plugin.contentEndpoints.find((e) => e.path === requestedContentPath) ??
+      plugin.contentEndpoints[0];
+    if (!endpoint) {
+      return Response.json({ detail: "This plugin has no content endpoint." }, { status: 400 });
+    }
+
     const repoResult = await pulpFetch<Record<string, unknown>>(basePath, authResult.auth);
     if (!repoResult.ok) {
       return unauthorizeAndRespond(repoResult.status, repoResult.detail);
@@ -72,13 +83,13 @@ export async function GET(request: Request) {
       return Response.json({ count: 0, totalSizeBytes: 0, results: [] });
     }
 
-    const fields = ["pulp_href", "pulp_created", ...plugin.contentFields.map((f) => f.name)];
-    if (plugin.contentSizeField) {
-      fields.push(plugin.contentSizeField);
+    const fields = ["pulp_href", "pulp_created", ...endpoint.fields.map((f) => f.name)];
+    if (endpoint.sizeField) {
+      fields.push(endpoint.sizeField);
     }
 
-    const fieldsQuery = plugin.contentFieldsQueryUnsupported ? "" : `&fields=${fields.join(",")}`;
-    const contentPath = `${plugin.contentPath}?repository_version=${encodeURIComponent(
+    const fieldsQuery = endpoint.fieldsQueryUnsupported ? "" : `&fields=${fields.join(",")}`;
+    const contentPath = `${endpoint.path}?repository_version=${encodeURIComponent(
       latestVersionHref
     )}&limit=100${fieldsQuery}`;
 
@@ -88,8 +99,8 @@ export async function GET(request: Request) {
     }
 
     let totalSizeBytes: number | null = null;
-    if (plugin.contentSizeField) {
-      const sizeField = plugin.contentSizeField;
+    if (endpoint.sizeField) {
+      const sizeField = endpoint.sizeField;
       totalSizeBytes = 0;
       for (const row of pages.rows) {
         totalSizeBytes += numOrNull(row[sizeField]) ?? 0;

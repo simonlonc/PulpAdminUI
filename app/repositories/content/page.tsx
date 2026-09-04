@@ -5,13 +5,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { FormField } from "@/components/ui/form-field";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { formatBytes } from "@/lib/format-bytes";
-import { findContentForHref, findPluginForRepositoryHref } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import {
   Table,
@@ -23,12 +24,16 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 
+const selectClassName =
+  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+
 function RepositoryContentInner() {
   const searchParams = useSearchParams();
   const pulpHref = searchParams.get("pulp_href")?.trim() ?? "";
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { findContentForHref, findPluginForRepositoryHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -37,6 +42,16 @@ function RepositoryContentInner() {
   const [totalSizeBytes, setTotalSizeBytes] = useState<number | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [selectedContentPath, setSelectedContentPath] = useState("");
+
+  const plugin = pulpHref ? findPluginForRepositoryHref(pulpHref) : null;
+  /* Falling back to the first endpoint rather than storing a default also resets the selection
+     when the plugin changes: a path from another family matches nothing here. */
+  const endpoint =
+    plugin?.contentEndpoints.find((e) => e.path === selectedContentPath) ??
+    plugin?.contentEndpoints[0] ??
+    null;
+  const contentPath = endpoint?.path;
 
   useEffect(() => {
     if (!hasSession || !pulpHref) {
@@ -52,7 +67,10 @@ function RepositoryContentInner() {
       setIsLoadingContent(true);
       setError(null);
       try {
-        const data = await pulpRepositoryManagementService.listRepositoryContent(pulpHref);
+        const data = await pulpRepositoryManagementService.listRepositoryContent(
+          pulpHref,
+          contentPath
+        );
         if (!active) return;
         setCount(data.count);
         setTotalSizeBytes(data.totalSizeBytes);
@@ -74,9 +92,7 @@ function RepositoryContentInner() {
     return () => {
       active = false;
     };
-  }, [hasSession, pulpHref, setError]);
-
-  const plugin = pulpHref ? findPluginForRepositoryHref(pulpHref) : null;
+  }, [hasSession, pulpHref, contentPath, setError]);
 
   function rowLabel(row: Record<string, unknown>): string {
     const name = row.name;
@@ -128,13 +144,31 @@ function RepositoryContentInner() {
                 </span>
               ) : null}
             </CardTitle>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {plugin && plugin.contentEndpoints.length > 1 ? (
+                <div className="flex flex-wrap items-end gap-3">
+                  <FormField label="Content type">
+                    <select
+                      value={endpoint?.path ?? ""}
+                      onChange={(event) => setSelectedContentPath(event.target.value)}
+                      disabled={isLoadingContent}
+                      className={selectClassName}
+                    >
+                      {plugin.contentEndpoints.map((contentEndpoint) => (
+                        <option key={contentEndpoint.path} value={contentEndpoint.path}>
+                          {contentEndpoint.label}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                </div>
+              ) : null}
               <TableWrapper>
                 <Table>
                   <TableHead>
                     <TableRow>
-                      {plugin ? (
-                        plugin.contentFields.map((field) => (
+                      {endpoint ? (
+                        endpoint.fields.map((field) => (
                           <TableHeaderCell key={field.name}>{field.label}</TableHeaderCell>
                         ))
                       ) : (
@@ -154,8 +188,8 @@ function RepositoryContentInner() {
                       const contentMatch = href && !pkgId ? findContentForHref(href) : null;
                       return (
                         <TableRow key={href ?? String(idx)}>
-                          {plugin ? (
-                            plugin.contentFields.map((field) => (
+                          {endpoint ? (
+                            endpoint.fields.map((field) => (
                               <TableCell key={field.name} className="max-w-xs truncate text-sm">
                                 {fieldValue(row[field.name])}
                               </TableCell>
@@ -166,7 +200,7 @@ function RepositoryContentInner() {
                           <TableCell className="max-w-md truncate font-mono text-xs">{href ?? "-"}</TableCell>
                           {totalSizeBytes !== null ? (
                             <TableCell className="text-right text-sm">
-                              {formatBytes(plugin?.contentSizeField ? row[plugin.contentSizeField] : null)}
+                              {formatBytes(endpoint?.sizeField ? row[endpoint.sizeField] : null)}
                             </TableCell>
                           ) : null}
                           <TableCell className="text-right">
@@ -179,7 +213,7 @@ function RepositoryContentInner() {
                               </Link>
                             ) : contentMatch ? (
                               <Link
-                                href={`/content/${contentMatch.kind}/${contentMatch.id}`}
+                                href={`/content/${contentMatch.kind}/${contentMatch.id}?path=${encodeURIComponent(contentMatch.path)}`}
                                 className="inline-flex rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                               >
                                 Review

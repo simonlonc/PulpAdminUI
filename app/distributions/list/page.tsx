@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -27,7 +28,6 @@ import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
-import { getPulpPlugin } from "@/lib/pulp-plugins";
 import { PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
@@ -45,6 +45,7 @@ function resolveDistributionUrl(raw: string): string {
 function DistributionsListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
+  const { getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -141,7 +142,7 @@ function DistributionsListPageContent() {
                   <option value="">All repositories</option>
                   {repositoryOptions.map((option) => (
                     <option key={option.href} value={option.href}>
-                      {option.name} ({getPulpPlugin(option.kind).label})
+                      {option.name} ({getPlugin(option.kind).label})
                     </option>
                   ))}
                 </select>

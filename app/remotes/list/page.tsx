@@ -3,12 +3,12 @@
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,8 +28,7 @@ import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
-  PULP_PLUGINS,
-  getPulpPlugin,
+  type PulpPluginDescriptor,
   type PulpPluginKind,
   type PulpRemoteField,
 } from "@/lib/pulp-plugins";
@@ -70,10 +69,10 @@ type RemoteFormState = {
   extra: Record<string, string | boolean | string[]>;
 };
 
-/** Blank values for the current kind's extra fields, so every input stays controlled. */
-function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean | string[]> {
+/** Blank values for the current plugin's extra fields, so every input stays controlled. */
+function emptyExtraFields(plugin: PulpPluginDescriptor): Record<string, string | boolean | string[]> {
   const extra: Record<string, string | boolean | string[]> = {};
-  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+  for (const field of plugin.extraRemoteFields) {
     extra[field.name] = field.type === "boolean" ? false : field.type === "string_list" ? [] : "";
   }
   return extra;
@@ -81,11 +80,11 @@ function emptyExtraFields(kind: PulpPluginKind): Record<string, string | boolean
 
 function extraFieldsFromRemote(
   remote: RemoteRow,
-  kind: PulpPluginKind
+  plugin: PulpPluginDescriptor
 ): Record<string, string | boolean | string[]> {
   const source = remote as Record<string, unknown>;
   const extra: Record<string, string | boolean | string[]> = {};
-  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+  for (const field of plugin.extraRemoteFields) {
     const value = source[field.name];
     if (field.type === "boolean") {
       extra[field.name] = Boolean(value);
@@ -102,7 +101,7 @@ function extraFieldsFromRemote(
   return extra;
 }
 
-function emptyRemoteForm(kind: PulpPluginKind): RemoteFormState {
+function emptyRemoteForm(plugin: PulpPluginDescriptor): RemoteFormState {
   return {
     name: "",
     url: "",
@@ -115,11 +114,11 @@ function emptyRemoteForm(kind: PulpPluginKind): RemoteFormState {
     client_cert: "",
     client_key: "",
     download_concurrency: "",
-    extra: emptyExtraFields(kind),
+    extra: emptyExtraFields(plugin),
   };
 }
 
-function formFromRemote(remote: RemoteRow, kind: PulpPluginKind): RemoteFormState {
+function formFromRemote(remote: RemoteRow, plugin: PulpPluginDescriptor): RemoteFormState {
   return {
     name: remote.name,
     url: remote.url,
@@ -134,7 +133,7 @@ function formFromRemote(remote: RemoteRow, kind: PulpPluginKind): RemoteFormStat
     client_key: "",
     download_concurrency:
       remote.download_concurrency === null ? "" : String(remote.download_concurrency),
-    extra: extraFieldsFromRemote(remote, kind),
+    extra: extraFieldsFromRemote(remote, plugin),
   };
 }
 
@@ -161,10 +160,10 @@ function parseNullableInteger(value: string): number | null {
 /** The plugin's extra fields, coerced to the shapes Pulp expects. Assumes JSON fields already validated. */
 function extraFieldsPayload(
   form: RemoteFormState,
-  kind: PulpPluginKind
+  plugin: PulpPluginDescriptor
 ): Partial<RemoteCreatePayload> {
   const payload: Record<string, unknown> = {};
-  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+  for (const field of plugin.extraRemoteFields) {
     const value = form.extra[field.name];
     if (field.type === "boolean") {
       payload[field.name] = Boolean(value);
@@ -190,9 +189,9 @@ function extraFieldsPayload(
 /** The extra fields that must be filled in before the form can be submitted. */
 function missingRequiredExtraField(
   form: RemoteFormState,
-  kind: PulpPluginKind
+  plugin: PulpPluginDescriptor
 ): PulpRemoteField | null {
-  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+  for (const field of plugin.extraRemoteFields) {
     if (!field.required) continue;
     const value = form.extra[field.name];
     if (field.type === "boolean") continue;
@@ -210,8 +209,11 @@ function missingRequiredExtraField(
 }
 
 /** The first "json" extra field whose typed text is not valid JSON, or null when all are valid. */
-function invalidJsonExtraField(form: RemoteFormState, kind: PulpPluginKind): PulpRemoteField | null {
-  for (const field of getPulpPlugin(kind).extraRemoteFields) {
+function invalidJsonExtraField(
+  form: RemoteFormState,
+  plugin: PulpPluginDescriptor
+): PulpRemoteField | null {
+  for (const field of plugin.extraRemoteFields) {
     if (field.type !== "json") continue;
     const value = form.extra[field.name];
     const text = typeof value === "string" ? value.trim() : "";
@@ -227,7 +229,7 @@ function invalidJsonExtraField(form: RemoteFormState, kind: PulpPluginKind): Pul
 
 function formToCreatePayload(
   form: RemoteFormState,
-  kind: PulpPluginKind
+  plugin: PulpPluginDescriptor
 ): RemoteCreatePayload {
   const payload: RemoteCreatePayload = {
     name: form.name.trim(),
@@ -241,14 +243,14 @@ function formToCreatePayload(
     client_cert: trimOrNull(form.client_cert),
     client_key: trimOrNull(form.client_key),
     download_concurrency: parseConcurrency(form.download_concurrency),
-    ...extraFieldsPayload(form, kind),
+    ...extraFieldsPayload(form, plugin),
   };
   return payload;
 }
 
 function formToUpdatePayload(
   form: RemoteFormState,
-  kind: PulpPluginKind
+  plugin: PulpPluginDescriptor
 ): RemoteUpdatePayload {
   const payload: RemoteUpdatePayload = {
     name: form.name.trim(),
@@ -259,7 +261,7 @@ function formToUpdatePayload(
     ca_cert: trimOrNull(form.ca_cert),
     client_cert: trimOrNull(form.client_cert),
     download_concurrency: parseConcurrency(form.download_concurrency),
-    ...extraFieldsPayload(form, kind),
+    ...extraFieldsPayload(form, plugin),
   };
   // Only send secrets when the user typed a new value; blank means "leave unchanged".
   const username = form.username.trim();
@@ -283,6 +285,7 @@ function formatIso(iso: string | null): string {
 function RemotesListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -290,13 +293,14 @@ function RemotesListPageContent() {
     usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
+  const plugin = getPlugin(kind);
   const [remotes, setRemotes] = useState<RemoteRow[]>([]);
   const [count, setCount] = useState(0);
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<RemoteRow | null>(null);
-  const [form, setForm] = useState<RemoteFormState>(emptyRemoteForm("rpm"));
+  const [form, setForm] = useState<RemoteFormState>(emptyRemoteForm(getPlugin("rpm")));
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [busyHref, setBusyHref] = useState<string | null>(null);
@@ -332,9 +336,9 @@ function RemotesListPageContent() {
     if (isSaving) return;
     setCreateOpen(false);
     setEditing(null);
-    setForm(emptyRemoteForm(kind));
+    setForm(emptyRemoteForm(getPlugin(kind)));
     setModalError(null);
-  }, [isSaving, kind]);
+  }, [isSaving, kind, getPlugin]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -354,14 +358,14 @@ function RemotesListPageContent() {
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyRemoteForm(kind));
+    setForm(emptyRemoteForm(plugin));
     setModalError(null);
     setCreateOpen(true);
   }
 
   function openEdit(remote: RemoteRow) {
     setCreateOpen(false);
-    setForm(formFromRemote(remote, kind));
+    setForm(formFromRemote(remote, plugin));
     setModalError(null);
     setEditing(remote);
   }
@@ -378,12 +382,12 @@ function RemotesListPageContent() {
       setModalError("Remote URL is required.");
       return;
     }
-    const missingField = missingRequiredExtraField(form, kind);
+    const missingField = missingRequiredExtraField(form, plugin);
     if (missingField) {
       setModalError(`${missingField.label} is required.`);
       return;
     }
-    const invalidJsonField = invalidJsonExtraField(form, kind);
+    const invalidJsonField = invalidJsonExtraField(form, plugin);
     if (invalidJsonField) {
       setModalError(`${invalidJsonField.label} must be valid JSON.`);
       return;
@@ -395,18 +399,18 @@ function RemotesListPageContent() {
         const result = await pulpRemoteService.update(
           kind,
           editing.pulp_href,
-          formToUpdatePayload(form, kind)
+          formToUpdatePayload(form, plugin)
         );
         if (!result.ok) {
           setModalError(result.detail);
           return;
         }
       } else {
-        await pulpRemoteService.create(kind, formToCreatePayload(form, kind));
+        await pulpRemoteService.create(kind, formToCreatePayload(form, plugin));
       }
       setCreateOpen(false);
       setEditing(null);
-      setForm(emptyRemoteForm(kind));
+      setForm(emptyRemoteForm(plugin));
       await load();
     } catch (e) {
       setModalError(e instanceof Error ? e.message : "Save failed.");
@@ -474,25 +478,28 @@ function RemotesListPageContent() {
               </Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 border-b border-zinc-200/80 px-5 py-3 dark:border-zinc-800/80">
-            {PULP_PLUGINS.map((plugin) => (
-              <button
-                key={plugin.kind}
-                type="button"
-                onClick={() => {
-                  setKind(plugin.kind);
-                  setPage(1);
-                }}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 text-sm",
-                  kind === plugin.kind
-                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                    : "border-zinc-300 dark:border-zinc-700"
-                )}
-              >
-                {plugin.kind.toUpperCase()}
-              </button>
-            ))}
+          <div className="border-b border-zinc-200/80 px-5 py-3 dark:border-zinc-800/80">
+            {/* selectClassName on this page is w-full for the modal forms, so the filter
+                is constrained here rather than stretching the whole card. */}
+            <div className="max-w-xs">
+              <FormField label="Type">
+                <select
+                  value={kind}
+                  onChange={(event) => {
+                    setKind(event.target.value as PulpPluginKind);
+                    setPage(1);
+                  }}
+                  disabled={isLoadingRemotes}
+                  className={selectClassName}
+                >
+                  {plugins.map((p) => (
+                    <option key={p.kind} value={p.kind}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
           </div>
           <CardContent className="space-y-4 p-5">
             <ListQueryBar
@@ -694,10 +701,10 @@ function RemotesListPageContent() {
                     setForm((f) => ({ ...f, url: event.target.value }));
                   }}
                   className="font-mono"
-                  placeholder={getPulpPlugin(kind).remoteUrlPlaceholder}
+                  placeholder={plugin.remoteUrlPlaceholder}
                 />
               </FormField>
-              {getPulpPlugin(kind).extraRemoteFields.map((field) => {
+              {plugin.extraRemoteFields.map((field) => {
                 const fieldLabel = field.required ? field.label : `${field.label} (optional)`;
                 if (field.type === "boolean") {
                   return (
