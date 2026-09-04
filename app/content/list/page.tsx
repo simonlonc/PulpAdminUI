@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/pulp/admin-shell";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpContent } from "@/components/pulp/use-pulp-content";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -24,7 +25,6 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
-import { PULP_PLUGINS, findContentForHref, getPulpPlugin } from "@/lib/pulp-plugins";
 
 const PAGE_SIZE = 50;
 
@@ -34,6 +34,7 @@ const selectClassName =
 function ContentListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin, findContentForHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -115,7 +116,7 @@ function ContentListPageContent() {
                     .filter((option) => option.latestVersionHref !== null)
                     .map((option) => (
                       <option key={option.href} value={option.latestVersionHref ?? undefined}>
-                        {option.name} ({getPulpPlugin(option.kind).label})
+                        {option.name} ({getPlugin(option.kind).label})
                       </option>
                     ))}
                 </select>
@@ -128,11 +129,20 @@ function ContentListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All content types</option>
-                  {PULP_PLUGINS.map((plugin) => (
-                    <option key={plugin.kind} value={plugin.contentType}>
-                      {plugin.label}
-                    </option>
-                  ))}
+                  {plugins.flatMap((plugin) => {
+                    /* A derived endpoint whose pulp_type could not be determined has
+                       contentType === "", indistinguishable from "All content types". */
+                    const endpoints = plugin.contentEndpoints.filter(
+                      (endpoint) => endpoint.contentType !== ""
+                    );
+                    return endpoints.map((endpoint) => (
+                      <option key={`${plugin.kind}:${endpoint.path}`} value={endpoint.contentType}>
+                        {endpoints.length > 1
+                          ? `${plugin.label} / ${endpoint.label}`
+                          : plugin.label}
+                      </option>
+                    ));
+                  })}
                 </select>
               </FormField>
             </div>
@@ -180,7 +190,7 @@ function ContentListPageContent() {
                               </Link>
                             ) : contentMatch ? (
                               <Link
-                                href={`/content/${contentMatch.kind}/${contentMatch.id}`}
+                                href={`/content/${contentMatch.kind}/${contentMatch.id}?path=${encodeURIComponent(contentMatch.path)}`}
                                 className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
                               >
                                 View content

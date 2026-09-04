@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -13,7 +14,6 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { CheckboxField, FormField } from "@/components/ui/form-field";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
-import { getPulpPlugin } from "@/lib/pulp-plugins";
 import { pulpReclaimService } from "@/services/pulp/reclaim-service";
 import { PulpReclaimSpaceResult } from "@/services/pulp/types";
 
@@ -30,6 +30,7 @@ function linesFromTextarea(value: string): string[] {
 export default function ReclaimSpacePage() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -139,7 +140,7 @@ export default function ReclaimSpacePage() {
                       <p className="text-sm text-zinc-500 dark:text-zinc-400">No repositories found.</p>
                     ) : (
                       repositoryOptions.map((option) => (
-                        <CheckboxField key={option.href} label={`${option.name} (${getPulpPlugin(option.kind).label})`}>
+                        <CheckboxField key={option.href} label={`${option.name} (${getPlugin(option.kind).label})`}>
                           <Input
                             type="checkbox"
                             className="h-4 w-4 rounded border-zinc-300 p-0 dark:border-zinc-700"

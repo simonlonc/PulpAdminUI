@@ -6,9 +6,9 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { usePulpRepositoryOptions } from "./use-pulp-repository-options";
 import { usePulpPublicationOptions } from "./use-pulp-publication-options";
+import { usePulpPluginsContext } from "./plugins-context";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { getPulpPlugin } from "@/lib/pulp-plugins";
 import { PulpContentGuard, PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
@@ -29,6 +29,7 @@ export function DistributionEditModal({
 }: DistributionEditModalProps) {
   const { repositoryOptions } = usePulpRepositoryOptions(true);
   const { publicationOptions } = usePulpPublicationOptions(true);
+  const { getPlugin } = usePulpPluginsContext();
   const [contentGuards, setContentGuards] = useState<PulpContentGuard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -217,7 +218,7 @@ export function DistributionEditModal({
                   <option value="">Select a repository</option>
                   {repositoryOptions.map((option) => (
                     <option key={option.href} value={option.href}>
-                      {option.name} ({getPulpPlugin(option.kind).label})
+                      {option.name} ({getPlugin(option.kind).label})
                     </option>
                   ))}
                 </select>

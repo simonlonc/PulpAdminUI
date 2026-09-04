@@ -22,9 +22,10 @@ export const pulpContentService = {
     return (await response.json()) as PulpRpmPackage;
   },
 
-  async getContentUnit(kind: string, id: string): Promise<Record<string, unknown>> {
+  async getContentUnit(kind: string, id: string, path?: string): Promise<Record<string, unknown>> {
+    const pathQuery = path ? `&path=${encodeURIComponent(path)}` : "";
     const response = await fetch(
-      `/api/pulp/content/detail?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`
+      `/api/pulp/content/detail?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}${pathQuery}`
     );
     if (!response.ok) {
       throw new Error(await readApiDetail(response));

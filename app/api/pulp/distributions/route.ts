@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
-import { findPulpPlugin } from "@/lib/pulp-plugins";
+import { findPulpPluginIn } from "@/lib/pulp-plugins";
+import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "../_helpers";
 import {
   authHeaders,
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
     return Response.json({ detail: "Invalid request body." }, { status: 400 });
   }
 
-  const plugin = findPulpPlugin(body.kind ?? "");
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), body.kind ?? "");
   if (!plugin) {
     return Response.json({ detail: `Unknown distribution kind: ${body.kind}` }, { status: 400 });
   }

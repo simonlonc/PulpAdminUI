@@ -11,9 +11,6 @@
  * gem 0.8.0 and maven 0.25.1.
  */
 
-/** Sync request body accepted by a repository's sync/ endpoint. */
-export type PulpSyncFlavor = "sync_policy" | "mirror" | "mirror_only";
-
 /**
  * A writable remote field a plugin adds beyond the common set.
  *
@@ -37,12 +34,53 @@ export type PulpRemoteField = {
   options?: readonly string[];
 };
 
-export type PulpPluginKind = "rpm" | "deb" | "file" | "python" | "npm" | "gem" | "maven";
+/**
+ * A writable property of a plugin's sync request body.
+ *
+ * The sync route coerces the value by `type` and the sync modal renders one control per
+ * field, so a family's sync body needs no per-kind branches.
+ */
+export type PulpSyncField = {
+  /** Pulp field name, sent verbatim in the sync request body. */
+  name: string;
+  /** "enum": a single choice from `options`. "string_list": zero or more of them. */
+  type: "boolean" | "enum" | "string_list";
+  label: string;
+  /** Initial control value. Falls back to false, the first option, and [] by type. */
+  default?: boolean | string;
+  /** "enum" and "string_list": the values the server accepts. */
+  options?: readonly string[];
+  /** "enum" only: display text per option, for values that need explaining. */
+  optionLabels?: Readonly<Record<string, string>>;
+};
+
+/**
+ * Widened to `string` so plugin kinds can come from a runtime-fetched descriptor list
+ * (see components/pulp/plugins-context.ts) rather than only this module's compiled-in
+ * PULP_PLUGINS. Kept as a named alias so existing type-only imports don't change.
+ */
+export type PulpPluginKind = string;
 
 /** A content-listing column: a Pulp field name paired with its display label. */
 export type PulpContentField = {
   name: string;
   label: string;
+};
+
+/** One of a plugin's content-listing endpoints, with the columns to show for it. */
+export type PulpContentEndpoint = {
+  /** Content list/detail endpoint, e.g. "/content/rpm/packages/". */
+  path: string;
+  /** Display name for the content-type selector. */
+  label: string;
+  /** The `pulp_type` for filtering GET /content/. Empty when it could not be determined. */
+  contentType: string;
+  /** Columns shown when browsing this endpoint, in display order. */
+  fields: readonly PulpContentField[];
+  /** Byte-size field on the content unit, when it has one. */
+  sizeField?: string;
+  /** Set when this endpoint cannot serve a `fields=` query (gem 0.8.0 answers 500). */
+  fieldsQueryUnsupported?: true;
 };
 
 export type PulpPluginDescriptor = {
@@ -59,19 +97,8 @@ export type PulpPluginDescriptor = {
   publicationPath: string | null;
   /** Distribution list/create endpoint for this plugin. */
   distributionPath: string;
-  /** The `pulp_type` of this plugin's primary content unit, for filtering GET /content/. */
-  contentType: string;
-  /** Per-plugin content-listing endpoint for this plugin's primary content unit. */
-  contentPath: string;
-  /** Columns shown when browsing a repository's content, in display order. */
-  contentFields: readonly PulpContentField[];
-  /** Byte-size field on the content unit, when it has one (used for the content list's size total). */
-  contentSizeField?: string;
-  /**
-   * Set when the plugin's content endpoint cannot serve a `fields=` query. gem 0.8.0 answers
-   * 500 to any `fields=` value on /content/gem/gem/, so its rows are fetched in full.
-   */
-  contentFieldsQueryUnsupported?: true;
+  /** The family's content endpoints, the first being the one the UI shows by default. */
+  contentEndpoints: readonly PulpContentEndpoint[];
   supportsPublish: boolean;
   supportsSync: boolean;
   /**
@@ -80,12 +107,10 @@ export type PulpPluginDescriptor = {
    */
   publicationDefaults?: Record<string, unknown>;
   /**
-   * "sync_policy": { remote, sync_policy, optimize } (rpm).
-   * "mirror": { remote, mirror, optimize } (deb's AptRepositorySyncURL, file's FileRepositorySyncURL).
-   * "mirror_only": { remote, mirror } -- the core RepositorySyncURL, which rejects `optimize`
-   * with "Unexpected field" (python, npm, gem; maven has no sync endpoint at all).
+   * The sync endpoint's writable properties beyond `remote`, in the order the schema declares
+   * them. Empty when the family cannot sync.
    */
-  syncFlavor: PulpSyncFlavor;
+  syncFields: readonly PulpSyncField[];
   /** Writable remote fields beyond the common set. */
   extraRemoteFields: readonly PulpRemoteField[];
   /** Writable repository fields beyond the common set, in Pulp field-name form. */
@@ -102,19 +127,44 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/",
     publicationPath: "/publications/rpm/rpm/",
     distributionPath: "/distributions/rpm/rpm/",
-    contentType: "rpm.package",
-    contentPath: "/content/rpm/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "epoch", label: "Epoch" },
-      { name: "version", label: "Version" },
-      { name: "release", label: "Release" },
-      { name: "arch", label: "Arch" },
+    contentEndpoints: [
+      {
+        path: "/content/rpm/packages/",
+        label: "Packages",
+        contentType: "rpm.package",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "epoch", label: "Epoch" },
+          { name: "version", label: "Version" },
+          { name: "release", label: "Release" },
+          { name: "arch", label: "Arch" },
+        ],
+        sizeField: "size_package",
+      },
     ],
-    contentSizeField: "size_package",
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "sync_policy",
+    syncFields: [
+      {
+        name: "sync_policy",
+        type: "enum",
+        label: "Sync policy",
+        default: "additive",
+        options: ["additive", "mirror_complete", "mirror_content_only"],
+        optionLabels: {
+          additive: "additive — add new content, keep existing",
+          mirror_complete: "mirror_complete — match remote exactly (metadata + content)",
+          mirror_content_only: "mirror_content_only — match remote content, regenerate metadata",
+        },
+      },
+      { name: "skip_types", type: "string_list", label: "Skip types", options: ["srpm", "treeinfo"] },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: [
       "autopublish",
@@ -136,18 +186,36 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "http://deb.debian.org/debian",
     publicationPath: "/publications/deb/apt/",
     distributionPath: "/distributions/deb/apt/",
-    contentType: "deb.package",
-    contentPath: "/content/deb/packages/",
-    contentFields: [
-      { name: "package", label: "Package" },
-      { name: "version", label: "Version" },
-      { name: "architecture", label: "Architecture" },
-      { name: "relative_path", label: "Relative path" },
+    contentEndpoints: [
+      {
+        path: "/content/deb/packages/",
+        label: "Packages",
+        contentType: "deb.package",
+        fields: [
+          { name: "package", label: "Package" },
+          { name: "version", label: "Version" },
+          { name: "architecture", label: "Architecture" },
+          { name: "relative_path", label: "Relative path" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
     publicationDefaults: { simple: true },
-    syncFlavor: "mirror",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [
       {
         name: "distributions",
@@ -189,15 +257,33 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://example.com/path/to/PULP_MANIFEST",
     publicationPath: "/publications/file/file/",
     distributionPath: "/distributions/file/file/",
-    contentType: "file.file",
-    contentPath: "/content/file/files/",
-    contentFields: [
-      { name: "relative_path", label: "Relative path" },
-      { name: "sha256", label: "SHA256" },
+    contentEndpoints: [
+      {
+        path: "/content/file/files/",
+        label: "Files",
+        contentType: "file.file",
+        fields: [
+          { name: "relative_path", label: "Relative path" },
+          { name: "sha256", label: "SHA256" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+      {
+        name: "optimize",
+        type: "boolean",
+        label: "Optimize (skip sync if nothing upstream changed)",
+        default: true,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: ["autopublish", "manifest"],
   },
@@ -210,18 +296,30 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://pypi.org/",
     publicationPath: "/publications/python/pypi/",
     distributionPath: "/distributions/python/pypi/",
-    contentType: "python.python",
-    contentPath: "/content/python/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "filename", label: "Filename" },
-      { name: "packagetype", label: "Package type" },
+    contentEndpoints: [
+      {
+        path: "/content/python/packages/",
+        label: "Packages",
+        contentType: "python.python",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "filename", label: "Filename" },
+          { name: "packagetype", label: "Package type" },
+        ],
+        sizeField: "size",
+      },
     ],
-    contentSizeField: "size",
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [
       {
         name: "includes",
@@ -276,16 +374,28 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://registry.npmjs.org/",
     publicationPath: null,
     distributionPath: "/distributions/npm/npm/",
-    contentType: "npm.package",
-    contentPath: "/content/npm/packages/",
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "relative_path", label: "Relative path" },
+    contentEndpoints: [
+      {
+        path: "/content/npm/packages/",
+        label: "Packages",
+        contentType: "npm.package",
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "relative_path", label: "Relative path" },
+        ],
+      },
     ],
     supportsPublish: false,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [],
     extraRepoFields: [],
   },
@@ -298,18 +408,30 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://rubygems.org/",
     publicationPath: "/publications/gem/gem/",
     distributionPath: "/distributions/gem/gem/",
-    contentType: "gem.gem",
-    contentPath: "/content/gem/gem/",
-    contentFieldsQueryUnsupported: true,
-    contentFields: [
-      { name: "name", label: "Name" },
-      { name: "version", label: "Version" },
-      { name: "platform", label: "Platform" },
-      { name: "prerelease", label: "Prerelease" },
+    contentEndpoints: [
+      {
+        path: "/content/gem/gem/",
+        label: "Gems",
+        contentType: "gem.gem",
+        fieldsQueryUnsupported: true,
+        fields: [
+          { name: "name", label: "Name" },
+          { name: "version", label: "Version" },
+          { name: "platform", label: "Platform" },
+          { name: "prerelease", label: "Prerelease" },
+        ],
+      },
     ],
     supportsPublish: true,
     supportsSync: true,
-    syncFlavor: "mirror_only",
+    syncFields: [
+      {
+        name: "mirror",
+        type: "boolean",
+        label: "Mirror (match remote exactly, removing content not present upstream)",
+        default: false,
+      },
+    ],
     extraRemoteFields: [
       { name: "prereleases", type: "boolean", label: "Sync pre-releases" },
       {
@@ -336,29 +458,100 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
     remoteUrlPlaceholder: "https://repo1.maven.org/maven2/",
     publicationPath: null,
     distributionPath: "/distributions/maven/maven/",
-    contentType: "maven.artifact",
-    contentPath: "/content/maven/artifact/",
-    contentFields: [
-      { name: "group_id", label: "Group ID" },
-      { name: "artifact_id", label: "Artifact ID" },
-      { name: "version", label: "Version" },
-      { name: "filename", label: "Filename" },
+    contentEndpoints: [
+      {
+        path: "/content/maven/artifact/",
+        label: "Artifacts",
+        contentType: "maven.artifact",
+        fields: [
+          { name: "group_id", label: "Group ID" },
+          { name: "artifact_id", label: "Artifact ID" },
+          { name: "version", label: "Version" },
+          { name: "filename", label: "Filename" },
+        ],
+      },
     ],
     supportsPublish: false,
     supportsSync: false,
-    syncFlavor: "mirror_only",
+    syncFields: [],
     extraRemoteFields: [],
     extraRepoFields: [],
   },
 ] as const;
 
+/**
+ * Matching logic below takes the descriptor list as its first argument so it can run against
+ * either the compiled-in PULP_PLUGINS (the module-level exports here) or a runtime-fetched list
+ * (components/pulp/plugins-context.ts). Keep this the single copy of each match; do not
+ * duplicate it against a second list.
+ */
+
+export function isPulpPluginKindIn(
+  plugins: readonly PulpPluginDescriptor[],
+  value: unknown
+): value is PulpPluginKind {
+  return typeof value === "string" && plugins.some((p) => p.kind === value);
+}
+
+/** Descriptor for a kind, or null when the kind is unknown. */
+export function findPulpPluginIn(
+  plugins: readonly PulpPluginDescriptor[],
+  kind: string
+): PulpPluginDescriptor | null {
+  return plugins.find((p) => p.kind === kind) ?? null;
+}
+
+/**
+ * Descriptor for the plugin whose repositoryPath appears in a repository href (relative API
+ * path or absolute URL), or null when the href matches no plugin.
+ */
+export function findPluginForRepositoryHrefIn(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): PulpPluginDescriptor | null {
+  return plugins.find((p) => href.includes(p.repositoryPath)) ?? null;
+}
+
+/**
+ * Kind, endpoint path and id extracted from a content unit href (relative API path or absolute
+ * URL) whose path matches one of a plugin's content endpoints, or null when none matches.
+ */
+export function findContentForHrefIn(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): { kind: PulpPluginKind; path: string; id: string } | null {
+  for (const plugin of plugins) {
+    for (const endpoint of plugin.contentEndpoints) {
+      const index = href.indexOf(endpoint.path);
+      if (index === -1) continue;
+      const id = href.slice(index + endpoint.path.length).replace(/\/+$/, "").split("/")[0];
+      if (id) {
+        return { kind: plugin.kind, path: endpoint.path, id };
+      }
+    }
+  }
+  return null;
+}
+
+/** Descriptor for a kind. Throws when the kind is unknown; use in client code where the kind is typed. */
+export function getPulpPluginIn(
+  plugins: readonly PulpPluginDescriptor[],
+  kind: PulpPluginKind
+): PulpPluginDescriptor {
+  const plugin = findPulpPluginIn(plugins, kind);
+  if (!plugin) {
+    throw new Error(`Unknown Pulp plugin kind: ${kind}`);
+  }
+  return plugin;
+}
+
 export function isPulpPluginKind(value: unknown): value is PulpPluginKind {
-  return typeof value === "string" && PULP_PLUGINS.some((p) => p.kind === value);
+  return isPulpPluginKindIn(PULP_PLUGINS, value);
 }
 
 /** Descriptor for a kind, or null when the kind is unknown. */
 export function findPulpPlugin(kind: string): PulpPluginDescriptor | null {
-  return PULP_PLUGINS.find((p) => p.kind === kind) ?? null;
+  return findPulpPluginIn(PULP_PLUGINS, kind);
 }
 
 /**
@@ -366,30 +559,20 @@ export function findPulpPlugin(kind: string): PulpPluginDescriptor | null {
  * path or absolute URL), or null when the href matches no plugin.
  */
 export function findPluginForRepositoryHref(href: string): PulpPluginDescriptor | null {
-  return PULP_PLUGINS.find((p) => href.includes(p.repositoryPath)) ?? null;
+  return findPluginForRepositoryHrefIn(PULP_PLUGINS, href);
 }
 
 /**
- * Kind and id extracted from a content unit href (relative API path or absolute URL) whose path
- * matches a plugin's contentPath, or null when no plugin's contentPath matches.
+ * Kind, endpoint path and id extracted from a content unit href (relative API path or absolute
+ * URL) whose path matches one of a plugin's content endpoints, or null when none matches.
  */
-export function findContentForHref(href: string): { kind: PulpPluginKind; id: string } | null {
-  for (const plugin of PULP_PLUGINS) {
-    const index = href.indexOf(plugin.contentPath);
-    if (index === -1) continue;
-    const id = href.slice(index + plugin.contentPath.length).replace(/\/+$/, "").split("/")[0];
-    if (id) {
-      return { kind: plugin.kind, id };
-    }
-  }
-  return null;
+export function findContentForHref(
+  href: string
+): { kind: PulpPluginKind; path: string; id: string } | null {
+  return findContentForHrefIn(PULP_PLUGINS, href);
 }
 
 /** Descriptor for a kind. Throws when the kind is unknown; use in client code where the kind is typed. */
 export function getPulpPlugin(kind: PulpPluginKind): PulpPluginDescriptor {
-  const plugin = findPulpPlugin(kind);
-  if (!plugin) {
-    throw new Error(`Unknown Pulp plugin kind: ${kind}`);
-  }
-  return plugin;
+  return getPulpPluginIn(PULP_PLUGINS, kind);
 }
