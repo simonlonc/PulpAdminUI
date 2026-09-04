@@ -85,6 +85,12 @@ const navSections = [
         hint: "Published content endpoints",
         icon: "distributions",
       },
+      {
+        href: "/publications/list",
+        label: "Publications",
+        hint: "Published snapshots of repository versions",
+        icon: "content",
+      },
       { href: "/content/list", label: "Content", hint: "Packages and metadata", icon: "content" },
       { href: "/uploads/create", label: "Upload file", hint: "Send file to Pulp", icon: "upload" },
     ] satisfies NavItem[],
