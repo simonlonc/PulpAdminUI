@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
@@ -18,7 +19,6 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { formatBytes } from "@/lib/format-bytes";
-import { findPulpPlugin, isPulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpContentService } from "@/services/pulp/content-service";
 
 function fieldLabel(key: string): string {
@@ -44,8 +44,9 @@ export default function ContentUnitDetailPage() {
   const params = useParams<{ kind: string; id: string }>();
   const kindParam = params?.kind ?? "";
   const id = params?.id ?? "";
-  const kind = isPulpPluginKind(kindParam) ? kindParam : null;
-  const plugin = kind ? findPulpPlugin(kind) : null;
+  const { isPluginKind, findPlugin } = usePulpPluginsContext();
+  const kind = isPluginKind(kindParam) ? kindParam : null;
+  const plugin = kind ? findPlugin(kind) : null;
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();

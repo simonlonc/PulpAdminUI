@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/pulp/admin-shell";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpContent } from "@/components/pulp/use-pulp-content";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
@@ -24,7 +25,6 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
-import { PULP_PLUGINS, findContentForHref, getPulpPlugin } from "@/lib/pulp-plugins";
 
 const PAGE_SIZE = 50;
 
@@ -34,6 +34,7 @@ const selectClassName =
 function ContentListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
+  const { plugins, getPlugin, findContentForHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);
@@ -115,7 +116,7 @@ function ContentListPageContent() {
                     .filter((option) => option.latestVersionHref !== null)
                     .map((option) => (
                       <option key={option.href} value={option.latestVersionHref ?? undefined}>
-                        {option.name} ({getPulpPlugin(option.kind).label})
+                        {option.name} ({getPlugin(option.kind).label})
                       </option>
                     ))}
                 </select>
@@ -128,7 +129,7 @@ function ContentListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All content types</option>
-                  {PULP_PLUGINS.map((plugin) => (
+                  {plugins.map((plugin) => (
                     <option key={plugin.kind} value={plugin.contentType}>
                       {plugin.label}
                     </option>

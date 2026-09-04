@@ -37,7 +37,12 @@ export type PulpRemoteField = {
   options?: readonly string[];
 };
 
-export type PulpPluginKind = "rpm" | "deb" | "file" | "python" | "npm" | "gem" | "maven";
+/**
+ * Widened to `string` so plugin kinds can come from a runtime-fetched descriptor list
+ * (see components/pulp/plugins-context.ts) rather than only this module's compiled-in
+ * PULP_PLUGINS. Kept as a named alias so existing type-only imports don't change.
+ */
+export type PulpPluginKind = string;
 
 /** A content-listing column: a Pulp field name paired with its display label. */
 export type PulpContentField = {
@@ -352,29 +357,48 @@ export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [
   },
 ] as const;
 
-export function isPulpPluginKind(value: unknown): value is PulpPluginKind {
-  return typeof value === "string" && PULP_PLUGINS.some((p) => p.kind === value);
+/**
+ * Matching logic below takes the descriptor list as its first argument so it can run against
+ * either the compiled-in PULP_PLUGINS (the module-level exports here) or a runtime-fetched list
+ * (components/pulp/plugins-context.ts). Keep this the single copy of each match; do not
+ * duplicate it against a second list.
+ */
+
+export function isPulpPluginKindIn(
+  plugins: readonly PulpPluginDescriptor[],
+  value: unknown
+): value is PulpPluginKind {
+  return typeof value === "string" && plugins.some((p) => p.kind === value);
 }
 
 /** Descriptor for a kind, or null when the kind is unknown. */
-export function findPulpPlugin(kind: string): PulpPluginDescriptor | null {
-  return PULP_PLUGINS.find((p) => p.kind === kind) ?? null;
+export function findPulpPluginIn(
+  plugins: readonly PulpPluginDescriptor[],
+  kind: string
+): PulpPluginDescriptor | null {
+  return plugins.find((p) => p.kind === kind) ?? null;
 }
 
 /**
  * Descriptor for the plugin whose repositoryPath appears in a repository href (relative API
  * path or absolute URL), or null when the href matches no plugin.
  */
-export function findPluginForRepositoryHref(href: string): PulpPluginDescriptor | null {
-  return PULP_PLUGINS.find((p) => href.includes(p.repositoryPath)) ?? null;
+export function findPluginForRepositoryHrefIn(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): PulpPluginDescriptor | null {
+  return plugins.find((p) => href.includes(p.repositoryPath)) ?? null;
 }
 
 /**
  * Kind and id extracted from a content unit href (relative API path or absolute URL) whose path
  * matches a plugin's contentPath, or null when no plugin's contentPath matches.
  */
-export function findContentForHref(href: string): { kind: PulpPluginKind; id: string } | null {
-  for (const plugin of PULP_PLUGINS) {
+export function findContentForHrefIn(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): { kind: PulpPluginKind; id: string } | null {
+  for (const plugin of plugins) {
     const index = href.indexOf(plugin.contentPath);
     if (index === -1) continue;
     const id = href.slice(index + plugin.contentPath.length).replace(/\/+$/, "").split("/")[0];
@@ -386,10 +410,43 @@ export function findContentForHref(href: string): { kind: PulpPluginKind; id: st
 }
 
 /** Descriptor for a kind. Throws when the kind is unknown; use in client code where the kind is typed. */
-export function getPulpPlugin(kind: PulpPluginKind): PulpPluginDescriptor {
-  const plugin = findPulpPlugin(kind);
+export function getPulpPluginIn(
+  plugins: readonly PulpPluginDescriptor[],
+  kind: PulpPluginKind
+): PulpPluginDescriptor {
+  const plugin = findPulpPluginIn(plugins, kind);
   if (!plugin) {
     throw new Error(`Unknown Pulp plugin kind: ${kind}`);
   }
   return plugin;
+}
+
+export function isPulpPluginKind(value: unknown): value is PulpPluginKind {
+  return isPulpPluginKindIn(PULP_PLUGINS, value);
+}
+
+/** Descriptor for a kind, or null when the kind is unknown. */
+export function findPulpPlugin(kind: string): PulpPluginDescriptor | null {
+  return findPulpPluginIn(PULP_PLUGINS, kind);
+}
+
+/**
+ * Descriptor for the plugin whose repositoryPath appears in a repository href (relative API
+ * path or absolute URL), or null when the href matches no plugin.
+ */
+export function findPluginForRepositoryHref(href: string): PulpPluginDescriptor | null {
+  return findPluginForRepositoryHrefIn(PULP_PLUGINS, href);
+}
+
+/**
+ * Kind and id extracted from a content unit href (relative API path or absolute URL) whose path
+ * matches a plugin's contentPath, or null when no plugin's contentPath matches.
+ */
+export function findContentForHref(href: string): { kind: PulpPluginKind; id: string } | null {
+  return findContentForHrefIn(PULP_PLUGINS, href);
+}
+
+/** Descriptor for a kind. Throws when the kind is unknown; use in client code where the kind is typed. */
+export function getPulpPlugin(kind: PulpPluginKind): PulpPluginDescriptor {
+  return getPulpPluginIn(PULP_PLUGINS, kind);
 }

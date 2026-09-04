@@ -5,13 +5,13 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { formatBytes } from "@/lib/format-bytes";
-import { findContentForHref, findPluginForRepositoryHref } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import {
   Table,
@@ -29,6 +29,7 @@ function RepositoryContentInner() {
 
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
+  const { findContentForHref, findPluginForRepositoryHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users } = usePulpUsers(hasSession);
   const { groups } = usePulpGroups(hasSession);

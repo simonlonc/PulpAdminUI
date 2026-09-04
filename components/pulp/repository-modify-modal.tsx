@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CheckboxField, FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { getPulpPlugin } from "@/lib/pulp-plugins";
+import { usePulpPluginsContext } from "./plugins-context";
 import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 
@@ -32,7 +32,8 @@ export function RepositoryModifyModal({
   onClose,
   onSaved,
 }: RepositoryModifyModalProps) {
-  const plugin = getPulpPlugin(kind);
+  const { getPlugin } = usePulpPluginsContext();
+  const plugin = getPlugin(kind);
   const [addUnits, setAddUnits] = useState("");
   const [removeUnits, setRemoveUnits] = useState("");
   const [overwrite, setOverwrite] = useState(true);
