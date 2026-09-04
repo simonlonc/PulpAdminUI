@@ -8,7 +8,6 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -474,25 +473,28 @@ function RemotesListPageContent() {
               </Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 border-b border-zinc-200/80 px-5 py-3 dark:border-zinc-800/80">
-            {PULP_PLUGINS.map((plugin) => (
-              <button
-                key={plugin.kind}
-                type="button"
-                onClick={() => {
-                  setKind(plugin.kind);
-                  setPage(1);
-                }}
-                className={cn(
-                  "rounded-md border px-3 py-1.5 text-sm",
-                  kind === plugin.kind
-                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                    : "border-zinc-300 dark:border-zinc-700"
-                )}
-              >
-                {plugin.kind.toUpperCase()}
-              </button>
-            ))}
+          <div className="border-b border-zinc-200/80 px-5 py-3 dark:border-zinc-800/80">
+            {/* selectClassName on this page is w-full for the modal forms, so the filter
+                is constrained here rather than stretching the whole card. */}
+            <div className="max-w-xs">
+              <FormField label="Type">
+                <select
+                  value={kind}
+                  onChange={(event) => {
+                    setKind(event.target.value as PulpPluginKind);
+                    setPage(1);
+                  }}
+                  disabled={isLoadingRemotes}
+                  className={selectClassName}
+                >
+                  {PULP_PLUGINS.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.kind}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
           </div>
           <CardContent className="space-y-4 p-5">
             <ListQueryBar

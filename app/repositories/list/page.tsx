@@ -11,7 +11,6 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -524,32 +523,31 @@ function RepositoriesListPageContent() {
       ) : (
         <Card>
           <CardTitle>
-            Repositories ({count}) — {kind.toUpperCase()}
+            Repositories ({count}) — {getPulpPlugin(kind).label}
           </CardTitle>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {PULP_PLUGINS.map((plugin) => (
-                <button
-                  key={plugin.kind}
-                  type="button"
-                  onClick={() => {
+            <div className="flex flex-wrap items-end gap-3">
+              <FormField label="Type">
+                <select
+                  value={kind}
+                  onChange={(event) => {
                     setPublishResult(null);
                     setDistributeResult(null);
                     setSyncResult(null);
-                    setKind(plugin.kind);
+                    setKind(event.target.value as PulpPluginKind);
                     setRemoteFilter("");
                     setPage(1);
                   }}
-                  className={cn(
-                    "rounded-md border px-3 py-1.5 text-sm",
-                    kind === plugin.kind
-                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                      : "border-zinc-300 dark:border-zinc-700"
-                  )}
+                  disabled={isLoadingRepos}
+                  className={selectClassName}
                 >
-                  {plugin.kind.toUpperCase()}
-                </button>
-              ))}
+                  {PULP_PLUGINS.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.kind}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <Button
                 type="button"
                 variant="outline"
@@ -912,24 +910,20 @@ function RepositoriesListPageContent() {
             </div>
 
             <form className="mt-4 flex flex-col gap-4" onSubmit={(e) => void handleCreateSubmit(e)}>
-              <div className="flex flex-wrap gap-2">
-                {PULP_PLUGINS.map((plugin) => (
-                  <button
-                    key={plugin.kind}
-                    type="button"
-                    onClick={() => setCreateKind(plugin.kind)}
-                    disabled={isCreating}
-                    className={cn(
-                      "rounded-md border px-3 py-1.5 text-sm disabled:opacity-50",
-                      createKind === plugin.kind
-                        ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-black"
-                        : "border-zinc-300 dark:border-zinc-700"
-                    )}
-                  >
-                    {plugin.kind.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+              <FormField label="Type">
+                <select
+                  value={createKind}
+                  onChange={(event) => setCreateKind(event.target.value as PulpPluginKind)}
+                  disabled={isCreating}
+                  className={selectClassName}
+                >
+                  {PULP_PLUGINS.map((plugin) => (
+                    <option key={plugin.kind} value={plugin.kind}>
+                      {plugin.label}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <FormField label="Name">
                 <Input
                   value={createName}
