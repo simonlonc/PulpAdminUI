@@ -2,7 +2,8 @@
  * Serves the plugin registry the whole app reads from: the connected Pulp server's OpenAPI
  * document, derived into descriptors (see lib/pulp-plugin-derive.ts) and merged with the curated
  * PULP_PLUGINS overlay, so the UI describes the server actually connected to instead of only the
- * plugins someone hand-wrote a descriptor for.
+ * plugins someone hand-wrote a descriptor for. The deployment's own overlay directory (see
+ * lib/pulp-plugin-overlay.ts) is applied last, over both, and is re-read on every build.
  *
  * Server-side only: fetches through pulpFetch, so this must not be imported from client code.
  */
@@ -14,6 +15,7 @@ import {
   type PulpPluginDescriptor,
 } from "@/lib/pulp-plugins";
 import { derivePulpPlugins } from "@/lib/pulp-plugin-derive";
+import { isCompleteDescriptor, loadPulpPluginOverlay } from "@/lib/pulp-plugin-overlay";
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -73,6 +75,49 @@ function mergeRegistry(derived: readonly PulpPluginDescriptor[]): readonly PulpP
 }
 
 /**
+ * Applies the deployment's overlay entries over an already-merged registry, overlay keys winning
+ * key by key, so an overlay file only has to name what it corrects. contentEndpoints is merged
+ * with the overlay endpoints in the curated role -- see mergeContentEndpoints.
+ *
+ * An entry for a kind the registry does not have describes a family this server does not offer,
+ * or one the derivation skipped. It is appended only when it is a complete descriptor, since
+ * there is no tier below it to supply the keys it leaves out.
+ */
+function applyOverlay(
+  registry: readonly PulpPluginDescriptor[],
+  overlay: readonly Partial<PulpPluginDescriptor>[]
+): readonly PulpPluginDescriptor[] {
+  if (overlay.length === 0) return registry;
+
+  const result = [...registry];
+  for (const entry of overlay) {
+    const index = result.findIndex((plugin) => plugin.kind === entry.kind);
+    if (index === -1) {
+      if (!isCompleteDescriptor(entry)) {
+        console.error(
+          `getPulpPluginRegistry: overlay kind "${entry.kind}" is not on this server and the entry is not a complete descriptor`
+        );
+        continue;
+      }
+      console.error(`getPulpPluginRegistry: admitted overlay plugin family "${entry.kind}"`);
+      result.push(entry);
+      continue;
+    }
+
+    const existing = result[index];
+    result[index] = {
+      ...existing,
+      ...entry,
+      contentEndpoints: entry.contentEndpoints
+        ? mergeContentEndpoints(existing.contentEndpoints, entry.contentEndpoints)
+        : existing.contentEndpoints,
+    };
+  }
+
+  return result;
+}
+
+/**
  * Derives and merges the registry from an already-parsed spec value. ok:false (with no families
  * derived) covers both a spec that fails to parse -- pulpFetch hands that back as undefined --
  * and a well-formed spec that simply derives nothing.
@@ -91,27 +136,32 @@ function buildRegistryFromSpec(
  * Fetches the server's OpenAPI document and builds the registry from it. Falls back to the
  * curated PULP_PLUGINS -- uncached, logged once -- on a non-ok response, a spec that derives zero
  * families (parse failures included, see buildRegistryFromSpec), or a fetch that throws outright.
+ * The deployment's overlay is applied on every path, so it still corrects the fallback registry
+ * when the server's document is unreachable.
  */
 async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
+  const overlay = await loadPulpPluginOverlay();
+
   try {
     const result = await pulpFetch<unknown>("/docs/api.json", auth);
     if (!result.ok) {
       console.error("getPulpPluginRegistry: failed to fetch the Pulp OpenAPI document:", result.detail);
-      return PULP_PLUGINS;
+      return applyOverlay(PULP_PLUGINS, overlay);
     }
 
     const built = buildRegistryFromSpec(result.data);
     if (!built.ok) {
       console.error("getPulpPluginRegistry: derived zero plugin families from the Pulp OpenAPI document");
-      return PULP_PLUGINS;
+      return applyOverlay(PULP_PLUGINS, overlay);
     }
 
-    cachedRegistry = built.registry;
+    const registry = applyOverlay(built.registry, overlay);
+    cachedRegistry = registry;
     cachedAt = Date.now();
-    return built.registry;
+    return registry;
   } catch (error) {
     console.error("getPulpPluginRegistry: failed to build the plugin registry:", error);
-    return PULP_PLUGINS;
+    return applyOverlay(PULP_PLUGINS, overlay);
   }
 }
 
