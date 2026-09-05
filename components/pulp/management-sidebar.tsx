@@ -18,6 +18,7 @@ type ManagementSidebarProps = {
 
 type NavIconName =
   | "dashboard"
+  | "search"
   | "workers"
   | "tasks"
   | "schedules"
@@ -50,6 +51,12 @@ const navSections = [
         label: "Dashboard",
         hint: "Overview and quick links",
         icon: "dashboard",
+      },
+      {
+        href: "/search",
+        label: "Global search",
+        hint: "Find a resource by href or PRN",
+        icon: "search",
       },
       {
         href: "/status",
@@ -167,6 +174,21 @@ function SidebarIcon({ name }: { name: NavIconName }) {
           <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5" />
           <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5" />
           <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <circle cx="10.5" cy="10.5" r="6" />
+          <path d="m19 19-4.35-4.35" />
         </svg>
       );
     case "workers":
