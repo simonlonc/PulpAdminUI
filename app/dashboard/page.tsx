@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
@@ -147,26 +147,34 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<PulpDashboardSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  const loadSummary = useCallback(async () => {
-    if (!hasSession) {
-      setSummary(null);
-      setSummaryError(null);
-      return;
-    }
-
-    try {
-      setSummaryError(null);
-      const data = await pulpDashboardService.summary();
-      setSummary(data);
-    } catch (err) {
-      setSummary(null);
-      setSummaryError(err instanceof Error ? err.message : "Failed to load dashboard stats.");
-    }
-  }, [hasSession]);
-
   useEffect(() => {
+    let active = true;
+
+    async function loadSummary() {
+      if (!hasSession) {
+        return;
+      }
+
+      try {
+        const data = await pulpDashboardService.summary();
+        if (active) {
+          setSummary(data);
+          setSummaryError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setSummary(null);
+          setSummaryError(err instanceof Error ? err.message : "Failed to load dashboard stats.");
+        }
+      }
+    }
+
     void loadSummary();
-  }, [loadSummary]);
+
+    return () => {
+      active = false;
+    };
+  }, [hasSession]);
 
   return (
     <AdminShell
@@ -206,7 +214,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {summaryError ? (
+          {hasSession && summaryError ? (
             <Card className="border-amber-300 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/30">
               <div className="flex gap-3">
                 <span
@@ -223,7 +231,7 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          {summary ? (
+          {hasSession && summary ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {statCards.map(({ key, label, icon: Icon, iconWrap }) => (
                 <Card
