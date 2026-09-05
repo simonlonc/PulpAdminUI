@@ -1,3 +1,5 @@
+import { PulpResourceFamily } from "@/lib/pulp-resource-ref";
+
 export type ApiErrorResponse = {
   detail?: string;
 };
@@ -734,4 +736,30 @@ export type CreatePulpGroupPayload = {
 
 export type UpdatePulpGroupPayload = {
   name: string;
+};
+
+/** Result of GET /api/pulp/resolve — a pulp_href or PRN resolved to the object it names. */
+export type PulpResolvedResource = {
+  pulp_href: string;
+  prn: string;
+  name: string | null;
+};
+
+/** One hit within a PulpSearchGroup from GET /api/pulp/search. */
+export type PulpSearchHit = {
+  pulp_href: string;
+  prn: string;
+  name: string;
+};
+
+/**
+ * One resource family's results from GET /api/pulp/search. `count` is the upstream total, which
+ * may exceed `results.length` when there are more matches than the query limit. `error` is the
+ * upstream detail string when this family's request failed; the other families still render.
+ */
+export type PulpSearchGroup = {
+  family: PulpResourceFamily;
+  count: number;
+  results: PulpSearchHit[];
+  error: string | null;
 };
