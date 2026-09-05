@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Dummy values: next build reads both, and nothing here contacts a Pulp server.
+    # PULP_TEST_BASE_URL is deliberately unset, so the opt-in contract tier stays skipped.
+    env:
+      PULP_PROJECT_NAME: Pulp
+      PULP_BASE_URL: http://localhost:8080/pulp/api/v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
