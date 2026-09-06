@@ -1,15 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  authHeaders,
-  normalizePulpHrefToApiPath,
-  readDetail,
-  toPulpHrefPath,
-  waitForTask,
-} from "../../_server";
+import { normalizePulpHrefToApiPath, toPulpHrefPath, waitForTask } from "../../_server";
 
 type ModifyBody = {
   pulp_href?: string;
@@ -53,10 +47,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const payload: Record<string, unknown> = {};
   if (addContentUnits.length > 0) {
     payload.add_content_units = addContentUnits.map((h) => toPulpHrefPath(h));
@@ -71,25 +61,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     payload.overwrite = body.overwrite;
   }
 
-  const modifyResponse = await fetch(getPulpApiUrl(`${apiPath}modify/`), {
+  const modifyResult = await pulpFetch<{ task: string }>(`${apiPath}modify/`, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(payload),
-    cache: "no-store",
   });
 
-  if (!modifyResponse.ok) {
-    if (modifyResponse.status === 401 || modifyResponse.status === 403) {
+  if (!modifyResult.ok) {
+    if (modifyResult.status === 401 || modifyResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(modifyResponse) }, { status: modifyResponse.status });
+    return Response.json({ detail: modifyResult.detail }, { status: modifyResult.status });
   }
 
-  const { task } = (await modifyResponse.json()) as { task: string };
+  const { task } = modifyResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, authResult.auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(

@@ -1,11 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
-  authHeaders,
   hrefFromCreatedResource,
   normalizePulpHrefToApiPath,
-  readDetail,
   TaskRefResponse,
   toPulpHrefPath,
   waitForTask,
@@ -25,46 +23,52 @@ type ListRepositoriesResponse = {
   results?: PulpRepository[];
 };
 
-async function findOrCreateRepository(repositoryName: string, authHeader: string): Promise<string> {
-  const listResponse = await fetch(
-    getPulpApiUrl(`/repositories/rpm/rpm/?name=${encodeURIComponent(repositoryName)}`),
-    { method: "GET", headers: authHeaders(authHeader), cache: "no-store" }
+async function findOrCreateRepository(
+  repositoryName: string,
+  auth: PulpAuth
+): Promise<{ ok: true; href: string } | { ok: false; status: number; detail: string }> {
+  const listResult = await pulpFetch<ListRepositoriesResponse>(
+    `/repositories/rpm/rpm/?name=${encodeURIComponent(repositoryName)}`,
+    auth
   );
-  if (!listResponse.ok) {
-    throw new Error(await readDetail(listResponse));
+  if (!listResult.ok) {
+    return { ok: false, status: listResult.status, detail: listResult.detail };
   }
 
-  const listPayload = (await listResponse.json()) as ListRepositoriesResponse;
-  const existing = listPayload.results?.[0];
+  const existing = listResult.data.results?.[0];
   if (existing?.pulp_href || existing?.href) {
-    return existing.pulp_href ?? existing.href ?? "";
+    return { ok: true, href: existing.pulp_href ?? existing.href ?? "" };
   }
 
-  const createHeaders = authHeaders(authHeader);
-  createHeaders.set("Content-Type", "application/json");
-  const createResponse = await fetch(getPulpApiUrl("/repositories/rpm/rpm/"), {
+  const createResult = await pulpFetch<TaskRefResponse>("/repositories/rpm/rpm/", auth, {
     method: "POST",
-    headers: createHeaders,
     body: JSON.stringify({ name: repositoryName }),
-    cache: "no-store",
   });
-  if (!createResponse.ok) {
-    throw new Error(await readDetail(createResponse));
+  if (!createResult.ok) {
+    return { ok: false, status: createResult.status, detail: createResult.detail };
   }
 
-  const created = (await createResponse.json()) as TaskRefResponse;
+  const created = createResult.data;
   let repoHref = created.pulp_href ?? created.href ?? null;
 
   if (created.task) {
-    const task = await waitForTask(created.task, authHeader);
-    repoHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? repoHref;
+    try {
+      const task = await waitForTask(created.task, auth);
+      repoHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? repoHref;
+    } catch (error) {
+      return {
+        ok: false,
+        status: 500,
+        detail: error instanceof Error ? error.message : "Repository creation task failed.",
+      };
+    }
   }
 
   if (!repoHref) {
-    throw new Error("Repository creation completed without repository href.");
+    return { ok: false, status: 502, detail: "Repository creation completed without repository href." };
   }
 
-  return repoHref;
+  return { ok: true, href: repoHref };
 }
 
 export async function POST(request: Request) {
@@ -83,47 +87,51 @@ export async function POST(request: Request) {
     return Response.json({ detail: "Content href is required." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-
-  try {
-    const repositoryHref = await findOrCreateRepository(repositoryName, authHeader);
-    const modifyHeaders = authHeaders(authHeader);
-    modifyHeaders.set("Content-Type", "application/json");
-
-    const modifyResponse = await fetch(
-      getPulpApiUrl(`${normalizePulpHrefToApiPath(repositoryHref)}modify/`),
-      {
-        method: "POST",
-        headers: modifyHeaders,
-        body: JSON.stringify({
-          add_content_units: [toPulpHrefPath(content)],
-        }),
-        cache: "no-store",
-      }
-    );
-    if (!modifyResponse.ok) {
-      throw new Error(await readDetail(modifyResponse));
-    }
-
-    const modifyPayload = (await modifyResponse.json()) as TaskRefResponse;
-    if (modifyPayload.task) {
-      await waitForTask(modifyPayload.task, authHeader);
-    }
-
-    return Response.json({
-      repository: repositoryHref,
-      content: toPulpHrefPath(content),
-      task: modifyPayload.task ?? null,
-    });
-  } catch (error) {
-    if (error instanceof Error && /401|403/.test(error.message)) {
+  const repoResult = await findOrCreateRepository(repositoryName, authResult.auth);
+  if (!repoResult.ok) {
+    if (repoResult.status === 401 || repoResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Failed to add content to repository." },
-      { status: 500 }
-    );
+    return Response.json({ detail: repoResult.detail }, { status: repoResult.status });
   }
+
+  const repositoryHref = repoResult.href;
+
+  const modifyResult = await pulpFetch<TaskRefResponse>(
+    `${normalizePulpHrefToApiPath(repositoryHref)}modify/`,
+    authResult.auth,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        add_content_units: [toPulpHrefPath(content)],
+      }),
+    }
+  );
+
+  if (!modifyResult.ok) {
+    if (modifyResult.status === 401 || modifyResult.status === 403) {
+      const cookieStore = await cookies();
+      cookieStore.delete(PULP_AUTH_COOKIE);
+    }
+    return Response.json({ detail: modifyResult.detail }, { status: modifyResult.status });
+  }
+
+  const modifyPayload = modifyResult.data;
+  if (modifyPayload.task) {
+    try {
+      await waitForTask(modifyPayload.task, authResult.auth);
+    } catch (error) {
+      return Response.json(
+        { detail: error instanceof Error ? error.message : "Failed to add content to repository." },
+        { status: 500 }
+      );
+    }
+  }
+
+  return Response.json({
+    repository: repositoryHref,
+    content: toPulpHrefPath(content),
+    task: modifyPayload.task ?? null,
+  });
 }

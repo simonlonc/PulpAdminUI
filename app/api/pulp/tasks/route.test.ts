@@ -90,6 +90,20 @@ describe("GET /api/pulp/tasks", () => {
     expect(response.status).toBe(401);
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
   });
+
+  // An unreachable Pulp server (network failure inside pulpFetch's fetch() call) must surface
+  // as a normal { detail } JSON response, not as a thrown exception that Next.js turns into a
+  // bare 500 with a stack trace.
+  it("returns 502 with a detail body instead of throwing when Pulp is unreachable", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/tasks"));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      detail: "Could not reach Pulp server at http://pulp.test/pulp/api/v3: connect ECONNREFUSED",
+    });
+  });
 });
 
 describe("PATCH /api/pulp/tasks", () => {

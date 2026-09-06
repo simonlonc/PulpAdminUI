@@ -1,15 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  authHeaders,
-  normalizePulpHrefToApiPath,
-  readDetail,
-  TaskRefResponse,
-  toPulpHrefPath,
-} from "../../_server";
+import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type SyncBody = {
   pulp_href?: string;
@@ -49,10 +43,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const syncApiPath = `${repoApiPath.replace(/\/$/, "")}/sync/`;
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   // The body carries exactly the fields this plugin's sync schema declares, coerced by type; a
   // name the plugin does not declare is dropped rather than forwarded for the server to reject.
   const sent = body.fields ?? {};
@@ -77,22 +67,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     if (selected.length > 0) payload[field.name] = selected;
   }
 
-  const syncResponse = await fetch(getPulpApiUrl(syncApiPath), {
+  const syncResult = await pulpFetch<TaskRefResponse>(syncApiPath, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(payload),
-    cache: "no-store",
   });
 
-  if (!syncResponse.ok) {
-    if (syncResponse.status === 401 || syncResponse.status === 403) {
+  if (!syncResult.ok) {
+    if (syncResult.status === 401 || syncResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(syncResponse) }, { status: syncResponse.status });
+    return Response.json({ detail: syncResult.detail }, { status: syncResult.status });
   }
 
-  const dispatched = (await syncResponse.json()) as TaskRefResponse;
+  const dispatched = syncResult.data;
 
   // Sync is dispatch-and-return: a large first sync outlives waitForTask's 5-minute ceiling,
   // so the task href goes back to the UI to poll instead.

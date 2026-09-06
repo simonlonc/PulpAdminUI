@@ -1,15 +1,13 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
-  authHeaders,
   buildUpstreamListParams,
   normalizePulpHrefToApiPath,
   PulpPaginatedJson,
-  readDetail,
   TaskRefResponse,
   waitForTask,
 } from "../../repositories/_server";
@@ -315,47 +313,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
     return Response.json({ detail: "At least one field must be provided." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const patchResponse = await fetch(getPulpApiUrl(apiPath), {
+  const patchResult = await pulpFetch<TaskRefResponse>(apiPath, authResult.auth, {
     method: "PATCH",
-    headers,
     body: JSON.stringify(patchPayload),
-    cache: "no-store",
   });
 
-  if (patchResponse.status === 202) {
-    const ct = patchResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      try {
-        const raw = await patchResponse.text();
-        if (raw) {
-          const payload = JSON.parse(raw) as TaskRefResponse;
-          if (payload.task) {
-            await waitForTask(payload.task, authHeader);
-          }
-        }
-      } catch (error) {
-        return Response.json(
-          { detail: error instanceof Error ? error.message : "Remote update task failed." },
-          { status: 500 }
-        );
-      }
+  if (!patchResult.ok) {
+    if (patchResult.status === 401 || patchResult.status === 403) {
+      const cookieStore = await cookies();
+      cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ ok: true });
+    return Response.json({ detail: patchResult.detail }, { status: patchResult.status });
   }
 
-  if (patchResponse.ok) {
-    return Response.json({ ok: true });
+  if (patchResult.status === 202 && patchResult.data.task) {
+    try {
+      await waitForTask(patchResult.data.task, authResult.auth);
+    } catch (error) {
+      return Response.json(
+        { detail: error instanceof Error ? error.message : "Remote update task failed." },
+        { status: 500 }
+      );
+    }
   }
 
-  if (patchResponse.status === 401 || patchResponse.status === 403) {
-    const cookieStore = await cookies();
-    cookieStore.delete(PULP_AUTH_COOKIE);
-  }
-  return Response.json({ detail: await readDetail(patchResponse) }, { status: patchResponse.status });
+  return Response.json({ ok: true });
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
@@ -381,31 +363,21 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const deleteResponse = await fetch(getPulpApiUrl(apiPath), {
+  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, authResult.auth, {
     method: "DELETE",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
   });
 
-  if (deleteResponse.status === 202) {
-    const ct = deleteResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      const payload = (await deleteResponse.json()) as TaskRefResponse;
-      if (payload.task) {
-        await waitForTask(payload.task, authHeader);
-      }
+  if (!deleteResult.ok) {
+    if (deleteResult.status === 401 || deleteResult.status === 403) {
+      const cookieStore = await cookies();
+      cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ ok: true });
+    return Response.json({ detail: deleteResult.detail }, { status: deleteResult.status });
   }
 
-  if (deleteResponse.status === 204 || deleteResponse.ok) {
-    return Response.json({ ok: true });
+  if (deleteResult.status === 202 && deleteResult.data.task) {
+    await waitForTask(deleteResult.data.task, authResult.auth);
   }
 
-  if (deleteResponse.status === 401 || deleteResponse.status === 403) {
-    const cookieStore = await cookies();
-    cookieStore.delete(PULP_AUTH_COOKIE);
-  }
-  return Response.json({ detail: await readDetail(deleteResponse) }, { status: deleteResponse.status });
+  return Response.json({ ok: true });
 }

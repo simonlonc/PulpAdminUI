@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, readDetail, waitForTask } from "../../repositories/_server";
+import { waitForTask } from "../../repositories/_server";
 import type { PulpTaskPurgeState } from "@/services/pulp/types";
 
 const PURGE_STATES = ["skipped", "completed", "failed", "canceled"] as const;
@@ -41,29 +41,23 @@ export async function POST(request: Request) {
     return Response.json({ detail: "At least one task state must be selected." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const purgeResponse = await fetch(getPulpApiUrl("/tasks/purge/"), {
+  const purgeResult = await pulpFetch<{ task: string }>("/tasks/purge/", authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify({ finished_before: finishedBefore, states }),
-    cache: "no-store",
   });
 
-  if (!purgeResponse.ok) {
-    if (purgeResponse.status === 401 || purgeResponse.status === 403) {
+  if (!purgeResult.ok) {
+    if (purgeResult.status === 401 || purgeResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(purgeResponse) }, { status: purgeResponse.status });
+    return Response.json({ detail: purgeResult.detail }, { status: purgeResult.status });
   }
 
-  const { task } = (await purgeResponse.json()) as { task: string };
+  const { task } = purgeResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, authResult.auth);
     return Response.json({
       task,
       state: finished.state ?? "completed",

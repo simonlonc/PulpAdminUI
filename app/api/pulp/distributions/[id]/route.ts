@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "../../_helpers";
 import { waitForTask } from "@/app/api/pulp/repositories/_server";
 
@@ -144,9 +144,8 @@ export async function PATCH(
   // A 202 response body is just {"task": "<href>"}, not the updated distribution, so the
   // caller would otherwise refresh against stale data. Wait for the task, then re-fetch.
   if (result.status === 202 && result.data.task) {
-    const authHeader = toBasicAuthHeader(authResult.auth);
     try {
-      await waitForTask(result.data.task, authHeader);
+      await waitForTask(result.data.task, authResult.auth);
     } catch (error) {
       return Response.json(
         { detail: error instanceof Error ? error.message : "Distribution task failed." },
@@ -193,9 +192,8 @@ export async function DELETE(
   }
 
   if (result.status === 202 && result.data.task) {
-    const authHeader = toBasicAuthHeader(authResult.auth);
     try {
-      await waitForTask(result.data.task, authHeader);
+      await waitForTask(result.data.task, authResult.auth);
     } catch (error) {
       return Response.json(
         { detail: error instanceof Error ? error.message : "Distribution task failed." },

@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import type {
   PulpDebRepositoryDetail,
   PulpFileRepositoryDetail,
   PulpRpmRepositoryDetail,
 } from "@/services/pulp/types";
-import { authHeaders, normalizePulpHrefToApiPath, readDetail } from "../_server";
+import { normalizePulpHrefToApiPath } from "../_server";
 
 function isRpmRepositoryDetailPath(path: string): boolean {
   return path.includes("/repositories/rpm/rpm/");
@@ -127,22 +127,17 @@ export async function GET(request: Request) {
     return Response.json({ detail: "Invalid repository href." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const detailResponse = await fetch(getPulpApiUrl(apiPath), {
-    method: "GET",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
-  });
+  const detailResult = await pulpFetch<Record<string, unknown>>(apiPath, authResult.auth);
 
-  if (!detailResponse.ok) {
-    if (detailResponse.status === 401 || detailResponse.status === 403) {
+  if (!detailResult.ok) {
+    if (detailResult.status === 401 || detailResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(detailResponse) }, { status: detailResponse.status });
+    return Response.json({ detail: detailResult.detail }, { status: detailResult.status });
   }
 
-  const row = (await detailResponse.json()) as Record<string, unknown>;
+  const row = detailResult.data;
 
   if (isRpmRepositoryDetailPath(apiPath)) {
     return Response.json(mapRpmDetail(row, pulpHref));
