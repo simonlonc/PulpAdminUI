@@ -10,12 +10,8 @@ export async function GET() {
   }
 
   const cookieStore = await cookies();
-  const encoded = cookieStore.get(PULP_AUTH_COOKIE)?.value;
-  if (!encoded) {
-    return Response.json({ detail: "Not authenticated." }, { status: 401 });
-  }
 
-  const stats = await getCachedPulpDashboardStats(encoded);
+  const stats = await getCachedPulpDashboardStats(authResult.auth);
 
   if (!stats.ok) {
     if (stats.status === 401 || stats.status === 403) {

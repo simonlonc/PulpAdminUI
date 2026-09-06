@@ -131,7 +131,15 @@ export function getBaseApiPath(): string {
 }
 
 export function normalizePulpHrefToApiPath(href: string): string {
-  const rawPath = href.startsWith("http://") || href.startsWith("https://") ? new URL(href).pathname : href;
+  let rawPath: string;
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    rawPath = new URL(href).pathname;
+  } else {
+    // Resolve against a dummy base so "../" segments are collapsed before the allowlist
+    // checks below see the path, while pathname + search keeps the query string intact.
+    const resolved = new URL(href, "http://x");
+    rawPath = resolved.pathname + resolved.search;
+  }
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 

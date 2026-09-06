@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { decodePulpAuth, pulpFetch } from "@/lib/pulp";
+import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 
 type PulpCountListResponse = {
   count: number;
@@ -20,12 +20,7 @@ export type PulpDashboardStatsResult =
     }
   | { ok: false; detail: string; status?: number };
 
-async function loadPulpDashboardStats(authEncoded: string): Promise<PulpDashboardStatsResult> {
-  const auth = decodePulpAuth(authEncoded);
-  if (!auth) {
-    return { ok: false, detail: "Invalid session." };
-  }
-
+async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
   const [usersRes, groupsRes, rpmRes, debRes, fileRes] = await Promise.all([
     pulpFetch<PulpCountListResponse>("/users/?limit=1&offset=0", auth),
     pulpFetch<PulpCountListResponse>("/groups/?limit=1&offset=0", auth),
@@ -65,8 +60,10 @@ async function loadPulpDashboardStats(authEncoded: string): Promise<PulpDashboar
   };
 }
 
-export const getCachedPulpDashboardStats = unstable_cache(
-  async (authEncoded: string) => loadPulpDashboardStats(authEncoded),
-  ["pulp-dashboard-stats"],
-  { revalidate: 60, tags: ["pulp-dashboard"] }
-);
+export function getCachedPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
+  return unstable_cache(
+    async () => loadPulpDashboardStats(auth),
+    ["pulp-dashboard-stats", auth.username],
+    { revalidate: 60, tags: ["pulp-dashboard"] }
+  )();
+}
