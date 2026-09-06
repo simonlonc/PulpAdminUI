@@ -114,7 +114,10 @@ function TaskDetailInner() {
     setError(null);
     setIsCanceling(true);
     try {
-      await pulpTaskService.cancel(task.pulp_href);
+      const result = await pulpTaskService.cancel(task.pulp_href);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed.");

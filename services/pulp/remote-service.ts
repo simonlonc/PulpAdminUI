@@ -5,6 +5,7 @@ import {
   PulpRemote,
   RemoteCreatePayload,
   RemoteUpdatePayload,
+  ServiceDataResult,
   ServiceResult,
 } from "./types";
 
@@ -26,16 +27,19 @@ export const pulpRemoteService = {
     return (await response.json()) as PulpPaginatedResponse<PulpRemote>;
   },
 
-  async create(kind: PulpPluginKind, payload: RemoteCreatePayload): Promise<PulpRemote> {
+  async create(
+    kind: PulpPluginKind,
+    payload: RemoteCreatePayload
+  ): Promise<ServiceDataResult<PulpRemote>> {
     const response = await fetch(remotesPath(kind), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
-    return (await response.json()) as PulpRemote;
+    return { ok: true, data: (await response.json()) as PulpRemote };
   },
 
   async update(

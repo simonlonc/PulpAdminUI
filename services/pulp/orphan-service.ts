@@ -1,8 +1,10 @@
 import { readApiDetail } from "./http";
-import { PulpOrphanCleanupResult } from "./types";
+import { PulpOrphanCleanupResult, ServiceDataResult } from "./types";
 
 export const pulpOrphanService = {
-  async cleanup(orphanProtectionTimeMinutes?: number): Promise<PulpOrphanCleanupResult> {
+  async cleanup(
+    orphanProtectionTimeMinutes?: number
+  ): Promise<ServiceDataResult<PulpOrphanCleanupResult>> {
     const response = await fetch("/api/pulp/orphans/cleanup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -12,9 +14,9 @@ export const pulpOrphanService = {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return (await response.json()) as PulpOrphanCleanupResult;
+    return { ok: true, data: (await response.json()) as PulpOrphanCleanupResult };
   },
 };

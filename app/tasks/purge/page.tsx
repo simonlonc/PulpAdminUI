@@ -74,7 +74,10 @@ export default function TaskPurgePage() {
         finished_before: trimmed,
         states,
       });
-      setResult(purgeResult);
+      if (!purgeResult.ok) {
+        throw new Error(purgeResult.detail);
+      }
+      setResult(purgeResult.data);
     } catch (purgeError) {
       setError(purgeError instanceof Error ? purgeError.message : "Task purge failed.");
     } finally {

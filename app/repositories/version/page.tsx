@@ -84,7 +84,10 @@ function RepositoryVersionInner() {
     setError(null);
     setIsDeleting(true);
     try {
-      await pulpRepositoryManagementService.deleteRepositoryVersion(kind, pulpHref);
+      const result = await pulpRepositoryManagementService.deleteRepositoryVersion(kind, pulpHref);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       const repoHref = version.repository;
       if (repoHref) {
         router.push(`/repositories/versions?kind=${kind}&pulp_href=${encodeURIComponent(repoHref)}`);
@@ -116,7 +119,10 @@ function RepositoryVersionInner() {
         pulpHref,
         verifyChecksums
       );
-      setRepairResult(result);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
+      setRepairResult(result.data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Repair failed.");
     } finally {

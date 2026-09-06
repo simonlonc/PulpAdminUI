@@ -111,9 +111,12 @@ function RepositoryVersionsInner() {
     setError(null);
     setRollingBackHref(version.pulp_href);
     try {
-      await pulpRepositoryManagementService.modifyRepository(kind, pulpHref, {
+      const result = await pulpRepositoryManagementService.modifyRepository(kind, pulpHref, {
         base_version: version.pulp_href,
       });
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       await reloadVersions();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Rollback failed.");

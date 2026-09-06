@@ -50,7 +50,10 @@ export default function UploadsCreatePage() {
 
     try {
       const uploaded = await pulpUploadService.upload(selectedFile);
-      setResult(uploaded);
+      if (!uploaded.ok) {
+        throw new Error(uploaded.detail);
+      }
+      setResult(uploaded.data);
       setSelectedFile(null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
@@ -71,7 +74,10 @@ export default function UploadsCreatePage() {
 
     try {
       const created = await pulpUploadService.uploadAsRpm(result.artifact);
-      setRpmResult(created);
+      if (!created.ok) {
+        throw new Error(created.detail);
+      }
+      setRpmResult(created.data);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Failed to create RPM content.");
     } finally {

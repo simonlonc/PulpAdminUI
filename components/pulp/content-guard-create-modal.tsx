@@ -127,7 +127,10 @@ export function ContentGuardCreateModal({ onClose, onCreated }: ContentGuardCrea
 
     setIsSaving(true);
     try {
-      await pulpContentGuardService.create(payload);
+      const result = await pulpContentGuardService.create(payload);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       onCreated();
     } catch (error) {
       setModalError(error instanceof Error ? error.message : "Failed to create content guard.");
