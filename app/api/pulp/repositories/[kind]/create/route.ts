@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { hrefFromCreatedResource, TaskRefResponse, waitForTask } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
@@ -77,14 +76,9 @@ function buildCreateBody(
   return body;
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -104,17 +98,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const pulpBody = buildCreateBody(plugin, raw, name, labels, description);
 
-  const createResult = await pulpFetch<TaskRefResponse>(plugin.repositoryPath, authResult.auth, {
+  const createResult = await pulpFetch<TaskRefResponse>(plugin.repositoryPath, auth, {
     method: "POST",
     body: JSON.stringify(pulpBody),
   });
 
   if (!createResult.ok) {
-    if (createResult.status === 401 || createResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: createResult.detail }, { status: createResult.status });
+    throw new PulpApiError(createResult.status, createResult.detail);
   }
 
   const created = createResult.data;
@@ -122,7 +112,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   try {
     if (created.task) {
-      const task = await waitForTask(created.task, authResult.auth);
+      const task = await waitForTask(created.task, auth);
       pulpHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? pulpHref;
     }
   } catch (error) {
@@ -137,4 +127,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     pulp_href: pulpHref,
     task: created.task ?? null,
   });
-}
+});

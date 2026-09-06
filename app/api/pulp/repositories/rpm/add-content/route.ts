@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   hrefFromCreatedResource,
   normalizePulpHrefToApiPath,
@@ -71,12 +70,7 @@ async function findOrCreateRepository(
   return { ok: true, href: repoHref };
 }
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   const body = (await request.json()) as AddToRepositoryBody;
   const repositoryName = body.repositoryName?.trim();
   const content = body.content?.trim();
@@ -87,20 +81,16 @@ export async function POST(request: Request) {
     return Response.json({ detail: "Content href is required." }, { status: 400 });
   }
 
-  const repoResult = await findOrCreateRepository(repositoryName, authResult.auth);
+  const repoResult = await findOrCreateRepository(repositoryName, auth);
   if (!repoResult.ok) {
-    if (repoResult.status === 401 || repoResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: repoResult.detail }, { status: repoResult.status });
+    throw new PulpApiError(repoResult.status, repoResult.detail);
   }
 
   const repositoryHref = repoResult.href;
 
   const modifyResult = await pulpFetch<TaskRefResponse>(
     `${normalizePulpHrefToApiPath(repositoryHref)}modify/`,
-    authResult.auth,
+    auth,
     {
       method: "POST",
       body: JSON.stringify({
@@ -110,17 +100,13 @@ export async function POST(request: Request) {
   );
 
   if (!modifyResult.ok) {
-    if (modifyResult.status === 401 || modifyResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: modifyResult.detail }, { status: modifyResult.status });
+    throw new PulpApiError(modifyResult.status, modifyResult.detail);
   }
 
   const modifyPayload = modifyResult.data;
   if (modifyPayload.task) {
     try {
-      await waitForTask(modifyPayload.task, authResult.auth);
+      await waitForTask(modifyPayload.task, auth);
     } catch (error) {
       return Response.json(
         { detail: error instanceof Error ? error.message : "Failed to add content to repository." },
@@ -134,4 +120,4 @@ export async function POST(request: Request) {
     content: toPulpHrefPath(content),
     task: modifyPayload.task ?? null,
   });
-}
+});

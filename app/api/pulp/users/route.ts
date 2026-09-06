@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 
 type PulpUser = {
   pulp_href: string;
@@ -31,31 +30,16 @@ type CreatePulpUserPayload = {
   is_active?: boolean;
 };
 
-export async function GET() {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const result = await pulpFetch<PulpListResponse<PulpUser>>("/users/", authResult.auth);
+export const GET = withPulpAuth(async (_request, auth) => {
+  const result = await pulpFetch<PulpListResponse<PulpUser>>("/users/", auth);
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   let payload: Partial<CreatePulpUserPayload> | null = null;
   try {
     payload = (await request.json()) as Partial<CreatePulpUserPayload>;
@@ -80,19 +64,14 @@ export async function POST(request: Request) {
     is_active: payload.is_active ?? true,
   };
 
-  const result = await pulpFetch<PulpUser>("/users/", authResult.auth, {
+  const result = await pulpFetch<PulpUser>("/users/", auth, {
     method: "POST",
     body: JSON.stringify(createPayload),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data, { status: 201 });
-}
+});

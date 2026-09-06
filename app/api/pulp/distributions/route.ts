@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "../_helpers";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import {
   hrefFromCreatedResource,
   buildUpstreamListParams,
@@ -30,30 +29,20 @@ type PulpListResponse<T> = {
   results: T[];
 };
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const qs = buildUpstreamListParams(url.searchParams, ["repository"]);
 
   const result = await pulpFetch<PulpListResponse<PulpDistribution>>(
     `/distributions/?${qs.toString()}`,
-    authResult.auth
+    auth
   );
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
 type CreateBody = {
   kind?: string;
@@ -71,12 +60,7 @@ type CreateBody = {
  * convenience flow, which finds a distribution already linked to the repository and
  * patches it instead of creating a duplicate — this route always creates.
  */
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   let body: CreateBody;
   try {
     body = (await request.json()) as CreateBody;
@@ -84,7 +68,7 @@ export async function POST(request: Request) {
     return Response.json({ detail: "Invalid request body." }, { status: 400 });
   }
 
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), body.kind ?? "");
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), body.kind ?? "");
   if (!plugin) {
     return Response.json({ detail: `Unknown distribution kind: ${body.kind}` }, { status: 400 });
   }
@@ -109,17 +93,13 @@ export async function POST(request: Request) {
     createPayload.content_guard = toPulpHrefPath(body.content_guard);
   }
 
-  const createResult = await pulpFetch<TaskRefResponse>(plugin.distributionPath, authResult.auth, {
+  const createResult = await pulpFetch<TaskRefResponse>(plugin.distributionPath, auth, {
     method: "POST",
     body: JSON.stringify(createPayload),
   });
 
   if (!createResult.ok) {
-    if (createResult.status === 401 || createResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: createResult.detail }, { status: createResult.status });
+    throw new PulpApiError(createResult.status, createResult.detail);
   }
 
   const raw = createResult.data;
@@ -127,7 +107,7 @@ export async function POST(request: Request) {
 
   try {
     if (raw.task) {
-      const task = await waitForTask(raw.task, authResult.auth);
+      const task = await waitForTask(raw.task, auth);
       hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
     }
   } catch (error) {
@@ -143,7 +123,7 @@ export async function POST(request: Request) {
 
   if (hrefOut) {
     const detailPath = normalizePulpHrefToApiPath(hrefOut);
-    const detailResult = await pulpFetch<PulpDistribution>(detailPath, authResult.auth);
+    const detailResult = await pulpFetch<PulpDistribution>(detailPath, auth);
     if (detailResult.ok) {
       const dist = detailResult.data;
       baseUrl = dist.base_url ?? baseUrl;
@@ -158,4 +138,4 @@ export async function POST(request: Request) {
     base_path: basePathOut,
     base_url: baseUrl,
   });
-}
+});

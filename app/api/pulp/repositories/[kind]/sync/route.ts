@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type SyncBody = {
@@ -11,14 +10,9 @@ type SyncBody = {
   fields?: Record<string, unknown>;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -67,17 +61,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     if (selected.length > 0) payload[field.name] = selected;
   }
 
-  const syncResult = await pulpFetch<TaskRefResponse>(syncApiPath, authResult.auth, {
+  const syncResult = await pulpFetch<TaskRefResponse>(syncApiPath, auth, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
   if (!syncResult.ok) {
-    if (syncResult.status === 401 || syncResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: syncResult.detail }, { status: syncResult.status });
+    throw new PulpApiError(syncResult.status, syncResult.detail);
   }
 
   const dispatched = syncResult.data;
@@ -88,4 +78,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     repository: repoApiPath,
     task: dispatched.task ?? null,
   });
-}
+});

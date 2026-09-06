@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "@/app/api/pulp/repositories/_server";
 import { PulpObjectRole, PulpObjectRoleAssignmentPayload } from "@/services/pulp/types";
 
@@ -24,12 +23,7 @@ function isAllowedObjectRoleApiPath(apiPath: string): boolean {
   return apiPath.endsWith("/") && ALLOWED_OBJECT_ROLE_PATH_PREFIXES.some((prefix) => apiPath.startsWith(prefix));
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const pulpHref = url.searchParams.get("pulp_href")?.trim();
   if (!pulpHref) {
@@ -41,25 +35,16 @@ export async function GET(request: Request) {
     return Response.json({ detail: "Not a role-assignable resource href." }, { status: 400 });
   }
 
-  const result = await pulpFetch<{ roles: PulpObjectRole[] }>(`${apiPath}list_roles/`, authResult.auth);
+  const result = await pulpFetch<{ roles: PulpObjectRole[] }>(`${apiPath}list_roles/`, auth);
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   const body = (await request.json()) as ObjectRoleAssignmentBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
@@ -77,28 +62,19 @@ export async function POST(request: Request) {
 
   const payload: PulpObjectRoleAssignmentPayload = { role, users: body.users ?? [], groups: body.groups ?? [] };
 
-  const result = await pulpFetch(`${apiPath}add_role/`, authResult.auth, {
+  const result = await pulpFetch(`${apiPath}add_role/`, auth, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json({ ok: true });
-}
+});
 
-export async function DELETE(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const DELETE = withPulpAuth(async (request, auth) => {
   const body = (await request.json()) as ObjectRoleAssignmentBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
@@ -116,18 +92,14 @@ export async function DELETE(request: Request) {
 
   const payload: PulpObjectRoleAssignmentPayload = { role, users: body.users ?? [], groups: body.groups ?? [] };
 
-  const result = await pulpFetch(`${apiPath}remove_role/`, authResult.auth, {
+  const result = await pulpFetch(`${apiPath}remove_role/`, auth, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json({ ok: true });
-}
+});

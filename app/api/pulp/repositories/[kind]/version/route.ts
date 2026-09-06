@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse, waitForTask } from "../../_server";
 import { isRepositoryVersionInstancePath, mapPulpRepositoryVersion } from "../../repository-version-map";
 
@@ -10,14 +9,9 @@ type DeleteBody = {
   pulp_href?: string;
 };
 
-export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -45,27 +39,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     );
   }
 
-  const detailResult = await pulpFetch<Record<string, unknown>>(apiPath, authResult.auth);
+  const detailResult = await pulpFetch<Record<string, unknown>>(apiPath, auth);
 
   if (!detailResult.ok) {
-    if (detailResult.status === 401 || detailResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: detailResult.detail }, { status: detailResult.status });
+    throw new PulpApiError(detailResult.status, detailResult.detail);
   }
 
   return Response.json(mapPulpRepositoryVersion(detailResult.data));
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const DELETE = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -86,21 +71,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
     );
   }
 
-  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, authResult.auth, {
+  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, auth, {
     method: "DELETE",
   });
 
   if (!deleteResult.ok) {
-    if (deleteResult.status === 401 || deleteResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: deleteResult.detail }, { status: deleteResult.status });
+    throw new PulpApiError(deleteResult.status, deleteResult.detail);
   }
 
   if (deleteResult.data.task) {
     try {
-      await waitForTask(deleteResult.data.task, authResult.auth);
+      await waitForTask(deleteResult.data.task, auth);
     } catch (error) {
       return Response.json(
         { detail: error instanceof Error ? error.message : "Repository version delete task failed." },
@@ -110,4 +91,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
   }
 
   return Response.json({ ok: true });
-}
+});

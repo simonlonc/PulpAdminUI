@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, toPulpHrefPath, waitForTask } from "../../_server";
 
 type ModifyBody = {
@@ -13,14 +12,9 @@ type ModifyBody = {
   overwrite?: boolean;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -61,23 +55,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     payload.overwrite = body.overwrite;
   }
 
-  const modifyResult = await pulpFetch<{ task: string }>(`${apiPath}modify/`, authResult.auth, {
+  const modifyResult = await pulpFetch<{ task: string }>(`${apiPath}modify/`, auth, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
   if (!modifyResult.ok) {
-    if (modifyResult.status === 401 || modifyResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: modifyResult.detail }, { status: modifyResult.status });
+    throw new PulpApiError(modifyResult.status, modifyResult.detail);
   }
 
   const { task } = modifyResult.data;
 
   try {
-    const finished = await waitForTask(task, authResult.auth);
+    const finished = await waitForTask(task, auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(
@@ -85,4 +75,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
       { status: 500 }
     );
   }
-}
+});

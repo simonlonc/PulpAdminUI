@@ -1,15 +1,9 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "../../repositories/_server";
 import { PulpTask } from "@/services/pulp/types";
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const pulpHref = url.searchParams.get("pulp_href")?.trim();
   if (!pulpHref) {
@@ -21,16 +15,11 @@ export async function GET(request: Request) {
     return Response.json({ detail: "Not a task href." }, { status: 400 });
   }
 
-  const result = await pulpFetch<PulpTask>(apiPath, authResult.auth);
+  const result = await pulpFetch<PulpTask>(apiPath, auth);
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
