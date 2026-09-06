@@ -7,13 +7,7 @@ import {
   pulpFetch,
 } from "@/lib/pulp";
 
-type PulpUser = {
-  username: string;
-};
-
-type PulpListResponse<T> = {
-  results: T[];
-};
+type PulpUserCountResponse = { count: number };
 
 export async function POST(request: Request) {
   let payload: Partial<PulpAuth> | null = null;
@@ -36,27 +30,37 @@ export async function POST(request: Request) {
     password: payload.password,
   };
 
-  const result = await pulpFetch<PulpListResponse<PulpUser>>(
-    "/users/?limit=1000",
+  const result = await pulpFetch<PulpUserCountResponse>(
+    `/users/?username=${encodeURIComponent(auth.username)}`,
     auth
   );
 
   if (!result.ok) {
-    return Response.json({ detail: result.detail }, { status: result.status });
-  }
-
-  const hasUser = result.data.results.some((user) => user.username === auth.username);
-  if (!hasUser) {
+    // A 403 means the credentials are valid but this user may not list users; that must not block login.
+    if (result.status !== 403) {
+      return Response.json({ detail: result.detail }, { status: result.status });
+    }
+  } else if (result.data.count === 0) {
     return Response.json(
       { detail: "Authenticated but user cannot be found in Pulp users list." },
       { status: 403 }
     );
   }
 
+  let encodedAuth: string;
+  try {
+    encodedAuth = encodePulpAuth(auth);
+  } catch (error) {
+    return Response.json(
+      { detail: error instanceof Error ? error.message : "Failed to encode session." },
+      { status: 500 }
+    );
+  }
+
   const cookieStore = await cookies();
-  cookieStore.set(PULP_AUTH_COOKIE, encodePulpAuth(auth), {
+  cookieStore.set(PULP_AUTH_COOKIE, encodedAuth, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 8,

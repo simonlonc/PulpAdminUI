@@ -145,6 +145,24 @@ describe("with PULP_BASE_URL stubbed", () => {
     it("returns a single slash for the bare base path", () => {
       expect(normalizePulpHrefToApiPath("/pulp/api/v3")).toBe("/");
     });
+
+    it("resolves parent-directory segments in a relative href before the base path check", () => {
+      expect(
+        normalizePulpHrefToApiPath("/repositories/../../../../pulp/api/v3/status/")
+      ).toBe("/status/");
+    });
+
+    it("keeps the query string when normalizing a relative path", () => {
+      expect(normalizePulpHrefToApiPath("/repositories/x/?limit=1&offset=0")).toBe(
+        "/repositories/x/?limit=1&offset=0"
+      );
+    });
+
+    it("resolves dot segments in an absolute http(s) URL", () => {
+      expect(
+        normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/../../x/")
+      ).toBe("/repositories/x/");
+    });
   });
 
   describe("toPulpHrefPath", () => {

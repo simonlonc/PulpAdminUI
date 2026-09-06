@@ -44,6 +44,7 @@ describe("GET /api/pulp/repositories/[kind]", () => {
   let fetchMock: ReturnType<typeof fetchImpl>;
 
   beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
     deleteCookieMock.mockClear();

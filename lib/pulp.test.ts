@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { decodePulpAuth, encodePulpAuth, pulpErrorDetailFromBody, type PulpAuth } from "@/lib/pulp";
 
@@ -58,6 +58,14 @@ describe("pulpErrorDetailFromBody", () => {
 });
 
 describe("encodePulpAuth / decodePulpAuth", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("round-trips a username and password", () => {
     const auth: PulpAuth = { username: "admin", password: "p@ss w0rd!" };
     expect(decodePulpAuth(encodePulpAuth(auth))).toEqual(auth);
@@ -68,7 +76,33 @@ describe("encodePulpAuth / decodePulpAuth", () => {
     expect(decodePulpAuth(encodePulpAuth(auth))).toEqual(auth);
   });
 
-  it("rejects a value that is not valid base64url JSON", () => {
+  it("produces a different cookie value on each call (random IV)", () => {
+    const auth: PulpAuth = { username: "admin", password: "p@ss w0rd!" };
+    expect(encodePulpAuth(auth)).not.toBe(encodePulpAuth(auth));
+  });
+
+  it("does not leak the plaintext password into the cookie value", () => {
+    const auth: PulpAuth = { username: "admin", password: "p@ss w0rd!" };
+    const raw = Buffer.from(encodePulpAuth(auth), "base64url");
+    expect(raw.toString("utf8")).not.toContain(auth.password);
+    expect(raw.toString("latin1")).not.toContain(auth.password);
+  });
+
+  it("rejects a tampered ciphertext", () => {
+    const auth: PulpAuth = { username: "admin", password: "p@ss w0rd!" };
+    const raw = Buffer.from(encodePulpAuth(auth), "base64url");
+    raw[raw.length - 1] ^= 0xff;
+    expect(decodePulpAuth(raw.toString("base64url"))).toBeNull();
+  });
+
+  it("throws when PULP_SESSION_SECRET is unset, and decode returns null", () => {
+    vi.unstubAllEnvs();
+    const auth: PulpAuth = { username: "admin", password: "p@ss w0rd!" };
+    expect(() => encodePulpAuth(auth)).toThrow("PULP_SESSION_SECRET is not set");
+    expect(decodePulpAuth("anything")).toBeNull();
+  });
+
+  it("rejects an old-format or garbage cookie", () => {
     expect(decodePulpAuth("not valid base64url json!!!")).toBeNull();
   });
 
