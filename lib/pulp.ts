@@ -1,3 +1,5 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+
 export const PULP_AUTH_COOKIE = "pulp_auth";
 
 export type PulpAuth = {
@@ -83,14 +85,49 @@ export function toBasicAuthHeader(auth: PulpAuth): string {
   return `Basic ${encoded}`;
 }
 
+const PULP_AUTH_IV_LENGTH = 12;
+const PULP_AUTH_AUTH_TAG_LENGTH = 16;
+
+function getPulpSessionKey(): Buffer {
+  const secret = process.env.PULP_SESSION_SECRET?.trim();
+  if (!secret) {
+    throw new Error(
+      "PULP_SESSION_SECRET is not set. Generate one with: openssl rand -base64 32"
+    );
+  }
+
+  return createHash("sha256").update(secret, "utf8").digest();
+}
+
 export function encodePulpAuth(auth: PulpAuth): string {
-  const serialized = JSON.stringify(auth);
-  return Buffer.from(serialized, "utf8").toString("base64url");
+  const key = getPulpSessionKey();
+  const iv = randomBytes(PULP_AUTH_IV_LENGTH);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(auth), "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  return Buffer.concat([iv, authTag, ciphertext]).toString("base64url");
 }
 
 export function decodePulpAuth(value: string): PulpAuth | null {
   try {
-    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const key = getPulpSessionKey();
+    const raw = Buffer.from(value, "base64url");
+
+    if (raw.length < PULP_AUTH_IV_LENGTH + PULP_AUTH_AUTH_TAG_LENGTH) {
+      return null;
+    }
+
+    const iv = raw.subarray(0, PULP_AUTH_IV_LENGTH);
+    const authTag = raw.subarray(
+      PULP_AUTH_IV_LENGTH,
+      PULP_AUTH_IV_LENGTH + PULP_AUTH_AUTH_TAG_LENGTH
+    );
+    const ciphertext = raw.subarray(PULP_AUTH_IV_LENGTH + PULP_AUTH_AUTH_TAG_LENGTH);
+
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    const decoded = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
     const parsed = JSON.parse(decoded) as Partial<PulpAuth>;
 
     if (

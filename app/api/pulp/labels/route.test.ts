@@ -25,6 +25,7 @@ describe("labels route", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
     deleteCookieMock.mockClear();
@@ -119,13 +120,10 @@ describe("labels route", () => {
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
   });
 
-  // Known open bug: normalizePulpHrefToApiPath (app/api/pulp/repositories/_server.ts) only runs
-  // new URL() on absolute http(s) hrefs, so a relative href's "../" segments survive the
-  // allowlist check untouched here, while the eventual fetch() call resolves the concatenated
-  // URL string per the URL spec and lands on a completely different path. Fixed by L4, which
-  // will normalize parent-directory segments in normalizePulpHrefToApiPath. When L4 lands,
-  // change `it.fails` below to `it`.
-  it.fails("rejects a traversal href that would escape the allowlisted prefix", async () => {
+  // normalizePulpHrefToApiPath (app/api/pulp/repositories/_server.ts) resolves parent-directory
+  // segments before the allowlist check runs, so a traversal href is rejected here with 400 and
+  // never reaches fetch.
+  it("rejects a traversal href that would escape the allowlisted prefix", async () => {
     const request = new Request("http://pulp.test/api/pulp/labels", {
       method: "POST",
       body: JSON.stringify({
