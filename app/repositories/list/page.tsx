@@ -153,15 +153,9 @@ function RepositoriesListPageContent() {
   } | null>(null);
 
   const [syncModalRepo, setSyncModalRepo] = useState<PulpRepository | null>(null);
-  const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemote[]>>({
-    rpm: [],
-    deb: [],
-    file: [],
-    python: [],
-    npm: [],
-    gem: [],
-    maven: [],
-  });
+  // Filled in per kind as remotes load. The registry is derived from the server, so a kind
+  // this map has not reached yet reads as an empty list rather than undefined.
+  const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemote[]>>({});
   const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
   const [syncRemoteHref, setSyncRemoteHref] = useState("");
   const [syncFieldValues, setSyncFieldValues] = useState<
@@ -699,7 +693,7 @@ function RepositoriesListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All remotes</option>
-                  {remotesByKind[kind].map((remote) => (
+                  {(remotesByKind[kind] ?? []).map((remote) => (
                     <option key={remote.pulp_href} value={remote.pulp_href}>
                       {remote.name}
                     </option>
@@ -961,10 +955,10 @@ function RepositoriesListPageContent() {
                   >
                     <option value="">(none)</option>
                     {createRemote !== "" &&
-                    !remotesByKind[createKind].some((r) => r.pulp_href === createRemote) ? (
+                    !(remotesByKind[createKind] ?? []).some((r) => r.pulp_href === createRemote) ? (
                       <option value={createRemote}>{createRemote} (current)</option>
                     ) : null}
-                    {remotesByKind[createKind].map((remote) => (
+                    {(remotesByKind[createKind] ?? []).map((remote) => (
                       <option key={remote.pulp_href} value={remote.pulp_href}>
                         {remote.name} — {remote.url}
                       </option>
@@ -1149,17 +1143,17 @@ function RepositoriesListPageContent() {
                   <option value="">
                     {isLoadingRemotes
                       ? "Loading remotes…"
-                      : remotesByKind[kind].length === 0
+                      : (remotesByKind[kind] ?? []).length === 0
                         ? `No ${kind.toUpperCase()} remotes found`
                         : "Select a remote…"}
                   </option>
-                  {remotesByKind[kind].map((remote) => (
+                  {(remotesByKind[kind] ?? []).map((remote) => (
                     <option key={remote.pulp_href} value={remote.pulp_href}>
                       {remote.name} — {remote.url}
                     </option>
                   ))}
                 </select>
-                {!isLoadingRemotes && remotesByKind[kind].length === 0 ? (
+                {!isLoadingRemotes && (remotesByKind[kind] ?? []).length === 0 ? (
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     Create one first on the{" "}
                     <Link href="/remotes/list" className="underline underline-offset-2">
