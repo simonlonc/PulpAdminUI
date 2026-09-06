@@ -1,20 +1,12 @@
 import { cookies } from "next/headers";
-import {
-  getPulpApiUrl,
-  PULP_AUTH_COOKIE,
-  pulpFetch,
-  toBasicAuthHeader,
-  type PulpAuth,
-} from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
 import {
-  authHeaders,
   hrefFromCreatedResource,
   extractNextApiPath,
   normalizePulpHrefToApiPath,
-  readDetail,
   TaskRefResponse,
   toPulpHrefPath,
   waitForTask,
@@ -76,7 +68,7 @@ async function findFirstLinkedDistributionHref(
 }
 
 async function finalizeDistributionWrite(
-  authHeader: string,
+  auth: PulpAuth,
   pulpHref: string | null,
   fallbackName: string,
   fallbackBasePath: string,
@@ -86,7 +78,7 @@ async function finalizeDistributionWrite(
 
   try {
     if (taskHref) {
-      const task = await waitForTask(taskHref, authHeader);
+      const task = await waitForTask(taskHref, auth);
       hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
     }
   } catch (error) {
@@ -102,13 +94,9 @@ async function finalizeDistributionWrite(
 
   if (hrefOut) {
     const detailPath = normalizePulpHrefToApiPath(hrefOut);
-    const detailRes = await fetch(getPulpApiUrl(detailPath), {
-      method: "GET",
-      headers: authHeaders(authHeader),
-      cache: "no-store",
-    });
-    if (detailRes.ok) {
-      const dist = (await detailRes.json()) as PulpDistribution;
+    const detailResult = await pulpFetch<PulpDistribution>(detailPath, auth);
+    if (detailResult.ok) {
+      const dist = detailResult.data;
       baseUrl = dist.base_url ?? baseUrl;
       distName = dist.name ?? distName;
       basePathOut = dist.base_path ?? basePathOut;
@@ -161,10 +149,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const repositoryField = toPulpHrefPath(repoHref);
 
   const linked = await findFirstLinkedDistributionHref(plugin, repoHref, authResult.auth);
@@ -178,59 +162,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   if (linked.pulp_href) {
     const patchPath = normalizePulpHrefToApiPath(linked.pulp_href);
-    const patchResponse = await fetch(getPulpApiUrl(patchPath), {
+    const patchResult = await pulpFetch<TaskRefResponse>(patchPath, authResult.auth, {
       method: "PATCH",
-      headers,
       body: JSON.stringify({ name, base_path: basePath }),
-      cache: "no-store",
     });
 
-    if (!patchResponse.ok) {
-      if (patchResponse.status === 401 || patchResponse.status === 403) {
+    if (!patchResult.ok) {
+      if (patchResult.status === 401 || patchResult.status === 403) {
         const cookieStore = await cookies();
         cookieStore.delete(PULP_AUTH_COOKIE);
       }
-      return Response.json({ detail: await readDetail(patchResponse) }, { status: patchResponse.status });
+      return Response.json({ detail: patchResult.detail }, { status: patchResult.status });
     }
 
-    let taskHref: string | null = null;
-    const ct = patchResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      const rawText = await patchResponse.text();
-      if (rawText) {
-        try {
-          const parsed = JSON.parse(rawText) as TaskRefResponse;
-          taskHref = parsed.task ?? null;
-        } catch {
-          // Non-task JSON body — ignore.
-        }
-      }
-    }
+    const taskHref = patchResult.data.task ?? null;
 
-    return finalizeDistributionWrite(authHeader, linked.pulp_href, name, basePath, taskHref);
+    return finalizeDistributionWrite(authResult.auth, linked.pulp_href, name, basePath, taskHref);
   }
 
-  const createResponse = await fetch(getPulpApiUrl(plugin.distributionPath), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      name,
-      base_path: basePath,
-      repository: repositoryField,
-    }),
-    cache: "no-store",
-  });
+  const createResult = await pulpFetch<TaskRefResponse & Partial<PulpDistribution>>(
+    plugin.distributionPath,
+    authResult.auth,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        base_path: basePath,
+        repository: repositoryField,
+      }),
+    }
+  );
 
-  if (!createResponse.ok) {
-    if (createResponse.status === 401 || createResponse.status === 403) {
+  if (!createResult.ok) {
+    if (createResult.status === 401 || createResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(createResponse) }, { status: createResponse.status });
+    return Response.json({ detail: createResult.detail }, { status: createResult.status });
   }
 
-  const raw = (await createResponse.json()) as TaskRefResponse & Partial<PulpDistribution>;
+  const raw = createResult.data;
   const pulpHref = raw.pulp_href ?? raw.href ?? null;
 
-  return finalizeDistributionWrite(authHeader, pulpHref, name, basePath, raw.task ?? null);
+  return finalizeDistributionWrite(authResult.auth, pulpHref, name, basePath, raw.task ?? null);
 }

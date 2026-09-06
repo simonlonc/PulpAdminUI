@@ -1,15 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  authHeaders,
-  normalizePulpHrefToApiPath,
-  readDetail,
-  TaskRefResponse,
-  waitForTask,
-} from "../../_server";
+import { normalizePulpHrefToApiPath, TaskRefResponse, waitForTask } from "../../_server";
 import { isRepositoryVersionInstancePath, mapPulpRepositoryVersion } from "../../repository-version-map";
 
 type DeleteBody = {
@@ -51,23 +45,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const detailResponse = await fetch(getPulpApiUrl(apiPath), {
-    method: "GET",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
-  });
+  const detailResult = await pulpFetch<Record<string, unknown>>(apiPath, authResult.auth);
 
-  if (!detailResponse.ok) {
-    if (detailResponse.status === 401 || detailResponse.status === 403) {
+  if (!detailResult.ok) {
+    if (detailResult.status === 401 || detailResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(detailResponse) }, { status: detailResponse.status });
+    return Response.json({ detail: detailResult.detail }, { status: detailResult.status });
   }
 
-  const row = (await detailResponse.json()) as Record<string, unknown>;
-  return Response.json(mapPulpRepositoryVersion(row));
+  return Response.json(mapPulpRepositoryVersion(detailResult.data));
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
@@ -98,65 +86,26 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const deleteResponse = await fetch(getPulpApiUrl(apiPath), {
+  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, authResult.auth, {
     method: "DELETE",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
   });
 
-  if (deleteResponse.status === 204) {
-    return Response.json({ ok: true });
-  }
-
-  if (deleteResponse.status === 202) {
-    const ct = deleteResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      try {
-        const raw = await deleteResponse.text();
-        if (raw) {
-          const payload = JSON.parse(raw) as TaskRefResponse;
-          if (payload.task) {
-            try {
-              await waitForTask(payload.task, authHeader);
-            } catch (error) {
-              return Response.json(
-                {
-                  detail:
-                    error instanceof Error ? error.message : "Repository version delete task failed.",
-                },
-                { status: 500 }
-              );
-            }
-          }
-        }
-      } catch {
-        // Treat as accepted.
-      }
-    }
-    return Response.json({ ok: true });
-  }
-
-  if (!deleteResponse.ok) {
-    if (deleteResponse.status === 401 || deleteResponse.status === 403) {
+  if (!deleteResult.ok) {
+    if (deleteResult.status === 401 || deleteResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(deleteResponse) }, { status: deleteResponse.status });
+    return Response.json({ detail: deleteResult.detail }, { status: deleteResult.status });
   }
 
-  const ct = deleteResponse.headers.get("content-type") ?? "";
-  if (ct.includes("application/json")) {
+  if (deleteResult.data.task) {
     try {
-      const raw = await deleteResponse.text();
-      if (raw) {
-        const payload = JSON.parse(raw) as TaskRefResponse;
-        if (payload.task) {
-          await waitForTask(payload.task, authHeader);
-        }
-      }
-    } catch {
-      // ignore
+      await waitForTask(deleteResult.data.task, authResult.auth);
+    } catch (error) {
+      return Response.json(
+        { detail: error instanceof Error ? error.message : "Repository version delete task failed." },
+        { status: 500 }
+      );
     }
   }
 

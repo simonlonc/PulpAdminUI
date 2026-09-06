@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, normalizePulpHrefToApiPath, readDetail, waitForTask } from "../../../_server";
+import { normalizePulpHrefToApiPath, waitForTask } from "../../../_server";
 import { isRepositoryVersionInstancePath } from "../../../repository-version-map";
 
 type RepairBody = {
@@ -39,31 +39,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const verifyChecksums = body.verify_checksums ?? true;
 
-  const repairResponse = await fetch(getPulpApiUrl(`${apiPath}repair/`), {
+  const repairResult = await pulpFetch<{ task: string }>(`${apiPath}repair/`, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify({ verify_checksums: verifyChecksums }),
-    cache: "no-store",
   });
 
-  if (!repairResponse.ok) {
-    if (repairResponse.status === 401 || repairResponse.status === 403) {
+  if (!repairResult.ok) {
+    if (repairResult.status === 401 || repairResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(repairResponse) }, { status: repairResponse.status });
+    return Response.json({ detail: repairResult.detail }, { status: repairResult.status });
   }
 
-  const { task } = (await repairResponse.json()) as { task: string };
+  const { task } = repairResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, authResult.auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(

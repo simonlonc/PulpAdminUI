@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, readDetail, toPulpHrefPath, waitForTask } from "../_server";
+import { toPulpHrefPath, waitForTask } from "../_server";
 
 type ReclaimBody = {
   repo_hrefs?: string[];
@@ -20,10 +20,6 @@ export async function POST(request: Request) {
     return Response.json({ detail: "repo_hrefs is required." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const payload: Record<string, unknown> = {
     repo_hrefs: body.repo_hrefs.map((href) => (href === "*" ? href : toPulpHrefPath(href))),
   };
@@ -31,25 +27,23 @@ export async function POST(request: Request) {
     payload.repo_versions_keeplist = body.repo_versions_keeplist.map((href) => toPulpHrefPath(href));
   }
 
-  const reclaimResponse = await fetch(getPulpApiUrl("/repositories/reclaim_space/"), {
+  const reclaimResult = await pulpFetch<{ task: string }>("/repositories/reclaim_space/", authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(payload),
-    cache: "no-store",
   });
 
-  if (!reclaimResponse.ok) {
-    if (reclaimResponse.status === 401 || reclaimResponse.status === 403) {
+  if (!reclaimResult.ok) {
+    if (reclaimResult.status === 401 || reclaimResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(reclaimResponse) }, { status: reclaimResponse.status });
+    return Response.json({ detail: reclaimResult.detail }, { status: reclaimResult.status });
   }
 
-  const { task } = (await reclaimResponse.json()) as { task: string };
+  const { task } = reclaimResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, authResult.auth);
     return Response.json({
       task,
       state: finished.state ?? "completed",

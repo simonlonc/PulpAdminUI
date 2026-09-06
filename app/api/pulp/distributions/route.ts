@@ -1,14 +1,12 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "../_helpers";
 import {
-  authHeaders,
   hrefFromCreatedResource,
   buildUpstreamListParams,
   normalizePulpHrefToApiPath,
-  readDetail,
   toPulpHrefPath,
   TaskRefResponse,
   waitForTask,
@@ -111,31 +109,25 @@ export async function POST(request: Request) {
     createPayload.content_guard = toPulpHrefPath(body.content_guard);
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const createResponse = await fetch(getPulpApiUrl(plugin.distributionPath), {
+  const createResult = await pulpFetch<TaskRefResponse>(plugin.distributionPath, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(createPayload),
-    cache: "no-store",
   });
 
-  if (!createResponse.ok) {
-    if (createResponse.status === 401 || createResponse.status === 403) {
+  if (!createResult.ok) {
+    if (createResult.status === 401 || createResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(createResponse) }, { status: createResponse.status });
+    return Response.json({ detail: createResult.detail }, { status: createResult.status });
   }
 
-  const raw = (await createResponse.json()) as TaskRefResponse;
+  const raw = createResult.data;
   let hrefOut = raw.pulp_href ?? raw.href ?? null;
 
   try {
     if (raw.task) {
-      const task = await waitForTask(raw.task, authHeader);
+      const task = await waitForTask(raw.task, authResult.auth);
       hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
     }
   } catch (error) {
@@ -151,13 +143,9 @@ export async function POST(request: Request) {
 
   if (hrefOut) {
     const detailPath = normalizePulpHrefToApiPath(hrefOut);
-    const detailRes = await fetch(getPulpApiUrl(detailPath), {
-      method: "GET",
-      headers: authHeaders(authHeader),
-      cache: "no-store",
-    });
-    if (detailRes.ok) {
-      const dist = (await detailRes.json()) as PulpDistribution;
+    const detailResult = await pulpFetch<PulpDistribution>(detailPath, authResult.auth);
+    if (detailResult.ok) {
+      const dist = detailResult.data;
       baseUrl = dist.base_url ?? baseUrl;
       nameOut = dist.name ?? nameOut;
       basePathOut = dist.base_path ?? basePathOut;

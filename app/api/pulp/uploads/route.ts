@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
-import { getPulpApiUrl, getPulpBaseUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
 import { requirePulpAuth } from "../_helpers";
+import { authHeaders, normalizePulpHrefToApiPath, readDetail } from "../repositories/_server";
 
 const CHUNK_SIZE = 8 * 1024 * 1024;
 
@@ -17,6 +18,9 @@ type CommitUploadResponse = {
   href?: string;
 };
 
+// Distinct from the shared TaskResponse in _server.ts: this route needs the task's own
+// `artifact` field (only DRF's chunked upload commit task exposes it directly), and its
+// created_resources are always plain hrefs here rather than the {pulp_href} object shape.
 type TaskResponse = {
   state?: string;
   error?: unknown;
@@ -34,76 +38,36 @@ type PulpArtifactListResponse = {
   results?: PulpArtifactItem[];
 };
 
-async function readDetail(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { detail?: string };
-    if (typeof payload.detail === "string" && payload.detail.length > 0) {
-      return payload.detail;
-    }
-  } catch {
-    // Ignore parse errors and return fallback.
-  }
-
-  return response.statusText || `Pulp request failed with status ${response.status}.`;
-}
-
-function authHeaders(authHeader: string): Headers {
-  const headers = new Headers();
-  headers.set("Authorization", authHeader);
-  headers.set("Accept", "application/json");
-  return headers;
-}
-
-function normalizePulpHrefToApiPath(href: string): string {
-  const rawPath = href.startsWith("http://") || href.startsWith("https://") ? new URL(href).pathname : href;
-  const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-
-  const baseUrlPath = new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
-  if (baseUrlPath && normalizedRawPath.startsWith(baseUrlPath)) {
-    const withoutBase = normalizedRawPath.slice(baseUrlPath.length);
-    return withoutBase.startsWith("/") ? withoutBase : `/${withoutBase}`;
-  }
-
-  return normalizedRawPath;
-}
-
 function extractSha256FromDuplicateError(errorText: string): string | null {
   const match = errorText.match(/sha256 checksum of ['"]([a-f0-9]{64})['"]/i);
   return match?.[1] ?? null;
 }
 
-async function findArtifactBySha256(authHeader: string, sha256: string): Promise<string | null> {
-  const response = await fetch(getPulpApiUrl(`/artifacts/?sha256=${encodeURIComponent(sha256)}`), {
-    method: "GET",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
-  });
+async function findArtifactBySha256(auth: PulpAuth, sha256: string): Promise<string | null> {
+  const result = await pulpFetch<PulpArtifactListResponse>(
+    `/artifacts/?sha256=${encodeURIComponent(sha256)}`,
+    auth
+  );
 
-  if (!response.ok) {
+  if (!result.ok) {
     return null;
   }
 
-  const payload = (await response.json()) as PulpArtifactListResponse;
-  const first = payload.results?.[0];
+  const first = result.data.results?.[0];
   return first?.pulp_href ?? first?.href ?? null;
 }
 
-async function waitForTask(taskHref: string, authHeader: string): Promise<TaskResponse> {
+async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskResponse> {
   const maxAttempts = 60;
   const taskPath = normalizePulpHrefToApiPath(taskHref);
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const taskResponse = await fetch(getPulpApiUrl(taskPath), {
-      method: "GET",
-      headers: authHeaders(authHeader),
-      cache: "no-store",
-    });
-
-    if (!taskResponse.ok) {
-      throw new Error(await readDetail(taskResponse));
+    const result = await pulpFetch<TaskResponse>(taskPath, auth);
+    if (!result.ok) {
+      throw new Error(result.detail);
     }
 
-    const task = (await taskResponse.json()) as TaskResponse;
+    const task = result.data;
     if (task.state === "completed") {
       return task;
     }
@@ -138,27 +102,27 @@ export async function POST(request: Request) {
   }
 
   const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
+  // The per-chunk PUT below sends multipart FormData (Content-Range header, no JSON body), which
+  // pulpFetch cannot express (it always assumes/serializes a JSON request body), so that one call
+  // stays on raw fetch with the shared authHeaders()/readDetail() helpers; every other call in
+  // this route is plain JSON and goes through pulpFetch.
   const authHeader = toBasicAuthHeader(authResult.auth);
 
-  const createHeaders = authHeaders(authHeader);
-  createHeaders.set("Content-Type", "application/json");
-  const createUploadResponse = await fetch(getPulpApiUrl("/uploads/"), {
+  const createUploadResult = await pulpFetch<CreateUploadResponse>("/uploads/", authResult.auth, {
     method: "POST",
-    headers: createHeaders,
     body: JSON.stringify({ size: fileBuffer.byteLength }),
-    cache: "no-store",
   });
 
-  if (!createUploadResponse.ok) {
-    if (createUploadResponse.status === 401 || createUploadResponse.status === 403) {
+  if (!createUploadResult.ok) {
+    if (createUploadResult.status === 401 || createUploadResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
 
-    return Response.json({ detail: await readDetail(createUploadResponse) }, { status: createUploadResponse.status });
+    return Response.json({ detail: createUploadResult.detail }, { status: createUploadResult.status });
   }
 
-  const created = (await createUploadResponse.json()) as CreateUploadResponse;
+  const created = createUploadResult.data;
   const uploadHref = created.pulp_href ?? created.href;
   if (!uploadHref) {
     return Response.json({ detail: "Upload creation failed." }, { status: 502 });
@@ -192,33 +156,30 @@ export async function POST(request: Request) {
     }
   }
 
-  const commitHeaders = authHeaders(authHeader);
-  commitHeaders.set("Content-Type", "application/json");
-  const commitUploadResponse = await fetch(
-    getPulpApiUrl(normalizePulpHrefToApiPath(`${uploadHref}commit/`)),
+  const commitUploadResult = await pulpFetch<CommitUploadResponse>(
+    normalizePulpHrefToApiPath(`${uploadHref}commit/`),
+    authResult.auth,
     {
       method: "POST",
-      headers: commitHeaders,
       body: JSON.stringify({ sha256 }),
-      cache: "no-store",
     }
   );
 
-  if (!commitUploadResponse.ok) {
-    if (commitUploadResponse.status === 401 || commitUploadResponse.status === 403) {
+  if (!commitUploadResult.ok) {
+    if (commitUploadResult.status === 401 || commitUploadResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
 
-    return Response.json({ detail: await readDetail(commitUploadResponse) }, { status: commitUploadResponse.status });
+    return Response.json({ detail: commitUploadResult.detail }, { status: commitUploadResult.status });
   }
 
-  const committed = (await commitUploadResponse.json()) as CommitUploadResponse;
+  const committed = commitUploadResult.data;
   let artifact: string | null = committed.artifact ?? committed.pulp_href ?? committed.href ?? null;
 
   if (committed.task) {
     try {
-      const task = await waitForTask(committed.task, authHeader);
+      const task = await waitForTask(committed.task, authResult.auth);
       artifact =
         task.created_resources?.[0] ??
         task.artifact ??
@@ -232,7 +193,7 @@ export async function POST(request: Request) {
         throw error;
       }
 
-      const existingArtifact = await findArtifactBySha256(authHeader, duplicateSha256);
+      const existingArtifact = await findArtifactBySha256(authResult.auth, duplicateSha256);
       if (!existingArtifact) {
         throw error;
       }

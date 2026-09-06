@@ -1,4 +1,4 @@
-import { getPulpApiUrl, getPulpBaseUrl } from "@/lib/pulp";
+import { getPulpBaseUrl, pulpErrorDetailFromBody, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import type { PulpTaskProgressReport } from "@/services/pulp/types";
 
 export type CreatedResourceEntry = string | { pulp_href?: string; href?: string };
@@ -56,32 +56,6 @@ export type PulpPaginatedJson<T> = {
   results: T[];
 };
 
-function formatPulpErrorPayload(payload: unknown): string | null {
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-    return null;
-  }
-  const o = payload as Record<string, unknown>;
-  if (typeof o.detail === "string" && o.detail.length > 0) {
-    return o.detail;
-  }
-  if (Array.isArray(o.detail) && o.detail.length > 0) {
-    return o.detail.map(String).join("; ");
-  }
-  const parts: string[] = [];
-  for (const [key, val] of Object.entries(o)) {
-    if (key === "detail") continue;
-    if (Array.isArray(val)) {
-      const msgs = val.map((x) => (typeof x === "string" ? x : JSON.stringify(x)));
-      if (msgs.length > 0) parts.push(`${key}: ${msgs.join(", ")}`);
-    } else if (typeof val === "string") {
-      parts.push(`${key}: ${val}`);
-    } else if (val != null && typeof val === "object") {
-      parts.push(`${key}: ${JSON.stringify(val)}`);
-    }
-  }
-  return parts.length > 0 ? parts.join("; ") : null;
-}
-
 export async function readDetail(response: Response): Promise<string> {
   try {
     const text = await response.text();
@@ -89,7 +63,7 @@ export async function readDetail(response: Response): Promise<string> {
       return response.statusText || `Pulp request failed with status ${response.status}.`;
     }
     const payload = JSON.parse(text) as unknown;
-    const formatted = formatPulpErrorPayload(payload);
+    const formatted = pulpErrorDetailFromBody(payload);
     if (formatted) {
       return formatted;
     }
@@ -182,21 +156,17 @@ export function extractNextApiPath(next: string | null): string | null {
   }
 }
 
-export async function waitForTask(taskHref: string, authHeader: string): Promise<TaskResponse> {
+export async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskResponse> {
   const maxAttempts = 60;
   const taskPath = normalizePulpHrefToApiPath(taskHref);
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const taskResponse = await fetch(getPulpApiUrl(taskPath), {
-      method: "GET",
-      headers: authHeaders(authHeader),
-      cache: "no-store",
-    });
-    if (!taskResponse.ok) {
-      throw new Error(await readDetail(taskResponse));
+    const result = await pulpFetch<TaskResponse>(taskPath, auth);
+    if (!result.ok) {
+      throw new Error(result.detail);
     }
 
-    const task = (await taskResponse.json()) as TaskResponse;
+    const task = result.data;
     if (task.state === "completed") {
       return task;
     }

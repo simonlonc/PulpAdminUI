@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, hrefFromCreatedResource, readDetail, TaskRefResponse, waitForTask } from "../../_server";
+import { hrefFromCreatedResource, TaskRefResponse, waitForTask } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -104,31 +104,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const pulpBody = buildCreateBody(plugin, raw, name, labels, description);
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const createResponse = await fetch(getPulpApiUrl(plugin.repositoryPath), {
+  const createResult = await pulpFetch<TaskRefResponse>(plugin.repositoryPath, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(pulpBody),
-    cache: "no-store",
   });
 
-  if (!createResponse.ok) {
-    if (createResponse.status === 401 || createResponse.status === 403) {
+  if (!createResult.ok) {
+    if (createResult.status === 401 || createResult.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(createResponse) }, { status: createResponse.status });
+    return Response.json({ detail: createResult.detail }, { status: createResult.status });
   }
 
-  const created = (await createResponse.json()) as TaskRefResponse;
+  const created = createResult.data;
   let pulpHref = created.pulp_href ?? created.href ?? null;
 
   try {
     if (created.task) {
-      const task = await waitForTask(created.task, authHeader);
+      const task = await waitForTask(created.task, authResult.auth);
       pulpHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? pulpHref;
     }
   } catch (error) {

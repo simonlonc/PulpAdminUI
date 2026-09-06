@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
 import { requirePulpAuth } from "../_helpers";
 import { findPulpContentGuardKind } from "@/services/pulp/content-guard-kinds";
-import { authHeaders, buildUpstreamListParams, readDetail, toPulpHrefPath } from "../repositories/_server";
+import { buildUpstreamListParams, toPulpHrefPath } from "../repositories/_server";
 
 /** Row from GET /contentguards/, the generic cross-type content-guard list. Also used for the
  * distribution edit/create modals' guard picker. */
@@ -113,25 +113,18 @@ export async function POST(request: Request) {
     createPayload.guards = body.guards.map((guard) => toPulpHrefPath(guard));
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const createResponse = await fetch(getPulpApiUrl(`/contentguards/${descriptor.path}/`), {
+  const result = await pulpFetch<PulpContentGuard>(`/contentguards/${descriptor.path}/`, authResult.auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(createPayload),
-    cache: "no-store",
   });
 
-  if (!createResponse.ok) {
-    if (createResponse.status === 401 || createResponse.status === 403) {
+  if (!result.ok) {
+    if (result.status === 401 || result.status === 403) {
       const cookieStore = await cookies();
       cookieStore.delete(PULP_AUTH_COOKIE);
     }
-    return Response.json({ detail: await readDetail(createResponse) }, { status: createResponse.status });
+    return Response.json({ detail: result.detail }, { status: result.status });
   }
 
-  const created = (await createResponse.json()) as PulpContentGuard;
-  return Response.json(created);
+  return Response.json(result.data);
 }
