@@ -3,10 +3,11 @@ import {
   PulpAddToRepositoryResult,
   PulpUploadAsRpmResult,
   PulpUploadCreateResult,
+  ServiceDataResult,
 } from "./types";
 
 export const pulpUploadService = {
-  async upload(file: File): Promise<PulpUploadCreateResult> {
+  async upload(file: File): Promise<ServiceDataResult<PulpUploadCreateResult>> {
     const formData = new FormData();
     formData.set("file", file);
 
@@ -16,13 +17,13 @@ export const pulpUploadService = {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return (await response.json()) as PulpUploadCreateResult;
+    return { ok: true, data: (await response.json()) as PulpUploadCreateResult };
   },
 
-  async uploadAsRpm(artifact: string): Promise<PulpUploadAsRpmResult> {
+  async uploadAsRpm(artifact: string): Promise<ServiceDataResult<PulpUploadAsRpmResult>> {
     const response = await fetch("/api/pulp/content/rpm/packages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -30,16 +31,16 @@ export const pulpUploadService = {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return (await response.json()) as PulpUploadAsRpmResult;
+    return { ok: true, data: (await response.json()) as PulpUploadAsRpmResult };
   },
 
   async addToRepository(
     content: string,
     repositoryName: string
-  ): Promise<PulpAddToRepositoryResult> {
+  ): Promise<ServiceDataResult<PulpAddToRepositoryResult>> {
     const response = await fetch("/api/pulp/repositories/rpm/add-content", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,9 +48,9 @@ export const pulpUploadService = {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return (await response.json()) as PulpAddToRepositoryResult;
+    return { ok: true, data: (await response.json()) as PulpAddToRepositoryResult };
   },
 };

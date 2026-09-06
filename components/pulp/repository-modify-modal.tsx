@@ -75,11 +75,14 @@ export function RepositoryModifyModal({
 
     setIsSaving(true);
     try {
-      await pulpRepositoryManagementService.modifyRepository(kind, repositoryHref, {
+      const result = await pulpRepositoryManagementService.modifyRepository(kind, repositoryHref, {
         add_content_units: addContentUnits,
         remove_content_units: removeContentUnits,
         overwrite,
       });
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       onSaved();
     } catch (error) {
       setModalError(error instanceof Error ? error.message : "Modify failed.");

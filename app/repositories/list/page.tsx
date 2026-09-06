@@ -329,7 +329,10 @@ function RepositoriesListPageContent() {
       }
 
       const result = await pulpRepositoryManagementService.create(createKind, payload);
-      setCreateResult(result);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
+      setCreateResult(result.data);
       setCreateName("");
       resetCreateRepositoryFields();
       await load();
@@ -348,10 +351,13 @@ function RepositoriesListPageContent() {
     setSyncResult(null);
     try {
       const result = await pulpRepositoryManagementService.publish(kind, repo.pulp_href);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       setPublishResult({
         repoName: repo.name,
-        publication: result.publication,
-        task: result.task,
+        publication: result.data.publication,
+        task: result.data.task,
       });
       await load();
     } catch (e) {
@@ -372,13 +378,16 @@ function RepositoriesListPageContent() {
         repo.pulp_href,
         repo.name
       );
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       setDistributeResult({
         repoName: repo.name,
-        name: result.name,
-        pulp_href: result.pulp_href,
-        base_url: result.base_url,
-        base_path: result.base_path,
-        task: result.task,
+        name: result.data.name,
+        pulp_href: result.data.pulp_href,
+        base_url: result.data.base_url,
+        base_path: result.data.base_path,
+        task: result.data.task,
       });
       await load();
     } catch (e) {
@@ -430,7 +439,10 @@ function RepositoriesListPageContent() {
         remote: syncRemoteHref,
         fields: syncFieldValues,
       });
-      setSyncResult({ repoName: repo.name, task: result.task });
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
+      setSyncResult({ repoName: repo.name, task: result.data.task });
       setSyncModalRepo(null);
       await load();
     } catch (e) {
@@ -491,7 +503,10 @@ function RepositoriesListPageContent() {
         }
       }
 
-      await pulpRepositoryManagementService.remove(kind, repo.pulp_href);
+      const removedRepo = await pulpRepositoryManagementService.remove(kind, repo.pulp_href);
+      if (!removedRepo.ok) {
+        throw new Error(removedRepo.detail);
+      }
 
       setDeleteModalRepo(null);
       await load();

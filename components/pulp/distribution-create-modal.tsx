@@ -111,13 +111,16 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
 
     setIsSaving(true);
     try {
-      await pulpDistributionService.createDistribution(kind, {
+      const result = await pulpDistributionService.createDistribution(kind, {
         name: trimmedName,
         base_path: trimmedBasePath,
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
         content_guard: contentGuard || null,
       });
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       onCreated();
     } catch (error) {
       setModalError(error instanceof Error ? error.message : "Failed to create distribution.");

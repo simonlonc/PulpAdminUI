@@ -1,8 +1,11 @@
 import { readApiDetail } from "./http";
-import { PulpReclaimSpaceResult } from "./types";
+import { PulpReclaimSpaceResult, ServiceDataResult } from "./types";
 
 export const pulpReclaimService = {
-  async reclaim(repoHrefs: string[], repoVersionsKeeplist: string[]): Promise<PulpReclaimSpaceResult> {
+  async reclaim(
+    repoHrefs: string[],
+    repoVersionsKeeplist: string[]
+  ): Promise<ServiceDataResult<PulpReclaimSpaceResult>> {
     const payload: Record<string, unknown> = { repo_hrefs: repoHrefs };
     if (repoVersionsKeeplist.length > 0) {
       payload.repo_versions_keeplist = repoVersionsKeeplist;
@@ -15,9 +18,9 @@ export const pulpReclaimService = {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return (await response.json()) as PulpReclaimSpaceResult;
+    return { ok: true, data: (await response.json()) as PulpReclaimSpaceResult };
   },
 };

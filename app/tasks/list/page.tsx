@@ -146,7 +146,10 @@ function TasksListPageContent() {
     setCancelingHref(task.pulp_href);
     setError(null);
     try {
-      await pulpTaskService.cancel(task.pulp_href);
+      const result = await pulpTaskService.cancel(task.pulp_href);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       setCancelModalTask(null);
       reload();
     } catch (e) {

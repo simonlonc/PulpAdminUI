@@ -406,7 +406,11 @@ function RemotesListPageContent() {
           return;
         }
       } else {
-        await pulpRemoteService.create(kind, formToCreatePayload(form, plugin));
+        const result = await pulpRemoteService.create(kind, formToCreatePayload(form, plugin));
+        if (!result.ok) {
+          setModalError(result.detail);
+          return;
+        }
       }
       setCreateOpen(false);
       setEditing(null);
