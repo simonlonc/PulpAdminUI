@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
+import { PulpAuthProvider } from "@/components/pulp/auth-context";
+import { PulpPluginsProvider } from "@/components/pulp/plugins-context";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -28,7 +30,11 @@ export default function RootLayout({
       lang="en"
       className={`${manrope.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PulpAuthProvider>
+          <PulpPluginsProvider>{children}</PulpPluginsProvider>
+        </PulpAuthProvider>
+      </body>
     </html>
   );
 }
