@@ -388,25 +388,28 @@ function RepositoriesEditInner() {
         );
         return;
       }
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
       setActivityLog((prev) =>
         prev.map((line) =>
           line.id === saveLineId
             ? {
                 ...line,
                 phase: "done" as const,
-                detail: `Repository updated · name: ${result.name}`,
+                detail: `Repository updated · name: ${result.data.name}`,
               }
             : line
         )
       );
       if (loadedKind === "rpm" && rpm) {
-        setRpm({ ...rpm, name: result.name });
+        setRpm({ ...rpm, name: result.data.name });
       }
       if (loadedKind === "deb" && deb) {
-        setDeb({ ...deb, name: result.name });
+        setDeb({ ...deb, name: result.data.name });
       }
       if (loadedKind === "file" && fileRepo) {
-        setFileRepo({ ...fileRepo, name: result.name });
+        setFileRepo({ ...fileRepo, name: result.data.name });
       }
 
       let publishFailed = false;
@@ -418,9 +421,12 @@ function RepositoriesEditInner() {
         ]);
         try {
           const published = await pulpRepositoryManagementService.publish(loadedKind, pulpHref);
+          if (!published.ok) {
+            throw new Error(published.detail);
+          }
           const pubDetail = [
-            published.publication ? `publication: ${published.publication}` : null,
-            published.task ? `task: ${published.task}` : null,
+            published.data.publication ? `publication: ${published.data.publication}` : null,
+            published.data.task ? `task: ${published.data.task}` : null,
           ]
             .filter(Boolean)
             .join("\n");
@@ -457,14 +463,17 @@ function RepositoriesEditInner() {
           const distributed = await pulpDistributionService.createForRepository(
             loadedKind,
             pulpHref,
-            result.name
+            result.data.name
           );
+          if (!distributed.ok) {
+            throw new Error(distributed.detail);
+          }
           const distDetail = [
-            `name: ${distributed.name}`,
-            `base_path: ${distributed.base_path}`,
-            distributed.base_url ? `base_url: ${distributed.base_url}` : null,
-            distributed.pulp_href ? `href: ${distributed.pulp_href}` : null,
-            distributed.task ? `task: ${distributed.task}` : null,
+            `name: ${distributed.data.name}`,
+            `base_path: ${distributed.data.base_path}`,
+            distributed.data.base_url ? `base_url: ${distributed.data.base_url}` : null,
+            distributed.data.pulp_href ? `href: ${distributed.data.pulp_href}` : null,
+            distributed.data.task ? `task: ${distributed.data.task}` : null,
           ]
             .filter(Boolean)
             .join("\n");

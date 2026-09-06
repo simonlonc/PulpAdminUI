@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 
 type PulpWorker = {
   pulp_href: string;
@@ -17,21 +16,11 @@ type PulpListResponse<T> = {
   results: T[];
 };
 
-export async function GET() {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const result = await pulpFetch<PulpListResponse<PulpWorker>>("/workers/", authResult.auth);
+export const GET = withPulpAuth(async (_request, auth) => {
+  const result = await pulpFetch<PulpListResponse<PulpWorker>>("/workers/", auth);
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});

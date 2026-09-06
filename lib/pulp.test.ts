@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { decodePulpAuth, encodePulpAuth, pulpErrorDetailFromBody, type PulpAuth } from "@/lib/pulp";
+import {
+  decodePulpAuth,
+  encodePulpAuth,
+  pulpErrorDetailFromBody,
+  pulpFetch,
+  type PulpAuth,
+} from "@/lib/pulp";
 
 describe("pulpErrorDetailFromBody", () => {
   it("returns a trimmed string detail", () => {
@@ -54,6 +60,15 @@ describe("pulpErrorDetailFromBody", () => {
     expect(pulpErrorDetailFromBody(42)).toBeNull();
     expect(pulpErrorDetailFromBody("boom")).toBeNull();
     expect(pulpErrorDetailFromBody({})).toBeNull();
+  });
+
+  // Reconciled from the now-deleted formatPulpErrorPayload (app/api/pulp/repositories/_server.ts):
+  // that formatter JSON.stringify'd a plain-object field value instead of dropping it, which this
+  // formatter otherwise would. Keeping that behavior avoids silently losing error information.
+  it("stringifies a plain-object field value instead of dropping it", () => {
+    expect(pulpErrorDetailFromBody({ context: { field: "name", reason: "duplicate" } })).toBe(
+      'context: {"field":"name","reason":"duplicate"}'
+    );
   });
 });
 
@@ -145,5 +160,35 @@ describe("encodePulpAuth / decodePulpAuth", () => {
   it("rejects a JSON payload that is not an object", () => {
     const encoded = Buffer.from(JSON.stringify(["admin", "pass"]), "utf8").toString("base64url");
     expect(decodePulpAuth(encoded)).toBeNull();
+  });
+});
+
+describe("pulpFetch", () => {
+  const auth: PulpAuth = { username: "admin", password: "admin" };
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a 502 with a detail naming the base URL when the server is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("connect ECONNREFUSED");
+      })
+    );
+
+    const result = await pulpFetch("/status/", auth);
+
+    expect(result).toEqual({
+      ok: false,
+      status: 502,
+      detail: "Could not reach Pulp server at http://pulp.test/pulp/api/v3: connect ECONNREFUSED",
+    });
   });
 });

@@ -85,7 +85,10 @@ export default function ReclaimSpacePage() {
     try {
       const repoHrefs = allRepositories ? ["*"] : Array.from(selectedHrefs);
       const reclaimResult = await pulpReclaimService.reclaim(repoHrefs, linesFromTextarea(keeplistText));
-      setResult(reclaimResult);
+      if (!reclaimResult.ok) {
+        throw new Error(reclaimResult.detail);
+      }
+      setResult(reclaimResult.data);
     } catch (reclaimError) {
       setError(reclaimError instanceof Error ? reclaimError.message : "Reclaim space failed.");
     } finally {

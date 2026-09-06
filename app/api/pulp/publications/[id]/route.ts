@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../../_helpers";
 
 function resolvePublicationPath(encodedRef: string): string | null {
   const decodedRef = decodeURIComponent(encodedRef).trim();
@@ -30,33 +29,22 @@ function resolvePublicationPath(encodedRef: string): string | null {
   return normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`;
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const { id } = await params;
-  const publicationPath = resolvePublicationPath(id);
-  if (!publicationPath) {
-    return Response.json({ detail: "Invalid publication identifier." }, { status: 400 });
-  }
-
-  const result = await pulpFetch(publicationPath, authResult.auth, {
-    method: "DELETE",
-  });
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+export const DELETE = withPulpAuth(
+  async (_request: Request, auth, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    const publicationPath = resolvePublicationPath(id);
+    if (!publicationPath) {
+      return Response.json({ detail: "Invalid publication identifier." }, { status: 400 });
     }
 
-    return Response.json({ detail: result.detail }, { status: result.status });
-  }
+    const result = await pulpFetch(publicationPath, auth, {
+      method: "DELETE",
+    });
 
-  return Response.json({ ok: true });
-}
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
+    }
+
+    return Response.json({ ok: true });
+  }
+);

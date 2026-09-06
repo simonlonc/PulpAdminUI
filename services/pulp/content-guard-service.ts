@@ -4,6 +4,7 @@ import {
   PulpContentGuard,
   PulpContentGuardDetail,
   PulpPaginatedResponse,
+  ServiceDataResult,
   ServiceResult,
   UpdatePulpContentGuardPayload,
 } from "./types";
@@ -47,16 +48,18 @@ export const pulpContentGuardService = {
     return (await response.json()) as PulpContentGuardDetail;
   },
 
-  async create(payload: CreatePulpContentGuardPayload): Promise<PulpContentGuard> {
+  async create(
+    payload: CreatePulpContentGuardPayload
+  ): Promise<ServiceDataResult<PulpContentGuard>> {
     const response = await fetch(CONTENTGUARDS_PATH, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
-    return (await response.json()) as PulpContentGuard;
+    return { ok: true, data: (await response.json()) as PulpContentGuard };
   },
 
   async update(

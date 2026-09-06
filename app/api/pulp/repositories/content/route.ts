@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPluginForRepositoryHrefIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../_server";
 
 type ContentRow = Record<string, unknown>;
@@ -30,12 +29,7 @@ async function loadAllPages(
   return { ok: true, rows: allResults };
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const pulpHref = url.searchParams.get("pulp_href")?.trim();
   if (!pulpHref) {
@@ -52,15 +46,7 @@ export async function GET(request: Request) {
   const apiRelative = normalizePulpHrefToApiPath(decodedHref);
   const basePath = apiRelative.endsWith("/") ? apiRelative : `${apiRelative}/`;
 
-  async function unauthorizeAndRespond(status: number, detail: string) {
-    if (status === 401 || status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail }, { status });
-  }
-
-  const plugin = findPluginForRepositoryHrefIn(await getPulpPluginRegistry(authResult.auth), basePath);
+  const plugin = findPluginForRepositoryHrefIn(await getPulpPluginRegistry(auth), basePath);
 
   if (plugin) {
     // content_path names which of the family's endpoints to list; anything unrecognised falls
@@ -73,9 +59,9 @@ export async function GET(request: Request) {
       return Response.json({ detail: "This plugin has no content endpoint." }, { status: 400 });
     }
 
-    const repoResult = await pulpFetch<Record<string, unknown>>(basePath, authResult.auth);
+    const repoResult = await pulpFetch<Record<string, unknown>>(basePath, auth);
     if (!repoResult.ok) {
-      return unauthorizeAndRespond(repoResult.status, repoResult.detail);
+      throw new PulpApiError(repoResult.status, repoResult.detail);
     }
 
     const latestVersionHref = repoResult.data.latest_version_href;
@@ -93,9 +79,9 @@ export async function GET(request: Request) {
       latestVersionHref
     )}&limit=100${fieldsQuery}`;
 
-    const pages = await loadAllPages(contentPath, authResult.auth);
+    const pages = await loadAllPages(contentPath, auth);
     if (!pages.ok) {
-      return unauthorizeAndRespond(pages.status, pages.detail);
+      throw new PulpApiError(pages.status, pages.detail);
     }
 
     let totalSizeBytes: number | null = null;
@@ -114,9 +100,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const pages = await loadAllPages(`${basePath}content/`, authResult.auth);
+  const pages = await loadAllPages(`${basePath}content/`, auth);
   if (!pages.ok) {
-    return unauthorizeAndRespond(pages.status, pages.detail);
+    throw new PulpApiError(pages.status, pages.detail);
   }
 
   return Response.json({
@@ -124,4 +110,4 @@ export async function GET(request: Request) {
     totalSizeBytes: null,
     results: pages.rows,
   });
-}
+});
