@@ -151,7 +151,10 @@ export default function PackageDetailsPage() {
     setRpmResult(null);
     try {
       const created = await pulpUploadService.uploadAsRpm(artifactForApi);
-      setRpmResult(created);
+      if (!created.ok) {
+        throw new Error(created.detail);
+      }
+      setRpmResult(created.data);
     } catch (createError) {
       setRpmResult(null);
       setError(createError instanceof Error ? createError.message : "Failed to create RPM content.");
@@ -178,7 +181,10 @@ export default function PackageDetailsPage() {
 
     try {
       const added = await pulpUploadService.addToRepository(pkg.pulp_href, selectedRepositoryName);
-      setAddRepositoryResult(added);
+      if (!added.ok) {
+        throw new Error(added.detail);
+      }
+      setAddRepositoryResult(added.data);
     } catch (addError) {
       setError(addError instanceof Error ? addError.message : "Failed to add package to repository.");
     } finally {
@@ -197,7 +203,10 @@ export default function PackageDetailsPage() {
     setPublishRepositoryResult(null);
     try {
       const result = await pulpRepositoryManagementService.publish("rpm", repoHref);
-      setPublishRepositoryResult(result);
+      if (!result.ok) {
+        throw new Error(result.detail);
+      }
+      setPublishRepositoryResult(result.data);
     } catch (publishError) {
       setError(
         publishError instanceof Error ? publishError.message : "Failed to publish repository."

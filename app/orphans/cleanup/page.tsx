@@ -48,7 +48,10 @@ export default function OrphanCleanupPage() {
     setIsRunning(true);
     try {
       const cleanupResult = await pulpOrphanService.cleanup(parsed);
-      setResult(cleanupResult);
+      if (!cleanupResult.ok) {
+        throw new Error(cleanupResult.detail);
+      }
+      setResult(cleanupResult.data);
     } catch (cleanupError) {
       setError(cleanupError instanceof Error ? cleanupError.message : "Orphan cleanup failed.");
     } finally {

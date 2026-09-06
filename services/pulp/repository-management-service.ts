@@ -13,6 +13,8 @@ import {
   RepositoryVersionRepairResult,
   RepositoryModifyPayload,
   RepositoryModifyResult,
+  ServiceDataResult,
+  ServiceResult,
 } from "./types";
 
 export type RepositoryPublishResult = {
@@ -34,7 +36,6 @@ export type RepositoryContentListResult = {
 };
 
 export type RepositoryUpdateResult = {
-  ok: true;
   name: string;
 };
 
@@ -52,14 +53,14 @@ export const pulpRepositoryManagementService = {
   async create(
     kind: PulpPluginKind,
     payload: RepositoryCreatePayload
-  ): Promise<RepositoryCreateResult> {
+  ): Promise<ServiceDataResult<RepositoryCreateResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositoryCreateResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositoryCreateResult };
   },
 
   async getRepositoryDetail(pulpHref: string): Promise<PulpRepositoryDetail> {
@@ -74,46 +75,50 @@ export const pulpRepositoryManagementService = {
     kind: PulpPluginKind,
     pulpHref: string,
     payload: RepositoryUpdatePayload
-  ): Promise<RepositoryUpdateResult> {
+  ): Promise<ServiceDataResult<RepositoryUpdateResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: pulpHref, ...payload }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositoryUpdateResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositoryUpdateResult };
   },
 
-  async remove(kind: PulpPluginKind, pulpHref: string): Promise<void> {
+  async remove(kind: PulpPluginKind, pulpHref: string): Promise<ServiceResult> {
     const response = await fetch(`/api/pulp/repositories/${kind}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: pulpHref }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true };
   },
 
   async sync(
     kind: PulpPluginKind,
     payload: RepositorySyncPayload
-  ): Promise<RepositorySyncResult> {
+  ): Promise<ServiceDataResult<RepositorySyncResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositorySyncResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositorySyncResult };
   },
 
-  async publish(kind: PulpPluginKind, pulpHref: string): Promise<RepositoryPublishResult> {
+  async publish(
+    kind: PulpPluginKind,
+    pulpHref: string
+  ): Promise<ServiceDataResult<RepositoryPublishResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: pulpHref }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositoryPublishResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositoryPublishResult };
   },
 
   async listRepositoryContent(
@@ -150,40 +155,44 @@ export const pulpRepositoryManagementService = {
     return (await response.json()) as PulpRepositoryVersion;
   },
 
-  async deleteRepositoryVersion(kind: PulpPluginKind, versionPulpHref: string): Promise<void> {
+  async deleteRepositoryVersion(
+    kind: PulpPluginKind,
+    versionPulpHref: string
+  ): Promise<ServiceResult> {
     const response = await fetch(`/api/pulp/repositories/${kind}/version`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: versionPulpHref }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true };
   },
 
   async repairRepositoryVersion(
     kind: PulpPluginKind,
     versionPulpHref: string,
     verifyChecksums: boolean
-  ): Promise<RepositoryVersionRepairResult> {
+  ): Promise<ServiceDataResult<RepositoryVersionRepairResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}/version/repair`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: versionPulpHref, verify_checksums: verifyChecksums }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositoryVersionRepairResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositoryVersionRepairResult };
   },
 
   async modifyRepository(
     kind: PulpPluginKind,
     pulpHref: string,
     payload: RepositoryModifyPayload
-  ): Promise<RepositoryModifyResult> {
+  ): Promise<ServiceDataResult<RepositoryModifyResult>> {
     const response = await fetch(`/api/pulp/repositories/${kind}/modify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pulp_href: pulpHref, ...payload }),
     });
-    if (!response.ok) throw new Error(await readApiDetail(response));
-    return (await response.json()) as RepositoryModifyResult;
+    if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+    return { ok: true, data: (await response.json()) as RepositoryModifyResult };
   },
 };

@@ -1,9 +1,8 @@
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, normalizePulpHrefToApiPath, readDetail, waitForTask } from "../../../_server";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { normalizePulpHrefToApiPath, waitForTask } from "../../../_server";
 import { isRepositoryVersionInstancePath } from "../../../repository-version-map";
 
 type RepairBody = {
@@ -11,14 +10,9 @@ type RepairBody = {
   verify_checksums?: boolean;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -39,31 +33,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const verifyChecksums = body.verify_checksums ?? true;
 
-  const repairResponse = await fetch(getPulpApiUrl(`${apiPath}repair/`), {
+  const repairResult = await pulpFetch<{ task: string }>(`${apiPath}repair/`, auth, {
     method: "POST",
-    headers,
     body: JSON.stringify({ verify_checksums: verifyChecksums }),
-    cache: "no-store",
   });
 
-  if (!repairResponse.ok) {
-    if (repairResponse.status === 401 || repairResponse.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: await readDetail(repairResponse) }, { status: repairResponse.status });
+  if (!repairResult.ok) {
+    throw new PulpApiError(repairResult.status, repairResult.detail);
   }
 
-  const { task } = (await repairResponse.json()) as { task: string };
+  const { task } = repairResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(
@@ -71,4 +55,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
       { status: 500 }
     );
   }
-}
+});

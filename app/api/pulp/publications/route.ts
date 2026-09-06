@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import { buildUpstreamListParams } from "../repositories/_server";
 
 type PulpPublication = {
@@ -17,12 +16,7 @@ type PulpListResponse<T> = {
   results: T[];
 };
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const qs = buildUpstreamListParams(url.searchParams, [
     "repository",
@@ -32,16 +26,11 @@ export async function GET(request: Request) {
 
   const result = await pulpFetch<PulpListResponse<PulpPublication>>(
     `/publications/?${qs.toString()}`,
-    authResult.auth
+    auth
   );
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});

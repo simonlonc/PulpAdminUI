@@ -44,6 +44,8 @@ export function pulpErrorDetailFromBody(body: unknown): string | null {
       if (msgs.length > 0) {
         fieldParts.push(`${key}: ${msgs.join("; ")}`);
       }
+    } else if (val !== null && typeof val === "object") {
+      fieldParts.push(`${key}: ${JSON.stringify(val)}`);
     }
   }
 
@@ -161,11 +163,23 @@ export async function pulpFetch<TData>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(getPulpApiUrl(pathname), {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  const apiUrl = getPulpApiUrl(pathname);
+
+  let response: Response;
+  try {
+    response = await fetch(apiUrl, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      status: 502,
+      detail: `Could not reach Pulp server at ${getPulpBaseUrl()}: ${message}`,
+    };
+  }
 
   const rawText = await response.text();
   let parsed: unknown;

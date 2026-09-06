@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import {
   CreatePulpRolePayload,
   PulpPaginatedResponse,
@@ -23,12 +22,7 @@ function parseLimit(value: string | null): number {
   return Math.min(500, n);
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const limit = parseLimit(url.searchParams.get("limit"));
   const offset = parseOffset(url.searchParams.get("offset"));
@@ -44,20 +38,15 @@ export async function GET(request: Request) {
 
   const result = await pulpFetch<PulpPaginatedResponse<PulpRole>>(
     `/roles/?${qs.toString()}`,
-    authResult.auth
+    auth
   );
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
 function normalizePermissions(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -68,12 +57,7 @@ function normalizePermissions(value: unknown): string[] {
     .filter((s) => s.length > 0);
 }
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   let payload: Partial<CreatePulpRolePayload> | null = null;
   try {
     payload = (await request.json()) as Partial<CreatePulpRolePayload>;
@@ -106,19 +90,14 @@ export async function POST(request: Request) {
     createBody.description = description;
   }
 
-  const result = await pulpFetch<PulpRole>("/roles/", authResult.auth, {
+  const result = await pulpFetch<PulpRole>("/roles/", auth, {
     method: "POST",
     body: JSON.stringify(createBody),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data, { status: 201 });
-}
+});

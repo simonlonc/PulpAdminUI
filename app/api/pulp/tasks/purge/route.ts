@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import { authHeaders, readDetail, waitForTask } from "../../repositories/_server";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { waitForTask } from "../../repositories/_server";
 import type { PulpTaskPurgeState } from "@/services/pulp/types";
 
 const PURGE_STATES = ["skipped", "completed", "failed", "canceled"] as const;
@@ -20,12 +19,7 @@ function normalizeStates(value: unknown): PulpTaskPurgeState[] {
   );
 }
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   const body = (await request.json().catch(() => ({}))) as PurgeBody;
 
   const finishedBefore = body.finished_before?.trim();
@@ -41,29 +35,19 @@ export async function POST(request: Request) {
     return Response.json({ detail: "At least one task state must be selected." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
-  const purgeResponse = await fetch(getPulpApiUrl("/tasks/purge/"), {
+  const purgeResult = await pulpFetch<{ task: string }>("/tasks/purge/", auth, {
     method: "POST",
-    headers,
     body: JSON.stringify({ finished_before: finishedBefore, states }),
-    cache: "no-store",
   });
 
-  if (!purgeResponse.ok) {
-    if (purgeResponse.status === 401 || purgeResponse.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: await readDetail(purgeResponse) }, { status: purgeResponse.status });
+  if (!purgeResult.ok) {
+    throw new PulpApiError(purgeResult.status, purgeResult.detail);
   }
 
-  const { task } = (await purgeResponse.json()) as { task: string };
+  const { task } = purgeResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, auth);
     return Response.json({
       task,
       state: finished.state ?? "completed",
@@ -75,4 +59,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});

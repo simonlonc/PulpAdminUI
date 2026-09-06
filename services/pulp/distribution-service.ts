@@ -4,6 +4,7 @@ import {
   PulpDistribution,
   PulpDistributionDetail,
   PulpPaginatedResponse,
+  ServiceDataResult,
   ServiceResult,
   UpdatePulpDistributionPayload,
 } from "./types";
@@ -45,16 +46,16 @@ export const pulpDistributionService = {
       name: string;
       base_path: string;
     }
-  ): Promise<CreateDistributionResult> {
+  ): Promise<ServiceDataResult<CreateDistributionResult>> {
     const response = await fetch(`/api/pulp/distributions/create/${kind}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
-    return (await response.json()) as CreateDistributionResult;
+    return { ok: true, data: (await response.json()) as CreateDistributionResult };
   },
 
   /**
@@ -65,7 +66,7 @@ export const pulpDistributionService = {
     kind: PulpPluginKind,
     repositoryPulpHref: string,
     repositoryName: string
-  ): Promise<CreateDistributionResult> {
+  ): Promise<ServiceDataResult<CreateDistributionResult>> {
     return pulpDistributionService.create(kind, {
       repository: repositoryPulpHref,
       name: `${repositoryName}-dist`,
@@ -110,16 +111,16 @@ export const pulpDistributionService = {
       publication?: string | null;
       content_guard?: string | null;
     }
-  ): Promise<CreatedDistribution> {
+  ): Promise<ServiceDataResult<CreatedDistribution>> {
     const response = await fetch(DISTRIBUTIONS_PATH, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, ...payload }),
     });
     if (!response.ok) {
-      throw new Error(await readApiDetail(response));
+      return { ok: false, detail: await readApiDetail(response) };
     }
-    return (await response.json()) as CreatedDistribution;
+    return { ok: true, data: (await response.json()) as CreatedDistribution };
   },
 
   async update(

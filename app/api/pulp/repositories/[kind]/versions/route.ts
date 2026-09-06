@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRepositoryVersion } from "@/services/pulp/types";
 import { mapPulpRepositoryVersion } from "../../repository-version-map";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../../_server";
@@ -28,14 +27,9 @@ function resolveVersionsListPath(
   return `${base}versions/`;
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -63,16 +57,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   let nextPath: string | null = resolved;
 
   while (nextPath) {
-    const result = await pulpFetch<PulpPaginatedJson<Record<string, unknown>>>(
-      nextPath,
-      authResult.auth
-    );
+    const result = await pulpFetch<PulpPaginatedJson<Record<string, unknown>>>(nextPath, auth);
     if (!result.ok) {
-      if (result.status === 401 || result.status === 403) {
-        const cookieStore = await cookies();
-        cookieStore.delete(PULP_AUTH_COOKIE);
-      }
-      return Response.json({ detail: result.detail }, { status: result.status });
+      throw new PulpApiError(result.status, result.detail);
     }
 
     for (const row of result.data.results) {
@@ -85,4 +72,4 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     count: allResults.length,
     results: allResults,
   });
-}
+});

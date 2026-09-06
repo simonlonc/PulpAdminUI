@@ -1,15 +1,12 @@
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
+import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
-  authHeaders,
   buildUpstreamListParams,
   normalizePulpHrefToApiPath,
   PulpPaginatedJson,
-  readDetail,
   TaskRefResponse,
   waitForTask,
 } from "../../repositories/_server";
@@ -159,184 +156,156 @@ async function resolvePlugin(
   return { ok: true, plugin };
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
-  if (!pluginResult.ok) {
-    return pluginResult.response;
-  }
-  const { plugin } = pluginResult;
-
-  const url = new URL(request.url);
-  const queryParams = buildUpstreamListParams(url.searchParams);
-
-  const result = await pulpFetch<PulpPaginatedJson<PulpRemote>>(
-    `${plugin.remotePath}?${queryParams.toString()}`,
-    authResult.auth
-  );
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+export const GET = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+    const pluginResult = await resolvePlugin(params, auth);
+    if (!pluginResult.ok) {
+      return pluginResult.response;
     }
-    return Response.json({ detail: result.detail }, { status: result.status });
-  }
+    const { plugin } = pluginResult;
 
-  return Response.json(result.data);
-}
+    const url = new URL(request.url);
+    const queryParams = buildUpstreamListParams(url.searchParams);
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
+    const result = await pulpFetch<PulpPaginatedJson<PulpRemote>>(
+      `${plugin.remotePath}?${queryParams.toString()}`,
+      auth
+    );
 
-  const pluginResult = await resolvePlugin(params, authResult.auth);
-  if (!pluginResult.ok) {
-    return pluginResult.response;
-  }
-  const { plugin } = pluginResult;
-
-  const body = (await request.json()) as RemoteBody;
-  const name = body.name?.trim();
-  const remoteUrl = body.url?.trim();
-  if (!name) {
-    return Response.json({ detail: "Remote name is required." }, { status: 400 });
-  }
-  if (!remoteUrl) {
-    return Response.json({ detail: "Remote URL is required." }, { status: 400 });
-  }
-
-  const payload: Record<string, unknown> = {
-    name,
-    url: remoteUrl,
-    policy: normalizePolicy(body.policy),
-    tls_validation: body.tls_validation === undefined ? true : Boolean(body.tls_validation),
-    proxy_url: trimOrNull(body.proxy_url),
-    ca_cert: trimOrNull(body.ca_cert),
-    client_cert: trimOrNull(body.client_cert),
-    download_concurrency: parseNullableConcurrency(body.download_concurrency),
-  };
-  const extraError = assignExtraRemoteFields(payload, plugin, body, false);
-  if (extraError) {
-    return extraError;
-  }
-  assignSecretIfPresent(payload, "username", body.username);
-  assignSecretIfPresent(payload, "password", body.password);
-  assignSecretIfPresent(payload, "client_key", body.client_key);
-
-  const result = await pulpFetch<PulpRemote>(plugin.remotePath, authResult.auth, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
     }
-    return Response.json({ detail: result.detail }, { status: result.status });
+
+    return Response.json(result.data);
   }
+);
 
-  return Response.json(result.data);
-}
+export const POST = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+    const pluginResult = await resolvePlugin(params, auth);
+    if (!pluginResult.ok) {
+      return pluginResult.response;
+    }
+    const { plugin } = pluginResult;
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
-  if (!pluginResult.ok) {
-    return pluginResult.response;
-  }
-  const { plugin } = pluginResult;
-
-  const body = (await request.json()) as RemoteBody;
-  const pulpHref = body.pulp_href?.trim();
-  if (!pulpHref) {
-    return Response.json({ detail: "pulp_href is required." }, { status: 400 });
-  }
-
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
-  if (!isRemoteApiPath(plugin, apiPath)) {
-    return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
-  }
-
-  const patchPayload: Record<string, unknown> = {};
-  if (body.name !== undefined) {
-    const name = body.name.trim();
+    const body = (await request.json()) as RemoteBody;
+    const name = body.name?.trim();
+    const remoteUrl = body.url?.trim();
     if (!name) {
-      return Response.json({ detail: "Remote name cannot be empty." }, { status: 400 });
+      return Response.json({ detail: "Remote name is required." }, { status: 400 });
     }
-    patchPayload.name = name;
-  }
-  if (body.url !== undefined) {
-    const remoteUrl = body.url.trim();
     if (!remoteUrl) {
-      return Response.json({ detail: "Remote URL cannot be empty." }, { status: 400 });
+      return Response.json({ detail: "Remote URL is required." }, { status: 400 });
     }
-    patchPayload.url = remoteUrl;
-  }
-  if (body.policy !== undefined) {
-    patchPayload.policy = normalizePolicy(body.policy);
-  }
-  if (body.tls_validation !== undefined) {
-    patchPayload.tls_validation = Boolean(body.tls_validation);
-  }
-  if (body.proxy_url !== undefined) {
-    patchPayload.proxy_url = trimOrNull(body.proxy_url);
-  }
-  if (body.ca_cert !== undefined) {
-    patchPayload.ca_cert = trimOrNull(body.ca_cert);
-  }
-  if (body.client_cert !== undefined) {
-    patchPayload.client_cert = trimOrNull(body.client_cert);
-  }
-  if (body.download_concurrency !== undefined) {
-    patchPayload.download_concurrency = parseNullableConcurrency(body.download_concurrency);
-  }
-  const extraError = assignExtraRemoteFields(patchPayload, plugin, body, true);
-  if (extraError) {
-    return extraError;
-  }
-  // Secrets are only sent when a new value is supplied; omitting them leaves Pulp's stored value intact.
-  assignSecretIfPresent(patchPayload, "username", body.username);
-  assignSecretIfPresent(patchPayload, "password", body.password);
-  assignSecretIfPresent(patchPayload, "client_key", body.client_key);
 
-  if (Object.keys(patchPayload).length === 0) {
-    return Response.json({ detail: "At least one field must be provided." }, { status: 400 });
+    const payload: Record<string, unknown> = {
+      name,
+      url: remoteUrl,
+      policy: normalizePolicy(body.policy),
+      tls_validation: body.tls_validation === undefined ? true : Boolean(body.tls_validation),
+      proxy_url: trimOrNull(body.proxy_url),
+      ca_cert: trimOrNull(body.ca_cert),
+      client_cert: trimOrNull(body.client_cert),
+      download_concurrency: parseNullableConcurrency(body.download_concurrency),
+    };
+    const extraError = assignExtraRemoteFields(payload, plugin, body, false);
+    if (extraError) {
+      return extraError;
+    }
+    assignSecretIfPresent(payload, "username", body.username);
+    assignSecretIfPresent(payload, "password", body.password);
+    assignSecretIfPresent(payload, "client_key", body.client_key);
+
+    const result = await pulpFetch<PulpRemote>(plugin.remotePath, auth, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
+    }
+
+    return Response.json(result.data);
   }
+);
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
+export const PATCH = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+    const pluginResult = await resolvePlugin(params, auth);
+    if (!pluginResult.ok) {
+      return pluginResult.response;
+    }
+    const { plugin } = pluginResult;
 
-  const patchResponse = await fetch(getPulpApiUrl(apiPath), {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(patchPayload),
-    cache: "no-store",
-  });
+    const body = (await request.json()) as RemoteBody;
+    const pulpHref = body.pulp_href?.trim();
+    if (!pulpHref) {
+      return Response.json({ detail: "pulp_href is required." }, { status: 400 });
+    }
 
-  if (patchResponse.status === 202) {
-    const ct = patchResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
+    const apiPath = normalizePulpHrefToApiPath(pulpHref);
+    if (!isRemoteApiPath(plugin, apiPath)) {
+      return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
+    }
+
+    const patchPayload: Record<string, unknown> = {};
+    if (body.name !== undefined) {
+      const name = body.name.trim();
+      if (!name) {
+        return Response.json({ detail: "Remote name cannot be empty." }, { status: 400 });
+      }
+      patchPayload.name = name;
+    }
+    if (body.url !== undefined) {
+      const remoteUrl = body.url.trim();
+      if (!remoteUrl) {
+        return Response.json({ detail: "Remote URL cannot be empty." }, { status: 400 });
+      }
+      patchPayload.url = remoteUrl;
+    }
+    if (body.policy !== undefined) {
+      patchPayload.policy = normalizePolicy(body.policy);
+    }
+    if (body.tls_validation !== undefined) {
+      patchPayload.tls_validation = Boolean(body.tls_validation);
+    }
+    if (body.proxy_url !== undefined) {
+      patchPayload.proxy_url = trimOrNull(body.proxy_url);
+    }
+    if (body.ca_cert !== undefined) {
+      patchPayload.ca_cert = trimOrNull(body.ca_cert);
+    }
+    if (body.client_cert !== undefined) {
+      patchPayload.client_cert = trimOrNull(body.client_cert);
+    }
+    if (body.download_concurrency !== undefined) {
+      patchPayload.download_concurrency = parseNullableConcurrency(body.download_concurrency);
+    }
+    const extraError = assignExtraRemoteFields(patchPayload, plugin, body, true);
+    if (extraError) {
+      return extraError;
+    }
+    // Secrets are only sent when a new value is supplied; omitting them leaves Pulp's stored value intact.
+    assignSecretIfPresent(patchPayload, "username", body.username);
+    assignSecretIfPresent(patchPayload, "password", body.password);
+    assignSecretIfPresent(patchPayload, "client_key", body.client_key);
+
+    if (Object.keys(patchPayload).length === 0) {
+      return Response.json({ detail: "At least one field must be provided." }, { status: 400 });
+    }
+
+    const patchResult = await pulpFetch<TaskRefResponse>(apiPath, auth, {
+      method: "PATCH",
+      body: JSON.stringify(patchPayload),
+    });
+
+    if (!patchResult.ok) {
+      throw new PulpApiError(patchResult.status, patchResult.detail);
+    }
+
+    if (patchResult.status === 202 && patchResult.data.task) {
       try {
-        const raw = await patchResponse.text();
-        if (raw) {
-          const payload = JSON.parse(raw) as TaskRefResponse;
-          if (payload.task) {
-            await waitForTask(payload.task, authHeader);
-          }
-        }
+        await waitForTask(patchResult.data.task, auth);
       } catch (error) {
         return Response.json(
           { detail: error instanceof Error ? error.message : "Remote update task failed." },
@@ -344,68 +313,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
         );
       }
     }
+
     return Response.json({ ok: true });
   }
+);
 
-  if (patchResponse.ok) {
-    return Response.json({ ok: true });
-  }
-
-  if (patchResponse.status === 401 || patchResponse.status === 403) {
-    const cookieStore = await cookies();
-    cookieStore.delete(PULP_AUTH_COOKIE);
-  }
-  return Response.json({ detail: await readDetail(patchResponse) }, { status: patchResponse.status });
-}
-
-export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
-  if (!pluginResult.ok) {
-    return pluginResult.response;
-  }
-  const { plugin } = pluginResult;
-
-  const body = (await request.json()) as { pulp_href?: string };
-  const pulpHref = body.pulp_href?.trim();
-  if (!pulpHref) {
-    return Response.json({ detail: "pulp_href is required." }, { status: 400 });
-  }
-
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
-  if (!isRemoteApiPath(plugin, apiPath)) {
-    return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
-  }
-
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const deleteResponse = await fetch(getPulpApiUrl(apiPath), {
-    method: "DELETE",
-    headers: authHeaders(authHeader),
-    cache: "no-store",
-  });
-
-  if (deleteResponse.status === 202) {
-    const ct = deleteResponse.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      const payload = (await deleteResponse.json()) as TaskRefResponse;
-      if (payload.task) {
-        await waitForTask(payload.task, authHeader);
-      }
+export const DELETE = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+    const pluginResult = await resolvePlugin(params, auth);
+    if (!pluginResult.ok) {
+      return pluginResult.response;
     }
+    const { plugin } = pluginResult;
+
+    const body = (await request.json()) as { pulp_href?: string };
+    const pulpHref = body.pulp_href?.trim();
+    if (!pulpHref) {
+      return Response.json({ detail: "pulp_href is required." }, { status: 400 });
+    }
+
+    const apiPath = normalizePulpHrefToApiPath(pulpHref);
+    if (!isRemoteApiPath(plugin, apiPath)) {
+      return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
+    }
+
+    const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, auth, {
+      method: "DELETE",
+    });
+
+    if (!deleteResult.ok) {
+      throw new PulpApiError(deleteResult.status, deleteResult.detail);
+    }
+
+    if (deleteResult.status === 202 && deleteResult.data.task) {
+      await waitForTask(deleteResult.data.task, auth);
+    }
+
     return Response.json({ ok: true });
   }
-
-  if (deleteResponse.status === 204 || deleteResponse.ok) {
-    return Response.json({ ok: true });
-  }
-
-  if (deleteResponse.status === 401 || deleteResponse.status === 403) {
-    const cookieStore = await cookies();
-    cookieStore.delete(PULP_AUTH_COOKIE);
-  }
-  return Response.json({ detail: await readDetail(deleteResponse) }, { status: deleteResponse.status });
-}
+);

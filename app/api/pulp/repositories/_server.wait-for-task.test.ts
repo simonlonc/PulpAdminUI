@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { waitForTask } from "@/app/api/pulp/repositories/_server";
+import type { PulpAuth } from "@/lib/pulp";
+
+const auth: PulpAuth = { username: "admin", password: "admin" };
 
 // waitForTask polls every 5s, so real timers would make this suite take minutes; fake timers
 // plus advanceTimersByTimeAsync let a "running" -> "completed" poll resolve immediately.
@@ -24,7 +27,7 @@ describe("waitForTask", () => {
     const fetchMock = vi.fn(async () => responses.shift()!);
     vi.stubGlobal("fetch", fetchMock);
 
-    const promise = waitForTask("/pulp/api/v3/tasks/1/", "Basic xyz");
+    const promise = waitForTask("/pulp/api/v3/tasks/1/", auth);
     await vi.advanceTimersByTimeAsync(5000);
     const task = await promise;
 
@@ -38,14 +41,14 @@ describe("waitForTask", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(waitForTask("/pulp/api/v3/tasks/1/", "Basic xyz")).rejects.toThrow("boom");
+    await expect(waitForTask("/pulp/api/v3/tasks/1/", auth)).rejects.toThrow("boom");
   });
 
   it("throws with a stringified fallback error when a canceled task has no error", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ state: "canceled" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(waitForTask("/pulp/api/v3/tasks/1/", "Basic xyz")).rejects.toThrow(
+    await expect(waitForTask("/pulp/api/v3/tasks/1/", auth)).rejects.toThrow(
       JSON.stringify("Task failed")
     );
   });
@@ -56,6 +59,6 @@ describe("waitForTask", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(waitForTask("/pulp/api/v3/tasks/1/", "Basic xyz")).rejects.toThrow("Internal error.");
+    await expect(waitForTask("/pulp/api/v3/tasks/1/", auth)).rejects.toThrow("Internal error.");
   });
 });

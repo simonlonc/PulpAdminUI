@@ -11,6 +11,14 @@ export type ServiceResult =
       detail: string;
     };
 
+/** Like ServiceResult, but the success case carries the mutation's response payload. */
+export type ServiceDataResult<T> =
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      detail: string;
+    };
+
 export type PulpUser = {
   id: number;
   username: string;

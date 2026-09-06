@@ -1,12 +1,9 @@
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
-  authHeaders,
   normalizePulpHrefToApiPath,
-  readDetail,
   resolvePublicationHrefAfterTask,
   TaskRefResponse,
   toPulpHrefPath,
@@ -17,14 +14,9 @@ type PublishBody = {
   pulp_href?: string;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -41,36 +33,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     return Response.json({ detail: "Repository pulp_href is required." }, { status: 400 });
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const repository = toPulpHrefPath(repoHref);
 
-  const publishResponse = await fetch(getPulpApiUrl(plugin.publicationPath), {
+  const publishResult = await pulpFetch<TaskRefResponse>(plugin.publicationPath, auth, {
     method: "POST",
-    headers,
     body: JSON.stringify({
       repository,
       ...(plugin.publicationDefaults ?? {}),
     }),
-    cache: "no-store",
   });
 
-  if (!publishResponse.ok) {
-    if (publishResponse.status === 401 || publishResponse.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: await readDetail(publishResponse) }, { status: publishResponse.status });
+  if (!publishResult.ok) {
+    throw new PulpApiError(publishResult.status, publishResult.detail);
   }
 
-  const published = (await publishResponse.json()) as TaskRefResponse;
+  const published = publishResult.data;
   let publicationHref = published.pulp_href ?? published.href ?? null;
 
   try {
     if (published.task) {
-      const task = await waitForTask(published.task, authHeader);
+      const task = await waitForTask(published.task, auth);
       publicationHref = resolvePublicationHrefAfterTask(task, publicationHref);
     }
   } catch (error) {
@@ -85,4 +67,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     repository: normalizePulpHrefToApiPath(repoHref),
     task: published.task ?? null,
   });
-}
+});

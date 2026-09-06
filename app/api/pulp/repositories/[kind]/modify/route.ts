@@ -1,15 +1,8 @@
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, toBasicAuthHeader } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  authHeaders,
-  normalizePulpHrefToApiPath,
-  readDetail,
-  toPulpHrefPath,
-  waitForTask,
-} from "../../_server";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { normalizePulpHrefToApiPath, toPulpHrefPath, waitForTask } from "../../_server";
 
 type ModifyBody = {
   pulp_href?: string;
@@ -19,14 +12,9 @@ type ModifyBody = {
   overwrite?: boolean;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -53,10 +41,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     );
   }
 
-  const authHeader = toBasicAuthHeader(authResult.auth);
-  const headers = authHeaders(authHeader);
-  headers.set("Content-Type", "application/json");
-
   const payload: Record<string, unknown> = {};
   if (addContentUnits.length > 0) {
     payload.add_content_units = addContentUnits.map((h) => toPulpHrefPath(h));
@@ -71,25 +55,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     payload.overwrite = body.overwrite;
   }
 
-  const modifyResponse = await fetch(getPulpApiUrl(`${apiPath}modify/`), {
+  const modifyResult = await pulpFetch<{ task: string }>(`${apiPath}modify/`, auth, {
     method: "POST",
-    headers,
     body: JSON.stringify(payload),
-    cache: "no-store",
   });
 
-  if (!modifyResponse.ok) {
-    if (modifyResponse.status === 401 || modifyResponse.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: await readDetail(modifyResponse) }, { status: modifyResponse.status });
+  if (!modifyResult.ok) {
+    throw new PulpApiError(modifyResult.status, modifyResult.detail);
   }
 
-  const { task } = (await modifyResponse.json()) as { task: string };
+  const { task } = modifyResult.data;
 
   try {
-    const finished = await waitForTask(task, authHeader);
+    const finished = await waitForTask(task, auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(
@@ -97,4 +75,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
       { status: 500 }
     );
   }
-}
+});
