@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useCallback, useEffect, useId, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
@@ -13,7 +13,6 @@ import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  CircleHelp,
   GitBranch,
   MoreVertical,
   Package,
@@ -47,45 +45,19 @@ import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { RepositoryCreateModal } from "@/components/pulp/repository-create-modal";
+import { RepositoryDeleteModal } from "@/components/pulp/repository-delete-modal";
+import { RepositorySyncModal } from "@/components/pulp/repository-sync-modal";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { type PulpPluginKind, type PulpSyncField } from "@/lib/pulp-plugins";
+import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
-import {
-  pulpRepositoryManagementService,
-  type RepositoryCreateResult,
-} from "@/services/pulp/repository-management-service";
-import {
-  PulpDistribution,
-  PulpRemote,
-  PulpRepository,
-  type RepositoryCreatePayload,
-} from "@/services/pulp/types";
-
-const repoCreateTextareaClass =
-  "min-h-[4rem] w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
+import { PulpDistribution, PulpRemote, PulpRepository } from "@/services/pulp/types";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
-
-/** Initial sync modal values: each field's `default`, else false, the first option, or []. */
-function defaultSyncFieldValues(
-  fields: readonly PulpSyncField[]
-): Record<string, boolean | string | string[]> {
-  const values: Record<string, boolean | string | string[]> = {};
-  for (const field of fields) {
-    if (field.type === "boolean") {
-      values[field.name] = field.default === undefined ? false : Boolean(field.default);
-    } else if (field.type === "enum") {
-      values[field.name] =
-        typeof field.default === "string" ? field.default : (field.options?.[0] ?? "");
-    } else {
-      values[field.name] = [];
-    }
-  }
-  return values;
-}
 
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
@@ -98,20 +70,7 @@ function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Rec
   return map;
 }
 
-/** Distributions of the given kind, linked to this repository, deletable via `/api/pulp/distributions/[id]`. */
-function distributionsForRepository(
-  distributions: PulpDistribution[],
-  repoPulpHref: string,
-  distributionPath: string
-): PulpDistribution[] {
-  return distributions.filter(
-    (d) => d.repository === repoPulpHref && d.pulp_href.includes(distributionPath)
-  );
-}
-
 function RepositoriesListPageContent() {
-  const deleteDialogTitleId = useId();
-  const createDialogTitleId = useId();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -136,8 +95,6 @@ function RepositoriesListPageContent() {
   const [deleteModalRepo, setDeleteModalRepo] = useState<PulpRepository | null>(null);
   const [labelsTarget, setLabelsTarget] = useState<PulpRepository | null>(null);
   const [accessTarget, setAccessTarget] = useState<PulpRepository | null>(null);
-  const [deleteAlsoDistributions, setDeleteAlsoDistributions] = useState(true);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [publishResult, setPublishResult] = useState<{
     repoName: string;
     publication: string | null;
@@ -156,33 +113,13 @@ function RepositoriesListPageContent() {
   // Filled in per kind as remotes load. The registry is derived from the server, so a kind
   // this map has not reached yet reads as an empty list rather than undefined.
   const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemote[]>>({});
-  const [isLoadingRemotes, setIsLoadingRemotes] = useState(false);
-  const [syncRemoteHref, setSyncRemoteHref] = useState("");
-  const [syncFieldValues, setSyncFieldValues] = useState<
-    Record<string, boolean | string | string[]>
-  >({});
-  const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ repoName: string; task: string | null } | null>(
     null
   );
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createKind, setCreateKind] = useState<PulpPluginKind>("rpm");
-  const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
-  const [createRemote, setCreateRemote] = useState("");
-  const [createAutopublish, setCreateAutopublish] = useState(false);
-  const [createManifest, setCreateManifest] = useState("");
-  const [createNamingHintOpen, setCreateNamingHintOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [createResult, setCreateResult] = useState<RepositoryCreateResult | null>(null);
-
-  function resetCreateRepositoryFields() {
-    setCreateDescription("");
-    setCreateRemote("");
-    setCreateAutopublish(false);
-    setCreateManifest("");
-  }
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!hasSession) return;
@@ -236,111 +173,15 @@ function RepositoriesListPageContent() {
     setPage(1);
   }
 
-  // Memoized because it now closes over the registry from context rather than a module
-  // const, which makes it a real dependency of the create=1 effect below. Declared before
-  // that effect so the dependency array is not evaluated before initialization.
-  const loadCreateRemotes = useCallback(() => {
-    setIsLoadingRemotes(true);
-    void (async () => {
-      try {
-        const lists = await Promise.all(
-          plugins.map(
-            async (plugin) => [plugin.kind, (await pulpRemoteService.list(plugin.kind)).results] as const
-          )
-        );
-        setRemotesByKind(
-          Object.fromEntries(lists) as Record<PulpPluginKind, PulpRemote[]>
-        );
-      } catch {
-        // Leave remotes empty; the (none) option still works.
-      } finally {
-        setIsLoadingRemotes(false);
-      }
-    })();
-  }, [plugins]);
-
   useEffect(() => {
     if (searchParams.get("create") !== "1") return;
-    setCreateKind(kind);
     setCreateModalOpen(true);
-    loadCreateRemotes();
     router.replace("/repositories/list", { scroll: false });
-  }, [searchParams, router, kind, loadCreateRemotes]);
+  }, [searchParams, router]);
 
   function openCreateModal() {
-    setCreateKind(kind);
-    setCreateName("");
-    resetCreateRepositoryFields();
-    setCreateNamingHintOpen(false);
-    setCreateResult(null);
     setError(null);
     setCreateModalOpen(true);
-    loadCreateRemotes();
-  }
-
-  function closeCreateModal() {
-    if (isCreating) return;
-    setCreateModalOpen(false);
-  }
-
-  useEffect(() => {
-    if (!createModalOpen) return;
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isCreating) {
-        setCreateModalOpen(false);
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [createModalOpen, isCreating]);
-
-  async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = createName.trim();
-    if (!trimmed) {
-      setError("Repository name is required.");
-      return;
-    }
-    setError(null);
-    setIsCreating(true);
-    setCreateResult(null);
-    try {
-      const extraRepoFields = getPlugin(createKind).extraRepoFields;
-      const payload: RepositoryCreatePayload = {
-        pulp_labels: {},
-        name: trimmed,
-        description: createDescription,
-        retain_repo_versions: null,
-        remote: createRemote.trim() === "" ? null : createRemote.trim(),
-      };
-      if (extraRepoFields.includes("autopublish")) {
-        payload.autopublish = createAutopublish;
-      }
-      if (extraRepoFields.includes("manifest")) {
-        payload.manifest = createManifest.trim() === "" ? null : createManifest.trim();
-      }
-
-      const result = await pulpRepositoryManagementService.create(createKind, payload);
-      if (!result.ok) {
-        throw new Error(result.detail);
-      }
-      setCreateResult(result.data);
-      setCreateName("");
-      resetCreateRepositoryFields();
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed.");
-    } finally {
-      setIsCreating(false);
-    }
   }
 
   async function handlePublish(repo: PulpRepository) {
@@ -396,131 +237,6 @@ function RepositoriesListPageContent() {
       setBusyHref(null);
     }
   }
-
-  function openSyncModal(repo: PulpRepository) {
-    setSyncModalRepo(repo);
-    setSyncRemoteHref("");
-    setSyncFieldValues(defaultSyncFieldValues(getPlugin(kind).syncFields));
-    setSyncResult(null);
-    setError(null);
-    setIsLoadingRemotes(true);
-    void (async () => {
-      try {
-        const remotes = await pulpRemoteService.list(kind);
-        setRemotesByKind((prev) => ({ ...prev, [kind]: remotes.results }));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load remotes.");
-        setRemotesByKind((prev) => ({ ...prev, [kind]: [] }));
-      } finally {
-        setIsLoadingRemotes(false);
-      }
-    })();
-  }
-
-  function closeSyncModal() {
-    if (isSyncing) return;
-    setSyncModalRepo(null);
-  }
-
-  async function confirmSync() {
-    const repo = syncModalRepo;
-    if (!repo) return;
-    if (!syncRemoteHref) {
-      setError("Select a remote to sync from.");
-      return;
-    }
-    setBusyHref(repo.pulp_href);
-    setIsSyncing(true);
-    setError(null);
-    setSyncResult(null);
-    try {
-      const result = await pulpRepositoryManagementService.sync(kind, {
-        pulp_href: repo.pulp_href,
-        remote: syncRemoteHref,
-        fields: syncFieldValues,
-      });
-      if (!result.ok) {
-        throw new Error(result.detail);
-      }
-      setSyncResult({ repoName: repo.name, task: result.data.task });
-      setSyncModalRepo(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start sync.");
-    } finally {
-      setBusyHref(null);
-      setIsSyncing(false);
-    }
-  }
-
-  function openDeleteModal(repo: PulpRepository) {
-    setDeleteModalRepo(repo);
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
-    setDeleteAlsoDistributions(linked.length > 0);
-  }
-
-  function closeDeleteModal() {
-    if (isDeleting) return;
-    setDeleteModalRepo(null);
-  }
-
-  useEffect(() => {
-    if (!deleteModalRepo) {
-      return;
-    }
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isDeleting) {
-        setDeleteModalRepo(null);
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [deleteModalRepo, isDeleting]);
-
-  async function confirmDeleteRepository() {
-    const repo = deleteModalRepo;
-    if (!repo) return;
-
-    const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
-    setBusyHref(repo.pulp_href);
-    setError(null);
-    setIsDeleting(true);
-    try {
-      if (deleteAlsoDistributions && linked.length > 0) {
-        for (const d of linked) {
-          const removed = await pulpDistributionService.remove(d.pulp_href);
-          if (!removed.ok) {
-            throw new Error(removed.detail);
-          }
-        }
-      }
-
-      const removedRepo = await pulpRepositoryManagementService.remove(kind, repo.pulp_href);
-      if (!removedRepo.ok) {
-        throw new Error(removedRepo.detail);
-      }
-
-      setDeleteModalRepo(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
-    } finally {
-      setBusyHref(null);
-      setIsDeleting(false);
-    }
-  }
-
-  const deleteModalLinked = deleteModalRepo
-    ? distributionsForRepository(distributions, deleteModalRepo.pulp_href, getPlugin(kind).distributionPath)
-    : [];
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
@@ -817,7 +533,10 @@ function RepositoriesListPageContent() {
                               {getPlugin(kind).supportsSync ? (
                                 <DropdownMenuItem
                                   disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync")}
-                                  onSelect={() => openSyncModal(repo)}
+                                  onSelect={() => {
+                                    setSyncResult(null);
+                                    setSyncModalRepo(repo);
+                                  }}
                                 >
                                   <RefreshCw className="size-4" />
                                   Sync
@@ -843,7 +562,7 @@ function RepositoriesListPageContent() {
                               <DropdownMenuItem
                                 variant="destructive"
                                 disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "delete")}
-                                onSelect={() => openDeleteModal(repo)}
+                                onSelect={() => setDeleteModalRepo(repo)}
                               >
                                 <Trash2 className="size-4" />
                                 Delete
@@ -869,398 +588,43 @@ function RepositoriesListPageContent() {
       )}
 
       {createModalOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isCreating) {
-              closeCreateModal();
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={createDialogTitleId}
-            className="max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <h2
-              id={createDialogTitleId}
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-            >
-              Create repository
-            </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              New RPM, Debian APT, or File repository in Pulp.
-            </p>
-
-            <div className="mt-4">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-amber-900 underline decoration-amber-400/70 underline-offset-2 hover:decoration-amber-600 disabled:opacity-50 dark:text-amber-200 dark:decoration-amber-600/60 dark:hover:decoration-amber-400"
-                aria-expanded={createNamingHintOpen}
-                aria-controls={`${createDialogTitleId}-naming-hint`}
-                disabled={isCreating}
-                onClick={() => setCreateNamingHintOpen((open) => !open)}
-              >
-                <CircleHelp className="size-4 shrink-0" strokeWidth={2} aria-hidden />
-                How to name the repository
-              </button>
-              <div
-                id={`${createDialogTitleId}-naming-hint`}
-                role="region"
-                aria-label="Repository naming guidance"
-                hidden={!createNamingHintOpen}
-                className="mt-3 rounded-lg border border-amber-200/80 bg-amber-50/60 p-3 text-sm text-zinc-700 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-zinc-300"
-              >
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">How to name the repository</p>
-                <p className="mt-2">
-                  Use a path-style name: product or stream, distro family, major version, then architecture
-                  (matches how you organize RHEL-style trees).
-                </p>
-                <p className="mb-1.5 mt-3 font-medium text-zinc-900 dark:text-zinc-100">Examples</p>
-                <ul className="space-y-1 rounded-md border border-amber-200/60 bg-white/80 px-3 py-2 font-mono text-xs text-zinc-800 dark:border-amber-900/50 dark:bg-zinc-950/40 dark:text-zinc-200 sm:text-sm">
-                  <li>yourpulp-devel/rhel/10/noarch</li>
-                  <li>yourpulp-devel/rhel/10/x86_64</li>
-                </ul>
-              </div>
-            </div>
-
-            <form className="mt-4 flex flex-col gap-4" onSubmit={(e) => void handleCreateSubmit(e)}>
-              <FormField label="Type">
-                <select
-                  value={createKind}
-                  onChange={(event) => setCreateKind(event.target.value as PulpPluginKind)}
-                  disabled={isCreating}
-                  className={selectClassName}
-                >
-                  {plugins.map((plugin) => (
-                    <option key={plugin.kind} value={plugin.kind}>
-                      {plugin.label}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-              <FormField label="Name">
-                <Input
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  required
-                  disabled={isCreating}
-                />
-              </FormField>
-              <div className="space-y-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                <FormField label="Description">
-                  <textarea
-                    className={repoCreateTextareaClass}
-                    value={createDescription}
-                    onChange={(e) => setCreateDescription(e.target.value)}
-                    disabled={isCreating}
-                    rows={2}
-                    placeholder="Optional"
-                  />
-                </FormField>
-                <FormField label="Remote">
-                  <select
-                    value={createRemote}
-                    onChange={(e) => setCreateRemote(e.target.value)}
-                    disabled={isCreating}
-                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-                  >
-                    <option value="">(none)</option>
-                    {createRemote !== "" &&
-                    !(remotesByKind[createKind] ?? []).some((r) => r.pulp_href === createRemote) ? (
-                      <option value={createRemote}>{createRemote} (current)</option>
-                    ) : null}
-                    {(remotesByKind[createKind] ?? []).map((remote) => (
-                      <option key={remote.pulp_href} value={remote.pulp_href}>
-                        {remote.name} — {remote.url}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-                {createKind === "rpm" || createKind === "file" ? (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600"
-                      checked={createAutopublish}
-                      disabled={isCreating}
-                      onChange={(e) => setCreateAutopublish(e.target.checked)}
-                    />
-                    Autopublish new repository versions after sync
-                  </label>
-                ) : null}
-                {createKind === "file" ? (
-                  <FormField label="Manifest filename">
-                    <Input
-                      value={createManifest}
-                      onChange={(e) => setCreateManifest(e.target.value)}
-                      disabled={isCreating}
-                      placeholder="Optional — defaults to PULP_MANIFEST"
-                    />
-                  </FormField>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={isCreating}>
-                  {isCreating ? "Creating…" : "Create"}
-                </Button>
-                <Button type="button" variant="outline" disabled={isCreating} onClick={closeCreateModal}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-
-            {createResult ? (
-              <div className="mt-4 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-                <p className="font-medium text-zinc-900 dark:text-zinc-50">Created</p>
-                <p className="mt-2">
-                  <span className="font-medium">Name:</span> {createResult.name}
-                </p>
-                <p className="mt-1 break-all">
-                  <span className="font-medium">Href:</span> {createResult.pulp_href ?? "—"}
-                </p>
-                <p className="mt-1 break-all">
-                  <span className="font-medium">Task:</span>{" "}
-                  {createResult.task ? (
-                    <Link
-                      href={`/tasks/detail?pulp_href=${encodeURIComponent(createResult.task)}`}
-                      className="underline underline-offset-2"
-                    >
-                      {createResult.task}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </p>
-                {createResult.pulp_href ? (
-                  <Link
-                    href={`/repositories/content?pulp_href=${encodeURIComponent(createResult.pulp_href)}`}
-                    className="mt-3 inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                  >
-                    View content
-                  </Link>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <RepositoryCreateModal
+          initialKind={kind}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={() => void load()}
+          onBusyChange={setIsCreating}
+        />
       ) : null}
 
       {deleteModalRepo ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isDeleting) {
-              closeDeleteModal();
-            }
+        <RepositoryDeleteModal
+          repo={deleteModalRepo}
+          kind={kind}
+          distributions={distributions}
+          onClose={() => setDeleteModalRepo(null)}
+          onDeleted={() => {
+            setDeleteModalRepo(null);
+            void load();
           }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={deleteDialogTitleId}
-            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <h2
-              id={deleteDialogTitleId}
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-            >
-              Delete repository?
-            </h2>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">{deleteModalRepo.name}</span>
-              <span className="mt-1 block break-all font-mono text-xs text-zinc-500 dark:text-zinc-500">
-                {deleteModalRepo.pulp_href}
-              </span>
-            </p>
-            {deleteModalLinked.length > 0 ? (
-              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  checked={deleteAlsoDistributions}
-                  disabled={isDeleting}
-                  onChange={(e) => setDeleteAlsoDistributions(e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                    Also delete linked {getPlugin(kind).label} distribution
-                    {deleteModalLinked.length > 1 ? "s" : ""}
-                  </span>
-                  <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
-                    {deleteModalLinked.map((d) => d.name).join(", ")}
-                  </span>
-                </span>
-              </label>
-            ) : (
-              <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                No {getPlugin(kind).label} distribution in the list is linked to this repository.
-              </p>
-            )}
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" disabled={isDeleting} onClick={closeDeleteModal}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="border-red-300 bg-red-600 text-white hover:bg-red-700 dark:border-red-800 dark:bg-red-700 dark:hover:bg-red-600"
-                disabled={isDeleting}
-                onClick={() => void confirmDeleteRepository()}
-              >
-                {isDeleting ? "Deleting…" : "Delete repository"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          onBusyChange={(busy) => {
+            setIsDeleting(busy);
+            setBusyHref(busy ? deleteModalRepo.pulp_href : null);
+          }}
+        />
       ) : null}
 
       {syncModalRepo ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isSyncing) {
-              closeSyncModal();
-            }
+        <RepositorySyncModal
+          repo={syncModalRepo}
+          kind={kind}
+          onClose={() => setSyncModalRepo(null)}
+          onSynced={(result) => {
+            setSyncResult(result);
+            setSyncModalRepo(null);
+            void load();
           }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Sync ${syncModalRepo.name}`}
-            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Sync repository
-            </h2>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                {syncModalRepo.name}
-              </span>
-              <span className="mt-1 block break-all font-mono text-xs text-zinc-500">
-                {syncModalRepo.pulp_href}
-              </span>
-            </p>
-            <div className="mt-4 flex flex-col gap-4">
-              <FormField label="Remote">
-                <select
-                  value={syncRemoteHref}
-                  onChange={(e) => setSyncRemoteHref(e.target.value)}
-                  disabled={isSyncing || isLoadingRemotes}
-                  className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-                >
-                  <option value="">
-                    {isLoadingRemotes
-                      ? "Loading remotes…"
-                      : (remotesByKind[kind] ?? []).length === 0
-                        ? `No ${kind.toUpperCase()} remotes found`
-                        : "Select a remote…"}
-                  </option>
-                  {(remotesByKind[kind] ?? []).map((remote) => (
-                    <option key={remote.pulp_href} value={remote.pulp_href}>
-                      {remote.name} — {remote.url}
-                    </option>
-                  ))}
-                </select>
-                {!isLoadingRemotes && (remotesByKind[kind] ?? []).length === 0 ? (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Create one first on the{" "}
-                    <Link href="/remotes/list" className="underline underline-offset-2">
-                      Remotes
-                    </Link>{" "}
-                    page.
-                  </span>
-                ) : null}
-              </FormField>
-              {getPlugin(kind).syncFields.map((field) => {
-                const value = syncFieldValues[field.name];
-                const options = field.options ?? [];
-                if (field.type === "boolean") {
-                  return (
-                    <label
-                      key={field.name}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-zinc-800 dark:text-zinc-200"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0"
-                        checked={Boolean(value)}
-                        disabled={isSyncing}
-                        onChange={(e) =>
-                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.checked }))
-                        }
-                      />
-                      {field.label}
-                    </label>
-                  );
-                }
-                if (field.type === "enum") {
-                  return (
-                    <FormField key={field.name} label={field.label}>
-                      <select
-                        value={typeof value === "string" ? value : ""}
-                        onChange={(e) =>
-                          setSyncFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                        }
-                        disabled={isSyncing}
-                        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-                      >
-                        {options.map((option) => (
-                          <option key={option} value={option}>
-                            {field.optionLabels?.[option] ?? option}
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                  );
-                }
-                const selected = Array.isArray(value) ? value : [];
-                return (
-                  <FormField key={field.name} label={field.label}>
-                    <select
-                      multiple
-                      value={selected}
-                      onChange={(event) => {
-                        const values = Array.from(
-                          event.target.selectedOptions,
-                          (option) => option.value
-                        );
-                        setSyncFieldValues((prev) => ({ ...prev, [field.name]: values }));
-                      }}
-                      disabled={isSyncing}
-                      className={selectClassName}
-                      size={Math.min(options.length, 6)}
-                    >
-                      {options.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                );
-              })}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" disabled={isSyncing} onClick={closeSyncModal}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                disabled={isSyncing || isLoadingRemotes || !syncRemoteHref}
-                onClick={() => void confirmSync()}
-              >
-                {isSyncing ? "Starting…" : "Start sync"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          onBusyChange={(busy) => setBusyHref(busy ? syncModalRepo.pulp_href : null)}
+        />
       ) : null}
 
       {labelsTarget ? (
