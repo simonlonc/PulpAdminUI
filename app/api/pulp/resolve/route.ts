@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import { normalizePulpHrefToApiPath } from "../repositories/_server";
 import { parsePulpResourceRef, pulpListPathForPrn } from "@/lib/pulp-resource-ref";
 
@@ -27,12 +26,7 @@ function resolvedResourceResponse(object: PulpResolvedObject) {
   });
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const ref = url.searchParams.get("ref")?.trim();
   if (!ref) {
@@ -46,14 +40,9 @@ export async function GET(request: Request) {
 
   if (parsed.kind === "href") {
     const apiPath = normalizePulpHrefToApiPath(parsed.href);
-    const result = await pulpFetch<PulpResolvedObject>(apiPath, authResult.auth);
+    const result = await pulpFetch<PulpResolvedObject>(apiPath, auth);
     if (!result.ok) {
-      if (result.status === 401 || result.status === 403) {
-        const cookieStore = await cookies();
-        cookieStore.delete(PULP_AUTH_COOKIE);
-      }
-
-      return Response.json({ detail: result.detail }, { status: result.status });
+      throw new PulpApiError(result.status, result.detail);
     }
 
     return resolvedResourceResponse(result.data);
@@ -67,15 +56,10 @@ export async function GET(request: Request) {
   const qs = new URLSearchParams({ prn__in: parsed.prn, limit: "1" });
   const result = await pulpFetch<PulpListResponse<PulpResolvedObject>>(
     `${listPath}?${qs.toString()}`,
-    authResult.auth
+    auth
   );
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   const match = result.data.results[0];
@@ -84,4 +68,4 @@ export async function GET(request: Request) {
   }
 
   return resolvedResourceResponse(match);
-}
+});

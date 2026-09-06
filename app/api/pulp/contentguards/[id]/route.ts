@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../../_helpers";
 
 type PulpContentGuardDetail = {
   pulp_href: string;
@@ -56,123 +55,90 @@ function resolveContentGuardPath(encodedRef: string): string | null {
   return normalizedPath.endsWith("/") ? normalizedPath : `${normalizedPath}/`;
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const { id } = await params;
-  const contentGuardPath = resolveContentGuardPath(id);
-  if (!contentGuardPath) {
-    return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
-  }
-
-  const result = await pulpFetch<PulpContentGuardDetail>(contentGuardPath, authResult.auth);
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+export const GET = withPulpAuth(
+  async (_request: Request, auth, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    const contentGuardPath = resolveContentGuardPath(id);
+    if (!contentGuardPath) {
+      return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
     }
 
-    return Response.json({ detail: result.detail }, { status: result.status });
-  }
+    const result = await pulpFetch<PulpContentGuardDetail>(contentGuardPath, auth);
 
-  return Response.json(result.data);
-}
-
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const { id } = await params;
-  const contentGuardPath = resolveContentGuardPath(id);
-  if (!contentGuardPath) {
-    return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
-  }
-
-  let payload: Partial<UpdatePulpContentGuardPayload> | null = null;
-  try {
-    payload = (await request.json()) as Partial<UpdatePulpContentGuardPayload>;
-  } catch {
-    return Response.json({ detail: "Invalid request body." }, { status: 400 });
-  }
-
-  const updatePayload: UpdatePulpContentGuardPayload = {};
-  if (typeof payload.name === "string") updatePayload.name = payload.name.trim();
-  if ("description" in (payload ?? {})) {
-    updatePayload.description = payload.description ?? null;
-  }
-  if (typeof payload.header_name === "string") updatePayload.header_name = payload.header_name.trim();
-  if (typeof payload.header_value === "string") updatePayload.header_value = payload.header_value;
-  if ("jq_filter" in (payload ?? {})) {
-    updatePayload.jq_filter = payload.jq_filter ?? null;
-  }
-  if (typeof payload.ca_certificate === "string") updatePayload.ca_certificate = payload.ca_certificate;
-  if ("guards" in (payload ?? {})) {
-    updatePayload.guards = payload.guards ?? [];
-  }
-
-  if (Object.keys(updatePayload).length === 0) {
-    return Response.json(
-      { detail: "At least one content guard field must be provided." },
-      { status: 400 }
-    );
-  }
-
-  const result = await pulpFetch<PulpContentGuardDetail>(contentGuardPath, authResult.auth, {
-    method: "PATCH",
-    body: JSON.stringify(updatePayload),
-  });
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
     }
 
-    return Response.json({ detail: result.detail }, { status: result.status });
+    return Response.json(result.data);
   }
+);
 
-  return Response.json(result.data);
-}
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const { id } = await params;
-  const contentGuardPath = resolveContentGuardPath(id);
-  if (!contentGuardPath) {
-    return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
-  }
-
-  const result = await pulpFetch(contentGuardPath, authResult.auth, {
-    method: "DELETE",
-  });
-
-  if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+export const PATCH = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    const contentGuardPath = resolveContentGuardPath(id);
+    if (!contentGuardPath) {
+      return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
     }
 
-    return Response.json({ detail: result.detail }, { status: result.status });
-  }
+    let payload: Partial<UpdatePulpContentGuardPayload> | null = null;
+    try {
+      payload = (await request.json()) as Partial<UpdatePulpContentGuardPayload>;
+    } catch {
+      return Response.json({ detail: "Invalid request body." }, { status: 400 });
+    }
 
-  return Response.json({ ok: true });
-}
+    const updatePayload: UpdatePulpContentGuardPayload = {};
+    if (typeof payload.name === "string") updatePayload.name = payload.name.trim();
+    if ("description" in (payload ?? {})) {
+      updatePayload.description = payload.description ?? null;
+    }
+    if (typeof payload.header_name === "string") updatePayload.header_name = payload.header_name.trim();
+    if (typeof payload.header_value === "string") updatePayload.header_value = payload.header_value;
+    if ("jq_filter" in (payload ?? {})) {
+      updatePayload.jq_filter = payload.jq_filter ?? null;
+    }
+    if (typeof payload.ca_certificate === "string") updatePayload.ca_certificate = payload.ca_certificate;
+    if ("guards" in (payload ?? {})) {
+      updatePayload.guards = payload.guards ?? [];
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return Response.json(
+        { detail: "At least one content guard field must be provided." },
+        { status: 400 }
+      );
+    }
+
+    const result = await pulpFetch<PulpContentGuardDetail>(contentGuardPath, auth, {
+      method: "PATCH",
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
+    }
+
+    return Response.json(result.data);
+  }
+);
+
+export const DELETE = withPulpAuth(
+  async (_request: Request, auth, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+    const contentGuardPath = resolveContentGuardPath(id);
+    if (!contentGuardPath) {
+      return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
+    }
+
+    const result = await pulpFetch(contentGuardPath, auth, {
+      method: "DELETE",
+    });
+
+    if (!result.ok) {
+      throw new PulpApiError(result.status, result.detail);
+    }
+
+    return Response.json({ ok: true });
+  }
+);

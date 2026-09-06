@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, waitForTask } from "../../../_server";
 import { isRepositoryVersionInstancePath } from "../../../repository-version-map";
 
@@ -11,14 +10,9 @@ type RepairBody = {
   verify_checksums?: boolean;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -41,23 +35,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const verifyChecksums = body.verify_checksums ?? true;
 
-  const repairResult = await pulpFetch<{ task: string }>(`${apiPath}repair/`, authResult.auth, {
+  const repairResult = await pulpFetch<{ task: string }>(`${apiPath}repair/`, auth, {
     method: "POST",
     body: JSON.stringify({ verify_checksums: verifyChecksums }),
   });
 
   if (!repairResult.ok) {
-    if (repairResult.status === 401 || repairResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: repairResult.detail }, { status: repairResult.status });
+    throw new PulpApiError(repairResult.status, repairResult.detail);
   }
 
   const { task } = repairResult.data;
 
   try {
-    const finished = await waitForTask(task, authResult.auth);
+    const finished = await waitForTask(task, auth);
     return Response.json({ task, state: finished.state ?? "completed" });
   } catch (error) {
     return Response.json(
@@ -65,4 +55,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
       { status: 500 }
     );
   }
-}
+});

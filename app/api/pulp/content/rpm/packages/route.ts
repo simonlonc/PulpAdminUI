@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { getPulpBaseUrl, PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { getPulpBaseUrl, pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { hrefFromCreatedResource, waitForTask } from "@/app/api/pulp/repositories/_server";
 
 type CreateRpmRequestBody = {
@@ -92,30 +91,20 @@ async function findExistingRpmContent(
   return fetchFirst(queryParams.join("&"));
 }
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   const body = (await request.json()) as CreateRpmRequestBody;
   const artifact = body.artifact?.trim();
   if (!artifact) {
     return Response.json({ detail: "Artifact is required." }, { status: 400 });
   }
 
-  const createResult = await pulpFetch<CreateRpmResponse>("/content/rpm/packages/", authResult.auth, {
+  const createResult = await pulpFetch<CreateRpmResponse>("/content/rpm/packages/", auth, {
     method: "POST",
     body: JSON.stringify({ artifact: toAbsoluteArtifactUrl(artifact) }),
   });
 
   if (!createResult.ok) {
-    if (createResult.status === 401 || createResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: createResult.detail }, { status: createResult.status });
+    throw new PulpApiError(createResult.status, createResult.detail);
   }
 
   const created = createResult.data;
@@ -123,7 +112,7 @@ export async function POST(request: Request) {
 
   if (created.task) {
     try {
-      const task = await waitForTask(created.task, authResult.auth);
+      const task = await waitForTask(created.task, auth);
       content = hrefFromCreatedResource(task.created_resources?.[0]) ?? task.pulp_href ?? task.href ?? content;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -133,7 +122,7 @@ export async function POST(request: Request) {
         throw error;
       }
 
-      const existingContent = await findExistingRpmContent(authResult.auth, duplicateInfo);
+      const existingContent = await findExistingRpmContent(auth, duplicateInfo);
       if (!existingContent) {
         throw error;
       }
@@ -146,4 +135,4 @@ export async function POST(request: Request) {
     content,
     task: created.task ?? null,
   });
-}
+});

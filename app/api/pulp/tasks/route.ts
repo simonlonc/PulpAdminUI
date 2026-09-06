@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import { buildUpstreamListParams, normalizePulpHrefToApiPath } from "../repositories/_server";
 import { PulpPaginatedResponse, PulpTask } from "@/services/pulp/types";
 
@@ -20,32 +19,22 @@ function clampLimit(value: string | null): number {
   return Number.isFinite(n) && n >= 1 ? Math.min(500, n) : 100;
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const qs = buildUpstreamListParams(url.searchParams, TASK_LIST_PARAMS);
   qs.set("limit", String(clampLimit(url.searchParams.get("limit"))));
 
   const result = await pulpFetch<PulpPaginatedResponse<PulpTask>>(
     `/tasks/?${qs.toString()}`,
-    authResult.auth
+    auth
   );
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
 type CancelBody = {
   pulp_href?: string;
@@ -55,12 +44,7 @@ function isTaskApiPath(path: string): boolean {
   return path.includes("/tasks/");
 }
 
-export async function PATCH(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const PATCH = withPulpAuth(async (request, auth) => {
   const body = (await request.json()) as CancelBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
@@ -73,17 +57,12 @@ export async function PATCH(request: Request) {
   }
 
   // PatchedTaskCancel only accepts "canceled"; Pulp answers 409 for tasks that already finished.
-  const result = await pulpFetch<PulpTask>(apiPath, authResult.auth, {
+  const result = await pulpFetch<PulpTask>(apiPath, auth, {
     method: "PATCH",
     body: JSON.stringify({ state: "canceled" }),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
     // On 409 Pulp returns the task itself, not an error body, so build a readable message.
     if (result.status === 409) {
       return Response.json(
@@ -92,8 +71,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});

@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, PulpPaginatedJson } from "../repositories/_server";
 import { PulpTaskGroup } from "@/services/pulp/types";
 
@@ -20,12 +19,7 @@ function parseLimit(value: string | null): number {
   return Math.min(500, n);
 }
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const pulpHref = url.searchParams.get("pulp_href")?.trim();
 
@@ -47,17 +41,12 @@ export async function GET(request: Request) {
 
   const result = await pulpFetch<PulpTaskGroup | PulpPaginatedJson<PulpTaskGroup>>(
     path,
-    authResult.auth
+    auth
   );
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});

@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   hrefFromCreatedResource,
   extractNextApiPath,
@@ -112,97 +111,82 @@ async function finalizeDistributionWrite(
   });
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
-  if (!plugin) {
-    return Response.json({ detail: `Unknown distribution kind: ${kind}` }, { status: 400 });
-  }
-
-  const body = (await request.json()) as CreateBody;
-  const repoHref = body.repository?.trim();
-  const name = body.name?.trim();
-  const basePath = body.base_path?.trim();
-
-  if (!repoHref) {
-    return Response.json({ detail: "repository (pulp_href) is required." }, { status: 400 });
-  }
-  if (!name) {
-    return Response.json({ detail: "Distribution name is required." }, { status: 400 });
-  }
-  if (!basePath) {
-    return Response.json({ detail: "base_path is required." }, { status: 400 });
-  }
-
-  const apiPath = normalizePulpHrefToApiPath(repoHref);
-  if (!isPluginRepositoryPath(plugin, apiPath)) {
-    return Response.json(
-      {
-        detail: `Only ${plugin.label} repository hrefs can be bound to ${plugin.article} ${plugin.label} distribution.`,
-      },
-      { status: 400 }
-    );
-  }
-
-  const repositoryField = toPulpHrefPath(repoHref);
-
-  const linked = await findFirstLinkedDistributionHref(plugin, repoHref, authResult.auth);
-  if (!linked.ok) {
-    if (linked.status === 401 || linked.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
+export const POST = withPulpAuth(
+  async (request: Request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+    const { kind } = await params;
+    const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
+    if (!plugin) {
+      return Response.json({ detail: `Unknown distribution kind: ${kind}` }, { status: 400 });
     }
-    return Response.json({ detail: linked.detail }, { status: linked.status });
-  }
 
-  if (linked.pulp_href) {
-    const patchPath = normalizePulpHrefToApiPath(linked.pulp_href);
-    const patchResult = await pulpFetch<TaskRefResponse>(patchPath, authResult.auth, {
-      method: "PATCH",
-      body: JSON.stringify({ name, base_path: basePath }),
-    });
+    const body = (await request.json()) as CreateBody;
+    const repoHref = body.repository?.trim();
+    const name = body.name?.trim();
+    const basePath = body.base_path?.trim();
 
-    if (!patchResult.ok) {
-      if (patchResult.status === 401 || patchResult.status === 403) {
-        const cookieStore = await cookies();
-        cookieStore.delete(PULP_AUTH_COOKIE);
+    if (!repoHref) {
+      return Response.json({ detail: "repository (pulp_href) is required." }, { status: 400 });
+    }
+    if (!name) {
+      return Response.json({ detail: "Distribution name is required." }, { status: 400 });
+    }
+    if (!basePath) {
+      return Response.json({ detail: "base_path is required." }, { status: 400 });
+    }
+
+    const apiPath = normalizePulpHrefToApiPath(repoHref);
+    if (!isPluginRepositoryPath(plugin, apiPath)) {
+      return Response.json(
+        {
+          detail: `Only ${plugin.label} repository hrefs can be bound to ${plugin.article} ${plugin.label} distribution.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const repositoryField = toPulpHrefPath(repoHref);
+
+    const linked = await findFirstLinkedDistributionHref(plugin, repoHref, auth);
+    if (!linked.ok) {
+      throw new PulpApiError(linked.status, linked.detail);
+    }
+
+    if (linked.pulp_href) {
+      const patchPath = normalizePulpHrefToApiPath(linked.pulp_href);
+      const patchResult = await pulpFetch<TaskRefResponse>(patchPath, auth, {
+        method: "PATCH",
+        body: JSON.stringify({ name, base_path: basePath }),
+      });
+
+      if (!patchResult.ok) {
+        throw new PulpApiError(patchResult.status, patchResult.detail);
       }
-      return Response.json({ detail: patchResult.detail }, { status: patchResult.status });
+
+      const taskHref = patchResult.data.task ?? null;
+
+      return finalizeDistributionWrite(auth, linked.pulp_href, name, basePath, taskHref);
     }
 
-    const taskHref = patchResult.data.task ?? null;
+    const createResult = await pulpFetch<TaskRefResponse & Partial<PulpDistribution>>(
+      plugin.distributionPath,
+      auth,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          base_path: basePath,
+          repository: repositoryField,
+        }),
+      }
+    );
 
-    return finalizeDistributionWrite(authResult.auth, linked.pulp_href, name, basePath, taskHref);
+    if (!createResult.ok) {
+      throw new PulpApiError(createResult.status, createResult.detail);
+    }
+
+    const raw = createResult.data;
+    const pulpHref = raw.pulp_href ?? raw.href ?? null;
+
+    return finalizeDistributionWrite(auth, pulpHref, name, basePath, raw.task ?? null);
   }
-
-  const createResult = await pulpFetch<TaskRefResponse & Partial<PulpDistribution>>(
-    plugin.distributionPath,
-    authResult.auth,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        base_path: basePath,
-        repository: repositoryField,
-      }),
-    }
-  );
-
-  if (!createResult.ok) {
-    if (createResult.status === 401 || createResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: createResult.detail }, { status: createResult.status });
-  }
-
-  const raw = createResult.data;
-  const pulpHref = raw.pulp_href ?? raw.href ?? null;
-
-  return finalizeDistributionWrite(authResult.auth, pulpHref, name, basePath, raw.task ?? null);
-}
+);

@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { pulpFetch } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import { findPulpContentGuardKind } from "@/services/pulp/content-guard-kinds";
 import { buildUpstreamListParams, toPulpHrefPath } from "../repositories/_server";
 
@@ -22,12 +21,7 @@ type PulpListResponse<T> = {
   results: T[];
 };
 
-export async function GET(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
   const qs = buildUpstreamListParams(url.searchParams, ["pulp_type"]);
   // Content guards have no labels, and Pulp 400s on this filter for them.
@@ -35,19 +29,14 @@ export async function GET(request: Request) {
 
   const result = await pulpFetch<PulpListResponse<PulpContentGuard>>(
     `/contentguards/?${qs.toString()}`,
-    authResult.auth
+    auth
   );
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
 type CreateBody = {
   kind?: string;
@@ -62,12 +51,7 @@ type CreateBody = {
 
 /** Content-guard create: dispatches on `kind` to the matching typed upstream path. Unlike
  * distributions, every contentguards endpoint is synchronous (201, no task href). */
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   let body: CreateBody;
   try {
     body = (await request.json()) as CreateBody;
@@ -113,18 +97,14 @@ export async function POST(request: Request) {
     createPayload.guards = body.guards.map((guard) => toPulpHrefPath(guard));
   }
 
-  const result = await pulpFetch<PulpContentGuard>(`/contentguards/${descriptor.path}/`, authResult.auth, {
+  const result = await pulpFetch<PulpContentGuard>(`/contentguards/${descriptor.path}/`, auth, {
     method: "POST",
     body: JSON.stringify(createPayload),
   });
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});

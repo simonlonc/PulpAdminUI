@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch } from "@/lib/pulp";
+import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   normalizePulpHrefToApiPath,
   resolvePublicationHrefAfterTask,
@@ -15,14 +14,9 @@ type PublishBody = {
   pulp_href?: string;
 };
 
-export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
   const { kind } = await params;
-  const plugin = findPulpPluginIn(await getPulpPluginRegistry(authResult.auth), kind);
+  const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), kind);
   if (!plugin) {
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
@@ -41,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   const repository = toPulpHrefPath(repoHref);
 
-  const publishResult = await pulpFetch<TaskRefResponse>(plugin.publicationPath, authResult.auth, {
+  const publishResult = await pulpFetch<TaskRefResponse>(plugin.publicationPath, auth, {
     method: "POST",
     body: JSON.stringify({
       repository,
@@ -50,11 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   });
 
   if (!publishResult.ok) {
-    if (publishResult.status === 401 || publishResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: publishResult.detail }, { status: publishResult.status });
+    throw new PulpApiError(publishResult.status, publishResult.detail);
   }
 
   const published = publishResult.data;
@@ -62,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
 
   try {
     if (published.task) {
-      const task = await waitForTask(published.task, authResult.auth);
+      const task = await waitForTask(published.task, auth);
       publicationHref = resolvePublicationHrefAfterTask(task, publicationHref);
     }
   } catch (error) {
@@ -77,4 +67,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
     repository: normalizePulpHrefToApiPath(repoHref),
     task: published.task ?? null,
   });
-}
+});

@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
-import { PULP_AUTH_COOKIE, pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { requirePulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { buildUpstreamListParams, normalizePulpHrefToApiPath, TaskRefResponse, waitForTask } from "../_server";
 
 type PulpRepositoryRow = {
@@ -133,13 +132,8 @@ async function resolvePlugin(
   return { ok: true, plugin };
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
+export const GET = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+  const pluginResult = await resolvePlugin(params, auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -150,28 +144,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
 
   const result = await pulpFetch<PulpRepositoryListResponse>(
     `${plugin.repositoryPath}?${queryParams.toString()}`,
-    authResult.auth
+    auth
   );
 
   if (!result.ok) {
-    if (result.status === 401 || result.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: result.detail }, { status: result.status });
+    throw new PulpApiError(result.status, result.detail);
   }
 
   return Response.json(result.data);
-}
+});
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
+export const PATCH = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+  const pluginResult = await resolvePlugin(params, auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -194,22 +178,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
 
   const patchPayload = buildPatchPayload(plugin, body, name);
 
-  const patchResult = await pulpFetch<TaskRefResponse & { name?: string }>(apiPath, authResult.auth, {
+  const patchResult = await pulpFetch<TaskRefResponse & { name?: string }>(apiPath, auth, {
     method: "PATCH",
     body: JSON.stringify(patchPayload),
   });
 
   if (!patchResult.ok) {
-    if (patchResult.status === 401 || patchResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: patchResult.detail }, { status: patchResult.status });
+    throw new PulpApiError(patchResult.status, patchResult.detail);
   }
 
   if (patchResult.status === 202 && patchResult.data.task) {
     try {
-      await waitForTask(patchResult.data.task, authResult.auth);
+      await waitForTask(patchResult.data.task, auth);
     } catch (error) {
       return Response.json(
         { detail: error instanceof Error ? error.message : "Repository update task failed." },
@@ -220,15 +200,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ki
 
   const updatedName = patchResult.data.name;
   return Response.json({ ok: true, name: typeof updatedName === "string" ? updatedName : name });
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
-  const pluginResult = await resolvePlugin(params, authResult.auth);
+export const DELETE = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
+  const pluginResult = await resolvePlugin(params, auth);
   if (!pluginResult.ok) {
     return pluginResult.response;
   }
@@ -240,21 +215,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ k
   }
 
   const apiPath = normalizePulpHrefToApiPath(pulpHref);
-  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, authResult.auth, {
+  const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, auth, {
     method: "DELETE",
   });
 
   if (!deleteResult.ok) {
-    if (deleteResult.status === 401 || deleteResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-    return Response.json({ detail: deleteResult.detail }, { status: deleteResult.status });
+    throw new PulpApiError(deleteResult.status, deleteResult.detail);
   }
 
   if (deleteResult.data.task) {
-    await waitForTask(deleteResult.data.task, authResult.auth);
+    await waitForTask(deleteResult.data.task, auth);
   }
 
   return Response.json({ ok: true });
-}
+});
