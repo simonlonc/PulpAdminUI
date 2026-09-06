@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { CreatePulpGroupPayload } from "@/services/pulp/types";
 
-export default function GroupsListPage() {
+function GroupsListPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
@@ -243,5 +243,13 @@ export default function GroupsListPage() {
         </div>
       ) : null}
     </AdminShell>
+  );
+}
+
+export default function GroupsListPage() {
+  return (
+    <Suspense fallback={<Card className="p-6">Loading…</Card>}>
+      <GroupsListPageContent />
+    </Suspense>
   );
 }
