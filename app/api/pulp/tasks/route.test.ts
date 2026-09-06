@@ -31,6 +31,7 @@ describe("GET /api/pulp/tasks", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
     deleteCookieMock.mockClear();
@@ -95,6 +96,7 @@ describe("PATCH /api/pulp/tasks", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
     deleteCookieMock.mockClear();
