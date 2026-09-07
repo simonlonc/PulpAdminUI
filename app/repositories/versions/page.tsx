@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
@@ -45,6 +45,28 @@ function RepositoryVersionsInner() {
   const [rollingBackHref, setRollingBackHref] = useState<string | null>(null);
   const [isModifyModalOpen, setIsModifyModalOpen] = useState(false);
 
+  const versionsRequestRef = useRef(0);
+
+  const loadVersions = useCallback(async () => {
+    if (!hasSession || !pulpHref) return;
+    const requestId = ++versionsRequestRef.current;
+    setIsLoadingVersions(true);
+    setError(null);
+    try {
+      const data = await pulpRepositoryManagementService.listRepositoryVersions(kind, pulpHref);
+      if (versionsRequestRef.current !== requestId) return;
+      setCount(data.count);
+      setVersions(data.results);
+    } catch (e) {
+      if (versionsRequestRef.current !== requestId) return;
+      setVersions([]);
+      setCount(0);
+      setError(e instanceof Error ? e.message : "Failed to load repository versions.");
+    } finally {
+      if (versionsRequestRef.current === requestId) setIsLoadingVersions(false);
+    }
+  }, [hasSession, pulpHref, kind, setError]);
+
   useEffect(() => {
     if (!hasSession || !pulpHref) {
       setVersions([]);
@@ -52,50 +74,12 @@ function RepositoryVersionsInner() {
       return;
     }
 
-    let active = true;
-
-    async function load() {
-      setIsLoadingVersions(true);
-      setError(null);
-      try {
-        const data = await pulpRepositoryManagementService.listRepositoryVersions(kind, pulpHref);
-        if (!active) return;
-        setCount(data.count);
-        setVersions(data.results);
-      } catch (e) {
-        if (active) {
-          setVersions([]);
-          setCount(0);
-          setError(e instanceof Error ? e.message : "Failed to load repository versions.");
-        }
-      } finally {
-        if (active) setIsLoadingVersions(false);
-      }
-    }
-
-    void load();
+    void loadVersions();
 
     return () => {
-      active = false;
+      versionsRequestRef.current += 1;
     };
-  }, [hasSession, pulpHref, kind, setError]);
-
-  async function reloadVersions() {
-    if (!hasSession || !pulpHref) return;
-    setIsLoadingVersions(true);
-    setError(null);
-    try {
-      const data = await pulpRepositoryManagementService.listRepositoryVersions(kind, pulpHref);
-      setCount(data.count);
-      setVersions(data.results);
-    } catch (e) {
-      setVersions([]);
-      setCount(0);
-      setError(e instanceof Error ? e.message : "Failed to load repository versions.");
-    } finally {
-      setIsLoadingVersions(false);
-    }
-  }
+  }, [hasSession, pulpHref, kind, loadVersions]);
 
   const latestVersionNumber = versions.reduce((max, v) => Math.max(max, v.number), -Infinity);
 
@@ -117,7 +101,7 @@ function RepositoryVersionsInner() {
       if (!result.ok) {
         throw new Error(result.detail);
       }
-      await reloadVersions();
+      await loadVersions();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Rollback failed.");
     } finally {
@@ -236,7 +220,7 @@ function RepositoryVersionsInner() {
           onClose={() => setIsModifyModalOpen(false)}
           onSaved={() => {
             setIsModifyModalOpen(false);
-            void reloadVersions();
+            void loadVersions();
           }}
         />
       ) : null}
