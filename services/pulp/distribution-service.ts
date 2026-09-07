@@ -1,4 +1,6 @@
+import { hrefFromCreatedResource } from "@/lib/pulp-task-result";
 import { readApiDetail } from "./http";
+import { settleDispatchedTask } from "./task-service";
 import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   PulpDistribution,
@@ -17,7 +19,7 @@ export type CreateDistributionResult = {
   task: string | null;
 };
 
-/** Result of the plain POST /api/pulp/distributions create (already awaited server-side). */
+/** Result of the plain POST /api/pulp/distributions create, once the dispatched task settled. */
 export type CreatedDistribution = {
   pulp_href: string | null;
   name: string;
@@ -34,6 +36,53 @@ function encodeDistributionRef(pulpHref: string): string | null {
   }
 
   return encodeURIComponent(normalized);
+}
+
+type DistributionWriteResponse = {
+  pulp_href: string | null;
+  name: string;
+  base_path: string;
+  base_url: string | null;
+  task: string | null;
+};
+
+/** What the update and delete routes return before the browser has polled the dispatched task. */
+type DistributionTaskResponse = { task: string | null };
+
+/**
+ * Waits for the dispatched write, then re-reads the distribution so the caller
+ * gets the fields only Pulp can fill (base_url above all). The routes used to do
+ * both server-side; a failed detail read costs only those fields, exactly as it
+ * did there.
+ */
+async function settleDistributionWrite(
+  raw: DistributionWriteResponse
+): Promise<ServiceDataResult<CreateDistributionResult>> {
+  const settled = await settleDispatchedTask(raw.task);
+  if (!settled.ok) return { ok: false, detail: settled.detail };
+
+  const pulpHref = settled.task
+    ? (hrefFromCreatedResource(settled.task.created_resources?.[0]) ?? raw.pulp_href)
+    : raw.pulp_href;
+
+  let baseUrl = raw.base_url;
+  let name = raw.name;
+  let basePath = raw.base_path;
+  if (pulpHref) {
+    try {
+      const detail = await pulpDistributionService.get(pulpHref);
+      baseUrl = detail.base_url ?? baseUrl;
+      name = detail.name ?? name;
+      basePath = detail.base_path ?? basePath;
+    } catch {
+      // The write succeeded; only the enriched fields are missing.
+    }
+  }
+
+  return {
+    ok: true,
+    data: { name, pulp_href: pulpHref, base_url: baseUrl, base_path: basePath, task: raw.task },
+  };
 }
 
 export const pulpDistributionService = {
@@ -55,7 +104,7 @@ export const pulpDistributionService = {
     if (!response.ok) {
       return { ok: false, detail: await readApiDetail(response) };
     }
-    return { ok: true, data: (await response.json()) as CreateDistributionResult };
+    return settleDistributionWrite((await response.json()) as DistributionWriteResponse);
   },
 
   /**
@@ -120,7 +169,16 @@ export const pulpDistributionService = {
     if (!response.ok) {
       return { ok: false, detail: await readApiDetail(response) };
     }
-    return { ok: true, data: (await response.json()) as CreatedDistribution };
+
+    const settled = await settleDistributionWrite(
+      (await response.json()) as DistributionWriteResponse
+    );
+    if (!settled.ok) {
+      return { ok: false, detail: settled.detail };
+    }
+
+    const { pulp_href, name, base_path, base_url } = settled.data;
+    return { ok: true, data: { pulp_href, name, base_path, base_url } };
   },
 
   async update(
@@ -145,6 +203,12 @@ export const pulpDistributionService = {
       };
     }
 
+    const data = (await response.json()) as DistributionTaskResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) {
+      return { ok: false, detail: settled.detail };
+    }
+
     return { ok: true };
   },
 
@@ -163,6 +227,12 @@ export const pulpDistributionService = {
         ok: false,
         detail: await readApiDetail(response),
       };
+    }
+
+    const data = (await response.json()) as DistributionTaskResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) {
+      return { ok: false, detail: settled.detail };
     }
 
     return { ok: true };

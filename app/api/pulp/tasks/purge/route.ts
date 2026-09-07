@@ -1,6 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { waitForTask } from "../../repositories/_server";
 import type { PulpTaskPurgeState } from "@/services/pulp/types";
 
 const PURGE_STATES = ["skipped", "completed", "failed", "canceled"] as const;
@@ -46,17 +45,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 
   const { task } = purgeResult.data;
 
-  try {
-    const finished = await waitForTask(task, auth);
-    return Response.json({
-      task,
-      state: finished.state ?? "completed",
-      progress_reports: finished.progress_reports ?? [],
-    });
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Task purge failed." },
-      { status: 500 }
-    );
-  }
+  // Dispatch-and-return: purging a long task history outlives an HTTP request, so the task
+  // href goes back to the UI to poll and read the progress reports off.
+  return Response.json({ task });
 });

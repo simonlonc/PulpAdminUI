@@ -1,6 +1,6 @@
 import { pulpFetch } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { toPulpHrefPath, waitForTask } from "../_server";
+import { toPulpHrefPath } from "../_server";
 
 type ReclaimBody = {
   repo_hrefs?: string[];
@@ -32,17 +32,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 
   const { task } = reclaimResult.data;
 
-  try {
-    const finished = await waitForTask(task, auth);
-    return Response.json({
-      task,
-      state: finished.state ?? "completed",
-      progress_reports: finished.progress_reports ?? [],
-    });
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Reclaim space task failed." },
-      { status: 500 }
-    );
-  }
+  // Dispatch-and-return: reclaiming across many repositories outlives an HTTP request, so the task
+  // href goes back to the UI to poll and read the progress reports off.
+  return Response.json({ task });
 });

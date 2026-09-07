@@ -1,4 +1,5 @@
 import { readApiDetail } from "./http";
+import { settleDispatchedTask } from "./task-service";
 import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   PulpPaginatedResponse,
@@ -8,6 +9,9 @@ import {
   ServiceDataResult,
   ServiceResult,
 } from "./types";
+
+/** What the update and delete routes return before the browser has polled the dispatched task. */
+type RemoteWriteResponse = { task: string | null };
 
 function remotesPath(kind: PulpPluginKind): string {
   return `/api/pulp/remotes/${kind}`;
@@ -55,6 +59,11 @@ export const pulpRemoteService = {
     if (!response.ok) {
       return { ok: false, detail: await readApiDetail(response) };
     }
+
+    const data = (await response.json()) as RemoteWriteResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
     return { ok: true };
   },
 
@@ -67,6 +76,11 @@ export const pulpRemoteService = {
     if (!response.ok) {
       return { ok: false, detail: await readApiDetail(response) };
     }
+
+    const data = (await response.json()) as RemoteWriteResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
     return { ok: true };
   },
 };
