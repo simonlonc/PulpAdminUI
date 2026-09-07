@@ -6,7 +6,6 @@ import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
@@ -29,7 +28,6 @@ function GroupsListPageContent() {
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { groups, createGroup, updateGroup, deleteGroup } = usePulpGroups(hasSession);
-  const { users } = usePulpUsers(hasSession);
 
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
@@ -109,8 +107,6 @@ function GroupsListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

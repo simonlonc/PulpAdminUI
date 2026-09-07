@@ -6,9 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -48,8 +46,6 @@ function GlobalSearchPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { plugins } = usePulpPluginsContext();
 
   const [ref, setRef] = useState("");
@@ -156,8 +152,6 @@ function GlobalSearchPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isResolving}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -307,8 +301,6 @@ function GlobalSearchPageContent() {
 
 function GlobalSearchSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -317,8 +309,6 @@ function GlobalSearchSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

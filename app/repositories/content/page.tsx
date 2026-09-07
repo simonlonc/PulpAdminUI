@@ -6,9 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
@@ -35,8 +33,6 @@ function RepositoryContentInner() {
     usePulpAuthContext();
   const { findContentForHref, findPluginForRepositoryHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   const [count, setCount] = useState(0);
   const [totalSizeBytes, setTotalSizeBytes] = useState<number | null>(null);
@@ -120,8 +116,6 @@ function RepositoryContentInner() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingContent}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

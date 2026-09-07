@@ -2,9 +2,7 @@
 
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { usePulpWorkers } from "@/components/pulp/use-pulp-workers";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
@@ -34,8 +32,6 @@ export default function WorkersListPage() {
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { workers } = usePulpWorkers(hasSession);
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -44,8 +40,6 @@ export default function WorkersListPage() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

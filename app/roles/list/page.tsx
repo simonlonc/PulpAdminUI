@@ -5,10 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRoles } from "@/components/pulp/use-pulp-roles";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -83,8 +81,6 @@ function RolesListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout, setError } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { data, loading, totalPages, createRole, patchRole, deleteRole } = usePulpRoles(
     hasSession,
     page,
@@ -274,8 +270,6 @@ function RolesListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -604,8 +598,6 @@ function RolesListPageContent() {
 
 function RolesListSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -614,8 +606,6 @@ function RolesListSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

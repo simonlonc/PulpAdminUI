@@ -4,9 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -49,8 +47,6 @@ function RemotesListPageContent() {
     usePulpAuthContext();
   const { plugins } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
     usePulpListQuery();
 
@@ -133,8 +129,6 @@ function RemotesListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingRemotes || isSaving}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -359,8 +353,6 @@ function RemotesListPageContent() {
 
 function RemotesListSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -369,8 +361,6 @@ function RemotesListSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

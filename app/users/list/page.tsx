@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { CreatePulpUserPayload, UpdatePulpUserPayload } from "@/services/pulp/types";
@@ -28,7 +27,6 @@ export default function UsersListPage() {
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { users, createUser, updateUser, deleteUser, changeUserPassword } =
     usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   const createDialogTitleId = useId();
   const editDialogTitleId = useId();
@@ -234,8 +232,6 @@ export default function UsersListPage() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
