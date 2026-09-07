@@ -72,7 +72,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
 
   const dispatched = syncResult.data;
 
-  // Sync is dispatch-and-return: a large first sync outlives waitForTask's 5-minute ceiling,
+  // Sync is dispatch-and-return: a large first sync outlives an HTTP request's lifetime,
   // so the task href goes back to the UI to poll instead.
   return Response.json({
     repository: repoApiPath,
