@@ -2,7 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { normalizePulpHrefToApiPath, waitForTask } from "../../../_server";
+import { normalizePulpHrefToApiPath } from "../../../_server";
 import { isRepositoryVersionInstancePath } from "../../../repository-version-map";
 
 type RepairBody = {
@@ -46,13 +46,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
 
   const { task } = repairResult.data;
 
-  try {
-    const finished = await waitForTask(task, auth);
-    return Response.json({ task, state: finished.state ?? "completed" });
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Repository version repair task failed." },
-      { status: 500 }
-    );
-  }
+  // Dispatch-and-return: repairing a large version outlives an HTTP request, so the task href
+  // goes back to the UI to poll instead.
+  return Response.json({ task });
 });
