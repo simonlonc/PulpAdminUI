@@ -82,5 +82,40 @@ export function usePulpListQuery(options?: { pageSize?: number }) {
     [pushQuery, query]
   );
 
-  return { query, params, setSearch, setOrdering, setPage, setPageSize, setLabelSelect, setQ };
+  /**
+   * Merges page-specific params (not part of PulpListQuery) into the current
+   * URL through the same router.replace path the setters above use, so a
+   * page can URL-mirror its own filters without inventing its own
+   * read/write-URL plumbing. A key set to "" is deleted rather than written
+   * as an empty param, and the page resets to the default like every other
+   * filter change; every other param is left untouched.
+   */
+  const setExtraParams = useCallback(
+    (next: Record<string, string>) => {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(next)) {
+        if (value === "") {
+          nextParams.delete(key);
+        } else {
+          nextParams.set(key, value);
+        }
+      }
+      nextParams.delete("page");
+      const qs = nextParams.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  return {
+    query,
+    params,
+    setSearch,
+    setOrdering,
+    setPage,
+    setPageSize,
+    setLabelSelect,
+    setQ,
+    setExtraParams,
+  };
 }

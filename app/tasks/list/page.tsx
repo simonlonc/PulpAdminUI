@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpTasks } from "@/components/pulp/use-pulp-tasks";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -25,6 +24,11 @@ import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
+import {
+  applyPulpTaskFilters,
+  parsePulpTaskFilters,
+  pulpTaskFiltersToUrlParams,
+} from "@/lib/task-list-filters";
 import { pulpTaskService } from "@/services/pulp/task-service";
 import { PulpTask } from "@/services/pulp/types";
 
@@ -76,40 +80,20 @@ function shortTaskName(name: string): string {
   return parts.length > 2 ? parts.slice(-2).join(".") : name;
 }
 
-/** "YYYY-MM-DD" from a date input to the ISO-8601 timestamp Pulp's date-range filters accept. */
-function dateInputToIsoStart(value: string): string {
-  return `${value}T00:00:00.000Z`;
-}
-
-function dateInputToIsoEnd(value: string): string {
-  return `${value}T23:59:59.999Z`;
-}
-
 function TasksListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ } = usePulpListQuery({
-    pageSize: PAGE_SIZE,
-  });
+  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setExtraParams } =
+    usePulpListQuery({ pageSize: PAGE_SIZE });
 
-  const [state, setState] = useState("");
-  const [startedAfter, setStartedAfter] = useState("");
-  const [startedBefore, setStartedBefore] = useState("");
+  const searchParams = useSearchParams();
+  const filters = parsePulpTaskFilters(searchParams);
+  const { state, startedAfter, startedBefore } = filters;
 
   const params = useMemo(() => {
     const p = buildPulpListParams(query, { searchField: "name", searchLookup: "contains" });
-    if (state) {
-      p.set("state", state);
-    }
-    if (startedAfter) {
-      p.set("started_at__gte", dateInputToIsoStart(startedAfter));
-    }
-    if (startedBefore) {
-      p.set("started_at__lte", dateInputToIsoEnd(startedBefore));
-    }
+    applyPulpTaskFilters(p, { state, startedAfter, startedBefore });
     return p;
   }, [query, state, startedAfter, startedBefore]);
 
@@ -126,18 +110,15 @@ function TasksListPageContent() {
   }, [data, query.page, totalPages, setPage]);
 
   function handleStateChange(value: string) {
-    setState(value);
-    setPage(1);
+    setExtraParams(pulpTaskFiltersToUrlParams({ ...filters, state: value }));
   }
 
   function handleStartedAfterChange(value: string) {
-    setStartedAfter(value);
-    setPage(1);
+    setExtraParams(pulpTaskFiltersToUrlParams({ ...filters, startedAfter: value }));
   }
 
   function handleStartedBeforeChange(value: string) {
-    setStartedBefore(value);
-    setPage(1);
+    setExtraParams(pulpTaskFiltersToUrlParams({ ...filters, startedBefore: value }));
   }
 
   async function confirmCancel() {
@@ -169,8 +150,6 @@ function TasksListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -430,8 +409,6 @@ function TasksListPageContent() {
 
 function TasksListSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -440,8 +417,6 @@ function TasksListSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

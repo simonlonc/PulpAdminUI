@@ -22,8 +22,6 @@ export default function ErrorBoundary({
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={0}
-      groupsCount={0}
       error={null}
       onLogout={logout}
     >

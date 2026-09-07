@@ -14,8 +14,6 @@ type AdminShellProps = {
   hasSession: boolean;
   sessionUser: string | null;
   isLoading: boolean;
-  usersCount: number;
-  groupsCount: number;
   error: string | null;
   onLogout: () => void;
   children: ReactNode;
@@ -27,8 +25,6 @@ export function AdminShell({
   hasSession,
   sessionUser,
   isLoading,
-  usersCount,
-  groupsCount,
   error,
   onLogout,
   children,
@@ -36,10 +32,7 @@ export function AdminShell({
   return (
     <main className="min-h-screen w-full bg-zinc-100/70 dark:bg-zinc-950">
       <div className="flex min-h-screen flex-col md:flex-row">
-        <ManagementSidebar
-          usersCount={usersCount}
-          groupsCount={groupsCount}
-        />
+        <ManagementSidebar />
 
         <section className="flex min-w-0 flex-1 flex-col p-4 md:p-8">
           <header className="sticky top-0 z-20 -mx-4 mb-6 border-b border-zinc-200 bg-zinc-100/90 px-4 py-3 backdrop-blur md:-mx-8 md:px-8 dark:border-zinc-800 dark:bg-zinc-950/90">

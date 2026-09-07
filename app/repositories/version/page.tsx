@@ -7,9 +7,7 @@ import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { RepositoryVersionSummary } from "@/components/pulp/repository-version-summary";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { CheckboxField } from "@/components/ui/form-field";
@@ -30,8 +28,6 @@ function RepositoryVersionInner() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   const [version, setVersion] = useState<PulpRepositoryVersion | null>(null);
   const [isLoadingVersion, setIsLoadingVersion] = useState(false);
@@ -139,8 +135,6 @@ function RepositoryVersionInner() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingVersion || isDeleting || isRepairing}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

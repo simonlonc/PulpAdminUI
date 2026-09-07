@@ -15,8 +15,6 @@ export default function NotFound() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={0}
-      groupsCount={0}
       error={null}
       onLogout={logout}
     >

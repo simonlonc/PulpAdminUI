@@ -3,9 +3,7 @@
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { ChangelogMarkdown } from "@/components/pulp/changelog-markdown";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ChangelogReleaseFile } from "@/lib/get-changelog-releases";
 
@@ -17,8 +15,6 @@ export function ChangelogPageClient({ releases }: ChangelogPageClientProps) {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -27,8 +23,6 @@ export function ChangelogPageClient({ releases }: ChangelogPageClientProps) {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

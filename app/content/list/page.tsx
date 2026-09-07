@@ -7,10 +7,8 @@ import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpContent } from "@/components/pulp/use-pulp-content";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import {
@@ -36,8 +34,6 @@ function ContentListPageContent() {
     usePulpAuthContext();
   const { plugins, getPlugin, findContentForHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { query, params, setPage, setPageSize, setQ } = usePulpListQuery({ pageSize: PAGE_SIZE });
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
   const [repositoryFilter, setRepositoryFilter] = useState("");
@@ -73,8 +69,6 @@ function ContentListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -222,8 +216,6 @@ function ContentListPageContent() {
 
 function ContentListSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -232,8 +224,6 @@ function ContentListSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
