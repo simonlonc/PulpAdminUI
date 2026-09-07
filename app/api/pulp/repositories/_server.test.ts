@@ -3,11 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildUpstreamListParams,
   extractNextApiPath,
-  hrefFromCreatedResource,
   normalizePulpHrefToApiPath,
-  resolvePublicationHrefAfterTask,
   toPulpHrefPath,
-  type TaskResponse,
 } from "@/app/api/pulp/repositories/_server";
 
 describe("buildUpstreamListParams", () => {
@@ -50,59 +47,6 @@ describe("buildUpstreamListParams", () => {
 
     const withExtra = buildUpstreamListParams(new URLSearchParams({ state: "failed" }), ["state"]);
     expect(withExtra.get("state")).toBe("failed");
-  });
-});
-
-describe("hrefFromCreatedResource", () => {
-  it("returns a string entry as-is", () => {
-    expect(hrefFromCreatedResource("/pulp/api/v3/publications/rpm/rpm/abc/")).toBe(
-      "/pulp/api/v3/publications/rpm/rpm/abc/"
-    );
-  });
-
-  it("reads pulp_href, falling back to href", () => {
-    expect(hrefFromCreatedResource({ pulp_href: "/x/" })).toBe("/x/");
-    expect(hrefFromCreatedResource({ href: "/y/" })).toBe("/y/");
-  });
-
-  it("returns null when neither key is a string", () => {
-    expect(hrefFromCreatedResource({})).toBeNull();
-    expect(hrefFromCreatedResource(undefined)).toBeNull();
-  });
-});
-
-describe("resolvePublicationHrefAfterTask", () => {
-  it("finds the publication href among several created resources", () => {
-    const task: TaskResponse = {
-      created_resources: ["/pulp/api/v3/repositories/rpm/rpm/abc/", "/pulp/api/v3/publications/rpm/rpm/def/"],
-    };
-    expect(resolvePublicationHrefAfterTask(task, null)).toBe("/pulp/api/v3/publications/rpm/rpm/def/");
-  });
-
-  it("falls back to the first created resource when none look like a publication", () => {
-    const task: TaskResponse = {
-      created_resources: [{ pulp_href: "/pulp/api/v3/repositories/rpm/rpm/abc/versions/1/" }],
-    };
-    expect(resolvePublicationHrefAfterTask(task, null)).toBe(
-      "/pulp/api/v3/repositories/rpm/rpm/abc/versions/1/"
-    );
-  });
-
-  it("falls back to task.pulp_href or task.href when they look like a publication", () => {
-    expect(
-      resolvePublicationHrefAfterTask({ pulp_href: "/pulp/api/v3/publications/rpm/rpm/abc/" }, null)
-    ).toBe("/pulp/api/v3/publications/rpm/rpm/abc/");
-    expect(
-      resolvePublicationHrefAfterTask({ href: "/pulp/api/v3/publications/rpm/rpm/abc/" }, null)
-    ).toBe("/pulp/api/v3/publications/rpm/rpm/abc/");
-  });
-
-  it("falls back to the given fallback when nothing else matches", () => {
-    expect(resolvePublicationHrefAfterTask({}, "/fallback/")).toBe("/fallback/");
-    expect(resolvePublicationHrefAfterTask({ created_resources: [] }, "/fallback/")).toBe("/fallback/");
-    expect(
-      resolvePublicationHrefAfterTask({ pulp_href: "/pulp/api/v3/repositories/rpm/rpm/abc/" }, "/fallback/")
-    ).toBe("/fallback/");
   });
 });
 
