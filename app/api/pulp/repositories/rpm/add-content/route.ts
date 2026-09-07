@@ -1,12 +1,6 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  hrefFromCreatedResource,
-  normalizePulpHrefToApiPath,
-  TaskRefResponse,
-  toPulpHrefPath,
-  waitForTask,
-} from "../../_server";
+import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type AddToRepositoryBody = {
   repositoryName?: string;
@@ -48,20 +42,9 @@ async function findOrCreateRepository(
   }
 
   const created = createResult.data;
-  let repoHref = created.pulp_href ?? created.href ?? null;
-
-  if (created.task) {
-    try {
-      const task = await waitForTask(created.task, auth);
-      repoHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? repoHref;
-    } catch (error) {
-      return {
-        ok: false,
-        status: 500,
-        detail: error instanceof Error ? error.message : "Repository creation task failed.",
-      };
-    }
-  }
+  // Pulp answers a repository create synchronously with the created object, so there is no task
+  // to wait on here; a missing href falls through to the 502 below.
+  const repoHref = created.pulp_href ?? created.href ?? null;
 
   if (!repoHref) {
     return { ok: false, status: 502, detail: "Repository creation completed without repository href." };
@@ -104,17 +87,9 @@ export const POST = withPulpAuth(async (request, auth) => {
   }
 
   const modifyPayload = modifyResult.data;
-  if (modifyPayload.task) {
-    try {
-      await waitForTask(modifyPayload.task, auth);
-    } catch (error) {
-      return Response.json(
-        { detail: error instanceof Error ? error.message : "Failed to add content to repository." },
-        { status: 500 }
-      );
-    }
-  }
 
+  // Dispatch-and-return: the modify task href goes back to the UI to poll instead of being
+  // waited on here.
   return Response.json({
     repository: repositoryHref,
     content: toPulpHrefPath(content),

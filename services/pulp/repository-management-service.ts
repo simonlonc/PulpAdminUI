@@ -44,6 +44,9 @@ export type RepositoryUpdateResult = {
 /** What the route returns before the browser has polled the dispatched task. */
 type RepositoryUpdateResponse = RepositoryUpdateResult & { task: string | null };
 type RepositoryRemoveResponse = { task: string | null };
+type RepositoryVersionDeleteResponse = { task: string | null };
+/** Modify and version repair both answer with only the dispatched task href. */
+type TaskDispatchResponse = { task: string };
 
 export const pulpRepositoryManagementService = {
   async list(
@@ -197,6 +200,11 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: versionPulpHref }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+
+    const data = (await response.json()) as RepositoryVersionDeleteResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
     return { ok: true };
   },
 
@@ -211,7 +219,12 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: versionPulpHref, verify_checksums: verifyChecksums }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
-    return { ok: true, data: (await response.json()) as RepositoryVersionRepairResult };
+
+    const data = (await response.json()) as TaskDispatchResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return { ok: true, data: { task: data.task, state: settled.task?.state ?? "completed" } };
   },
 
   async modifyRepository(
@@ -225,6 +238,11 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: pulpHref, ...payload }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
-    return { ok: true, data: (await response.json()) as RepositoryModifyResult };
+
+    const data = (await response.json()) as TaskDispatchResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return { ok: true, data: { task: data.task, state: settled.task?.state ?? "completed" } };
   },
 };
