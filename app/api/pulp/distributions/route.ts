@@ -3,12 +3,9 @@ import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "../_helpers";
 import {
-  hrefFromCreatedResource,
   buildUpstreamListParams,
-  normalizePulpHrefToApiPath,
   toPulpHrefPath,
   TaskRefResponse,
-  waitForTask,
 } from "../repositories/_server";
 
 type PulpDistribution = {
@@ -103,39 +100,14 @@ export const POST = withPulpAuth(async (request, auth) => {
   }
 
   const raw = createResult.data;
-  let hrefOut = raw.pulp_href ?? raw.href ?? null;
 
-  try {
-    if (raw.task) {
-      const task = await waitForTask(raw.task, auth);
-      hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
-    }
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Distribution task failed." },
-      { status: 500 }
-    );
-  }
-
-  let baseUrl: string | null = null;
-  let nameOut = name;
-  let basePathOut = basePath;
-
-  if (hrefOut) {
-    const detailPath = normalizePulpHrefToApiPath(hrefOut);
-    const detailResult = await pulpFetch<PulpDistribution>(detailPath, auth);
-    if (detailResult.ok) {
-      const dist = detailResult.data;
-      baseUrl = dist.base_url ?? baseUrl;
-      nameOut = dist.name ?? nameOut;
-      basePathOut = dist.base_path ?? basePathOut;
-    }
-  }
-
+  // Dispatch-and-return: the task href goes back to the UI, which resolves the created
+  // distribution from it and re-reads the detail for the fields only Pulp can fill.
   return Response.json({
-    pulp_href: hrefOut,
-    name: nameOut,
-    base_path: basePathOut,
-    base_url: baseUrl,
+    pulp_href: raw.pulp_href ?? raw.href ?? null,
+    name,
+    base_path: basePath,
+    base_url: null,
+    task: raw.task ?? null,
   });
 });

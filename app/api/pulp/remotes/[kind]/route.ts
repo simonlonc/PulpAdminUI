@@ -8,7 +8,6 @@ import {
   normalizePulpHrefToApiPath,
   PulpPaginatedJson,
   TaskRefResponse,
-  waitForTask,
 } from "../../repositories/_server";
 
 const REMOTE_POLICIES = ["immediate", "on_demand", "streamed"] as const;
@@ -303,18 +302,8 @@ export const PATCH = withPulpAuth(
       throw new PulpApiError(patchResult.status, patchResult.detail);
     }
 
-    if (patchResult.status === 202 && patchResult.data.task) {
-      try {
-        await waitForTask(patchResult.data.task, auth);
-      } catch (error) {
-        return Response.json(
-          { detail: error instanceof Error ? error.message : "Remote update task failed." },
-          { status: 500 }
-        );
-      }
-    }
-
-    return Response.json({ ok: true });
+    // Dispatch-and-return: the task href goes back to the UI to poll.
+    return Response.json({ ok: true, task: patchResult.data.task ?? null });
   }
 );
 
@@ -345,10 +334,7 @@ export const DELETE = withPulpAuth(
       throw new PulpApiError(deleteResult.status, deleteResult.detail);
     }
 
-    if (deleteResult.status === 202 && deleteResult.data.task) {
-      await waitForTask(deleteResult.data.task, auth);
-    }
-
-    return Response.json({ ok: true });
+    // Dispatch-and-return: the task href goes back to the UI to poll.
+    return Response.json({ ok: true, task: deleteResult.data.task ?? null });
   }
 );
