@@ -1,6 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "../../_helpers";
-import { waitForTask } from "@/app/api/pulp/repositories/_server";
 
 type PulpDistribution = {
   pulp_href: string;
@@ -117,26 +116,9 @@ export const PATCH = withPulpAuth(
       throw new PulpApiError(result.status, result.detail);
     }
 
-    // A 202 response body is just {"task": "<href>"}, not the updated distribution, so the
-    // caller would otherwise refresh against stale data. Wait for the task, then re-fetch.
-    if (result.status === 202 && result.data.task) {
-      try {
-        await waitForTask(result.data.task, auth);
-      } catch (error) {
-        return Response.json(
-          { detail: error instanceof Error ? error.message : "Distribution task failed." },
-          { status: 500 }
-        );
-      }
-
-      const refreshed = await pulpFetch<PulpDistribution>(distributionPath, auth);
-      if (!refreshed.ok) {
-        return Response.json({ detail: refreshed.detail }, { status: refreshed.status });
-      }
-      return Response.json(refreshed.data);
-    }
-
-    return Response.json(result.data);
+    // Dispatch-and-return: the task href goes back to the UI to poll, and the caller re-reads
+    // the distribution itself.
+    return Response.json({ ok: true, task: result.data.task ?? null });
   }
 );
 
@@ -156,17 +138,7 @@ export const DELETE = withPulpAuth(
       throw new PulpApiError(result.status, result.detail);
     }
 
-    if (result.status === 202 && result.data.task) {
-      try {
-        await waitForTask(result.data.task, auth);
-      } catch (error) {
-        return Response.json(
-          { detail: error instanceof Error ? error.message : "Distribution task failed." },
-          { status: 500 }
-        );
-      }
-    }
-
-    return Response.json({ ok: true });
+    // Dispatch-and-return: the task href goes back to the UI to poll.
+    return Response.json({ ok: true, task: result.data.task ?? null });
   }
 );

@@ -3,11 +3,9 @@ import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins"
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
-  hrefFromCreatedResource,
   normalizePulpHrefToApiPath,
   TaskRefResponse,
   toPulpHrefPath,
-  waitForTask,
 } from "@/app/api/pulp/repositories/_server";
 
 type CreateBody = {
@@ -61,47 +59,19 @@ async function findFirstLinkedDistributionHref(
   return { ok: true, pulp_href: null };
 }
 
-async function finalizeDistributionWrite(
-  auth: PulpAuth,
+function finalizeDistributionWrite(
   pulpHref: string | null,
   fallbackName: string,
   fallbackBasePath: string,
   taskHref: string | null
-): Promise<Response> {
-  let hrefOut = pulpHref;
-
-  try {
-    if (taskHref) {
-      const task = await waitForTask(taskHref, auth);
-      hrefOut = hrefFromCreatedResource(task.created_resources?.[0]) ?? hrefOut;
-    }
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Distribution task failed." },
-      { status: 500 }
-    );
-  }
-
-  let baseUrl: string | null = null;
-  let distName: string | null = null;
-  let basePathOut = fallbackBasePath;
-
-  if (hrefOut) {
-    const detailPath = normalizePulpHrefToApiPath(hrefOut);
-    const detailResult = await pulpFetch<PulpDistribution>(detailPath, auth);
-    if (detailResult.ok) {
-      const dist = detailResult.data;
-      baseUrl = dist.base_url ?? baseUrl;
-      distName = dist.name ?? distName;
-      basePathOut = dist.base_path ?? basePathOut;
-    }
-  }
-
+): Response {
+  // Dispatch-and-return: the task href goes back to the UI, which resolves the written
+  // distribution from it and re-reads the detail for the fields only Pulp can fill.
   return Response.json({
-    name: distName ?? fallbackName,
-    pulp_href: hrefOut,
-    base_url: baseUrl,
-    base_path: basePathOut,
+    name: fallbackName,
+    pulp_href: pulpHref,
+    base_url: null,
+    base_path: fallbackBasePath,
     task: taskHref,
   });
 }
@@ -159,7 +129,7 @@ export const POST = withPulpAuth(
 
       const taskHref = patchResult.data.task ?? null;
 
-      return finalizeDistributionWrite(auth, linked.pulp_href, name, basePath, taskHref);
+      return finalizeDistributionWrite(linked.pulp_href, name, basePath, taskHref);
     }
 
     const createResult = await pulpFetch<TaskRefResponse & Partial<PulpDistribution>>(
@@ -182,6 +152,6 @@ export const POST = withPulpAuth(
     const raw = createResult.data;
     const pulpHref = raw.pulp_href ?? raw.href ?? null;
 
-    return finalizeDistributionWrite(auth, pulpHref, name, basePath, raw.task ?? null);
+    return finalizeDistributionWrite(pulpHref, name, basePath, raw.task ?? null);
   }
 );
