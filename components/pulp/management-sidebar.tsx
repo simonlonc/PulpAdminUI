@@ -11,11 +11,6 @@ if (!PROJECT_NAME) {
   throw new Error("Missing PULP_PROJECT_NAME environment variable.");
 }
 
-type ManagementSidebarProps = {
-  usersCount: number;
-  groupsCount: number;
-};
-
 type NavIconName =
   | "dashboard"
   | "search"
@@ -396,7 +391,7 @@ function SidebarIcon({ name }: { name: NavIconName }) {
   }
 }
 
-export function ManagementSidebar({ usersCount, groupsCount }: ManagementSidebarProps) {
+export function ManagementSidebar() {
   const pathname = usePathname();
 
   return (

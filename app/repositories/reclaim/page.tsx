@@ -5,10 +5,8 @@ import { FormEvent, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { CheckboxField, FormField } from "@/components/ui/form-field";
@@ -32,8 +30,6 @@ export default function ReclaimSpacePage() {
     usePulpAuthContext();
   const { getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
 
   const [selectedHrefs, setSelectedHrefs] = useState<Set<string>>(new Set());
@@ -103,8 +99,6 @@ export default function ReclaimSpacePage() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isRunning}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

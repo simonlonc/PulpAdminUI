@@ -6,9 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { RepositoryModifyModal } from "@/components/pulp/repository-modify-modal";
 import { RepositoryVersionSummary } from "@/components/pulp/repository-version-summary";
 import { Button } from "@/components/ui/button";
@@ -36,8 +34,6 @@ function RepositoryVersionsInner() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   const [count, setCount] = useState(0);
   const [versions, setVersions] = useState<PulpRepositoryVersion[]>([]);
@@ -116,8 +112,6 @@ function RepositoryVersionsInner() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingVersions || rollingBackHref !== null}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
