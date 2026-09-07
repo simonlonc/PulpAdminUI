@@ -1,4 +1,6 @@
+import { hrefFromCreatedResource, resolvePublicationHrefAfterTask } from "@/lib/pulp-task-result";
 import { readApiDetail } from "./http";
+import { settleDispatchedTask } from "./task-service";
 import type { PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   PulpPaginatedResponse,
@@ -39,6 +41,10 @@ export type RepositoryUpdateResult = {
   name: string;
 };
 
+/** What the route returns before the browser has polled the dispatched task. */
+type RepositoryUpdateResponse = RepositoryUpdateResult & { task: string | null };
+type RepositoryRemoveResponse = { task: string | null };
+
 export const pulpRepositoryManagementService = {
   async list(
     kind: PulpPluginKind,
@@ -60,7 +66,15 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify(payload),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
-    return { ok: true, data: (await response.json()) as RepositoryCreateResult };
+
+    const data = (await response.json()) as RepositoryCreateResult;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    const pulpHref = settled.task
+      ? (hrefFromCreatedResource(settled.task.created_resources?.[0]) ?? data.pulp_href)
+      : data.pulp_href;
+    return { ok: true, data: { ...data, pulp_href: pulpHref } };
   },
 
   async getRepositoryDetail(pulpHref: string): Promise<PulpRepositoryDetail> {
@@ -82,7 +96,12 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: pulpHref, ...payload }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
-    return { ok: true, data: (await response.json()) as RepositoryUpdateResult };
+
+    const data = (await response.json()) as RepositoryUpdateResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return { ok: true, data: { name: data.name } };
   },
 
   async remove(kind: PulpPluginKind, pulpHref: string): Promise<ServiceResult> {
@@ -92,6 +111,11 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: pulpHref }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
+
+    const data = (await response.json()) as RepositoryRemoveResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
     return { ok: true };
   },
 
@@ -118,7 +142,15 @@ export const pulpRepositoryManagementService = {
       body: JSON.stringify({ pulp_href: pulpHref }),
     });
     if (!response.ok) return { ok: false, detail: await readApiDetail(response) };
-    return { ok: true, data: (await response.json()) as RepositoryPublishResult };
+
+    const data = (await response.json()) as RepositoryPublishResult;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    const publication = settled.task
+      ? resolvePublicationHrefAfterTask(settled.task, data.publication)
+      : data.publication;
+    return { ok: true, data: { ...data, publication } };
   },
 
   async listRepositoryContent(

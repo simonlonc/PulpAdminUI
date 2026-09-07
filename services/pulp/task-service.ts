@@ -79,3 +79,20 @@ export const pulpTaskService = {
     }
   },
 };
+
+/**
+ * Waits in the browser for a task a route dispatched and returned, so a long
+ * operation is not bounded by an HTTP request's lifetime. `task` is null when
+ * the route completed synchronously (Pulp answered 200 rather than 202), in
+ * which case there is nothing to wait for.
+ */
+export async function settleDispatchedTask(
+  task: string | null | undefined
+): Promise<{ ok: true; task: PulpTask | null } | { ok: false; detail: string }> {
+  if (!task) return { ok: true, task: null };
+  try {
+    return { ok: true, task: await pulpTaskService.awaitTask(task) };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : "Task failed." };
+  }
+}
