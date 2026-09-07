@@ -2,13 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import {
-  normalizePulpHrefToApiPath,
-  resolvePublicationHrefAfterTask,
-  TaskRefResponse,
-  toPulpHrefPath,
-  waitForTask,
-} from "../../_server";
+import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type PublishBody = {
   pulp_href?: string;
@@ -48,22 +42,11 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
   }
 
   const published = publishResult.data;
-  let publicationHref = published.pulp_href ?? published.href ?? null;
 
-  try {
-    if (published.task) {
-      const task = await waitForTask(published.task, auth);
-      publicationHref = resolvePublicationHrefAfterTask(task, publicationHref);
-    }
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Publication task failed." },
-      { status: 500 }
-    );
-  }
-
+  // Dispatch-and-return: publication is set only when Pulp answered synchronously, otherwise the
+  // task href goes back to the UI to poll and resolve the publication from.
   return Response.json({
-    publication: publicationHref,
+    publication: published.pulp_href ?? published.href ?? null,
     repository: normalizePulpHrefToApiPath(repoHref),
     task: published.task ?? null,
   });
