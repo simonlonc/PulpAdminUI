@@ -4,7 +4,6 @@ import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   hrefFromCreatedResource,
-  extractNextApiPath,
   normalizePulpHrefToApiPath,
   TaskRefResponse,
   toPulpHrefPath,
@@ -33,8 +32,7 @@ function repoRefKey(href: string): string {
   return normalizePulpHrefToApiPath(href).replace(/\/+$/, "");
 }
 
-type DistListPage = {
-  next: string | null;
+type DistListResult = {
   results: Array<{ pulp_href: string; repository: string | null }>;
 };
 
@@ -47,20 +45,17 @@ async function findFirstLinkedDistributionHref(
   | { ok: false; status: number; detail: string }
 > {
   const want = repoRefKey(repoHref);
-  let listPath: string | null = `${plugin.distributionPath}?limit=200`;
+  // Ask Pulp to filter server-side instead of paging through every distribution of this family.
+  const repositoryParam = encodeURIComponent(toPulpHrefPath(repoHref));
+  const listPath = `${plugin.distributionPath}?repository=${repositoryParam}&limit=1`;
 
-  while (listPath) {
-    const pageResult = await pulpFetch<DistListPage>(listPath, auth);
-    if (!pageResult.ok) {
-      return { ok: false, status: pageResult.status, detail: pageResult.detail };
-    }
-    const page = pageResult.data;
-    for (const row of page.results) {
-      if (row.repository && repoRefKey(row.repository) === want) {
-        return { ok: true, pulp_href: row.pulp_href };
-      }
-    }
-    listPath = extractNextApiPath(page.next);
+  const pageResult = await pulpFetch<DistListResult>(listPath, auth);
+  if (!pageResult.ok) {
+    return { ok: false, status: pageResult.status, detail: pageResult.detail };
+  }
+  const row = pageResult.data.results[0];
+  if (row && row.repository && repoRefKey(row.repository) === want) {
+    return { ok: true, pulp_href: row.pulp_href };
   }
 
   return { ok: true, pulp_href: null };
