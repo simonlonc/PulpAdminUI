@@ -2,14 +2,27 @@ import { readApiDetail } from "./http";
 
 const DASHBOARD_PATH = "/api/pulp/dashboard-summary";
 
+export type PulpDashboardRepositoryCount = {
+  kind: string;
+  label: string;
+  count: number | null;
+};
+
+export type PulpDashboardActivity = {
+  runningTasks: number | null;
+  failedTasks: number | null;
+  onlineWorkers: number | null;
+  onlineContentApps: number | null;
+  onlineApiApps: number | null;
+};
+
 export type PulpDashboardSummary = {
   ok: true;
-  usersCount: number;
-  groupsCount: number;
-  rpmRepositories: number;
-  debRepositories: number;
-  fileRepositories: number;
+  usersCount: number | null;
+  groupsCount: number | null;
+  repositories: PulpDashboardRepositoryCount[];
   repositoriesTotal: number;
+  activity: PulpDashboardActivity;
 };
 
 export const pulpDashboardService = {

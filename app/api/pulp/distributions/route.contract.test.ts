@@ -53,3 +53,46 @@ describeContract("GET /distributions/?repository= contract", () => {
     }
   }, 15000);
 });
+
+/**
+ * Contract test: pins the same assumption for the plugin-specific distribution path (e.g.
+ * /distributions/rpm/rpm/) that app/api/pulp/distributions/create/[kind]/route.ts actually calls
+ * from findFirstLinkedDistributionHref -- a single `?repository=` filtered request replaces what
+ * used to be a full paginated scan of every distribution of that family.
+ */
+describeContract("GET /distributions/rpm/rpm/?repository= contract", () => {
+  it("filters by repository: matches an existing distribution's repository and excludes a nonexistent one", async () => {
+    const unfilteredResponse = await get("/distributions/rpm/rpm/?limit=1");
+    expect(unfilteredResponse.status).toBe(200);
+    const unfiltered = (await unfilteredResponse.json()) as {
+      count: number;
+      results: Array<{ pulp_href: string; repository: string | null }>;
+    };
+    expect(typeof unfiltered.count).toBe("number");
+
+    const noSuchRepositoryHref = "/pulp/api/v3/repositories/rpm/rpm/00000000-0000-0000-0000-000000000000/";
+    const noMatchResponse = await get(
+      `/distributions/rpm/rpm/?repository=${encodeURIComponent(noSuchRepositoryHref)}&limit=1`
+    );
+    expect(noMatchResponse.status).toBe(200);
+    const noMatch = (await noMatchResponse.json()) as { count: number; results: unknown[] };
+    expect(noMatch.count).toBe(0);
+    expect(noMatch.results).toEqual([]);
+
+    // Strongest proof, when the server has a distribution bound to a repository: filtering by
+    // that exact repository href returns it.
+    const existing = unfiltered.results[0];
+    if (existing?.repository) {
+      const matchResponse = await get(
+        `/distributions/rpm/rpm/?repository=${encodeURIComponent(existing.repository)}&limit=1`
+      );
+      expect(matchResponse.status).toBe(200);
+      const match = (await matchResponse.json()) as {
+        count: number;
+        results: Array<{ pulp_href: string }>;
+      };
+      expect(match.count).toBeGreaterThan(0);
+      expect(match.results.some((row) => row.pulp_href === existing.pulp_href)).toBe(true);
+    }
+  }, 15000);
+});
