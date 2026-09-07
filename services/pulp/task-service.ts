@@ -1,3 +1,4 @@
+import { isPulpTaskFinished, pulpTaskFailureMessage } from "@/lib/pulp-task-result";
 import { readApiDetail } from "./http";
 import {
   PulpPaginatedResponse,
@@ -53,5 +54,28 @@ export const pulpTaskService = {
     }
 
     return { ok: true, data: (await response.json()) as PulpTaskPurgeResult };
+  },
+
+  /**
+   * Polls a task from the browser until it reaches a terminal state, replacing the
+   * server-side wait loop routes used to block a request on. No attempt cap: the old cap
+   * existed to protect a blocked server worker, and there is nothing to protect here;
+   * capping would reintroduce the exact bug this removes, a slow-but-successful task
+   * reported as failed because polling gave up on it.
+   */
+  async awaitTask(pulpHref: string, options?: { intervalMs?: number }): Promise<PulpTask> {
+    const intervalMs = options?.intervalMs ?? 5000;
+
+    for (;;) {
+      const task = await pulpTaskService.get(pulpHref);
+      if (isPulpTaskFinished(task.state)) {
+        const failureMessage = pulpTaskFailureMessage(task);
+        if (failureMessage) {
+          throw new Error(failureMessage);
+        }
+        return task;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
   },
 };

@@ -1,7 +1,13 @@
 import { getPulpBaseUrl, pulpErrorDetailFromBody, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import type { PulpTaskProgressReport } from "@/services/pulp/types";
+import {
+  type CreatedResourceEntry,
+  hrefFromCreatedResource,
+  resolvePublicationHrefAfterTask,
+} from "@/lib/pulp-task-result";
 
-export type CreatedResourceEntry = string | { pulp_href?: string; href?: string };
+export type { CreatedResourceEntry };
+export { hrefFromCreatedResource, resolvePublicationHrefAfterTask };
 
 export type TaskResponse = {
   state?: string;
@@ -11,37 +17,6 @@ export type TaskResponse = {
   href?: string;
   progress_reports?: PulpTaskProgressReport[];
 };
-
-export function hrefFromCreatedResource(entry: CreatedResourceEntry | undefined): string | null {
-  if (entry == null) return null;
-  if (typeof entry === "string") return entry;
-  const h = entry.pulp_href ?? entry.href;
-  return typeof h === "string" ? h : null;
-}
-
-/** Pulp may return created_resources as strings or nested objects; publication may not be index 0. */
-export function resolvePublicationHrefAfterTask(task: TaskResponse, fallback: string | null): string | null {
-  const resources = task.created_resources;
-  if (resources?.length) {
-    for (const r of resources) {
-      const h = hrefFromCreatedResource(r);
-      if (h && h.includes("/publications/")) {
-        return h;
-      }
-    }
-    const first = hrefFromCreatedResource(resources[0]);
-    if (first) {
-      return first;
-    }
-  }
-  if (typeof task.pulp_href === "string" && task.pulp_href.includes("/publications/")) {
-    return task.pulp_href;
-  }
-  if (typeof task.href === "string" && task.href.includes("/publications/")) {
-    return task.href;
-  }
-  return fallback;
-}
 
 export type TaskRefResponse = {
   task?: string;
