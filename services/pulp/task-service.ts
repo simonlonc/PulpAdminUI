@@ -10,6 +10,9 @@ import {
 
 const TASKS_PATH = "/api/pulp/tasks";
 
+/** What the route returns before the browser has polled the dispatched task. */
+type TaskPurgeResponse = { task: string };
+
 export const pulpTaskService = {
   async list(params: URLSearchParams): Promise<PulpPaginatedResponse<PulpTask>> {
     const response = await fetch(`${TASKS_PATH}?${params}`);
@@ -53,7 +56,18 @@ export const pulpTaskService = {
       return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return { ok: true, data: (await response.json()) as PulpTaskPurgeResult };
+    const data = (await response.json()) as TaskPurgeResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return {
+      ok: true,
+      data: {
+        task: data.task,
+        state: settled.task?.state ?? "completed",
+        progress_reports: settled.task?.progress_reports ?? [],
+      },
+    };
   },
 
   /**

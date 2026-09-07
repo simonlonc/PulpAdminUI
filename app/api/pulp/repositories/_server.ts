@@ -131,6 +131,12 @@ export function extractNextApiPath(next: string | null): string | null {
   }
 }
 
+/**
+ * The last server-side task wait, kept only for content/rpm/packages, whose failure path needs a
+ * server-side duplicate lookup; every other route now returns the dispatched task href and lets the
+ * browser poll it (settleDispatchedTask in services/pulp/task-service.ts). The 60x5s cap is fine
+ * there because creating content from an already-uploaded artifact is a seconds-long task.
+ */
 export async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskResponse> {
   const maxAttempts = 60;
   const taskPath = normalizePulpHrefToApiPath(taskHref);

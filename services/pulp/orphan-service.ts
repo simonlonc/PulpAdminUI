@@ -1,5 +1,9 @@
 import { readApiDetail } from "./http";
+import { settleDispatchedTask } from "./task-service";
 import { PulpOrphanCleanupResult, ServiceDataResult } from "./types";
+
+/** What the route returns before the browser has polled the dispatched task. */
+type OrphanCleanupResponse = { task: string };
 
 export const pulpOrphanService = {
   async cleanup(
@@ -17,6 +21,17 @@ export const pulpOrphanService = {
       return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return { ok: true, data: (await response.json()) as PulpOrphanCleanupResult };
+    const data = (await response.json()) as OrphanCleanupResponse;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return {
+      ok: true,
+      data: {
+        task: data.task,
+        state: settled.task?.state ?? "completed",
+        progress_reports: settled.task?.progress_reports ?? [],
+      },
+    };
   },
 };

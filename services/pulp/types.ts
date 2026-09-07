@@ -198,7 +198,7 @@ export type PulpOrphanCleanupResult = {
   progress_reports: PulpTaskProgressReport[];
 };
 
-/** Same shape as PulpOrphanCleanupResult (task/state/progress_reports from waitForTask); aliased rather than duplicated. */
+/** Same shape as PulpOrphanCleanupResult (task/state/progress_reports from the task the browser polled); aliased rather than duplicated. */
 export type PulpReclaimSpaceResult = PulpOrphanCleanupResult;
 
 export type PulpTaskSchedule = {
