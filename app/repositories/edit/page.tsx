@@ -9,10 +9,8 @@ import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { RepositoryEditDebForm } from "@/components/pulp/repository-edit-deb-form";
 import { RepositoryEditFileForm } from "@/components/pulp/repository-edit-file-form";
 import { RepositoryEditRpmForm } from "@/components/pulp/repository-edit-rpm-form";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
@@ -37,8 +35,6 @@ function RepositoriesEditInner() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { ensure: ensurePermissions, can: canOnRepo } = usePulpObjectPermissions();
 
   const [loadedKind, setLoadedKind] = useState<RepoKind | null>(null);
@@ -357,8 +353,6 @@ function RepositoriesEditInner() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingDetail || isSubmitting}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

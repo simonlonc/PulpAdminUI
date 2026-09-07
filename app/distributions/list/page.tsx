@@ -5,11 +5,9 @@ import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { usePulpContentGuardOptions } from "@/components/pulp/use-pulp-content-guard-options";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -48,8 +46,6 @@ function DistributionsListPageContent() {
     usePulpAuthContext();
   const { getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
   const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
     usePulpListQuery();
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
@@ -107,8 +103,6 @@ function DistributionsListPageContent() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
@@ -317,8 +311,6 @@ function DistributionsListPageContent() {
 
 function DistributionsListSuspenseFallback() {
   const { sessionUser, isLoading, hasSession, error, logout } = usePulpAuthContext();
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   return (
     <AdminShell
@@ -327,8 +319,6 @@ function DistributionsListSuspenseFallback() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >

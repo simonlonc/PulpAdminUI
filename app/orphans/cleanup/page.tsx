@@ -4,9 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
-import { usePulpGroups } from "@/components/pulp/use-pulp-groups";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { usePulpUsers } from "@/components/pulp/use-pulp-users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -19,8 +17,6 @@ export default function OrphanCleanupPage() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { users } = usePulpUsers(hasSession);
-  const { groups } = usePulpGroups(hasSession);
 
   const [protectionTime, setProtectionTime] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -66,8 +62,6 @@ export default function OrphanCleanupPage() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isRunning}
-      usersCount={users.length}
-      groupsCount={groups.length}
       error={error}
       onLogout={logout}
     >
