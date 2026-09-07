@@ -2,7 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { normalizePulpHrefToApiPath, toPulpHrefPath, waitForTask } from "../../_server";
+import { normalizePulpHrefToApiPath, toPulpHrefPath } from "../../_server";
 
 type ModifyBody = {
   pulp_href?: string;
@@ -66,13 +66,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
 
   const { task } = modifyResult.data;
 
-  try {
-    const finished = await waitForTask(task, auth);
-    return Response.json({ task, state: finished.state ?? "completed" });
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Repository modify task failed." },
-      { status: 500 }
-    );
-  }
+  // Dispatch-and-return: a modify over many content units outlives an HTTP request, so the task
+  // href goes back to the UI to poll instead.
+  return Response.json({ task });
 });

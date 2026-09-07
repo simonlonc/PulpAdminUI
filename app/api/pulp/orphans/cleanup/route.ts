@@ -1,6 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { waitForTask } from "../../repositories/_server";
 
 type CleanupBody = {
   orphan_protection_time?: number | null;
@@ -25,17 +24,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 
   const { task } = cleanupResult.data;
 
-  try {
-    const finished = await waitForTask(task, auth);
-    return Response.json({
-      task,
-      state: finished.state ?? "completed",
-      progress_reports: finished.progress_reports ?? [],
-    });
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Orphan cleanup task failed." },
-      { status: 500 }
-    );
-  }
+  // Dispatch-and-return: cleaning up a large orphan set outlives an HTTP request, so the task
+  // href goes back to the UI to poll and read the progress reports off.
+  return Response.json({ task });
 });

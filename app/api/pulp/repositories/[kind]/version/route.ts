@@ -2,7 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { normalizePulpHrefToApiPath, TaskRefResponse, waitForTask } from "../../_server";
+import { normalizePulpHrefToApiPath, TaskRefResponse } from "../../_server";
 import { isRepositoryVersionInstancePath, mapPulpRepositoryVersion } from "../../repository-version-map";
 
 type DeleteBody = {
@@ -79,16 +79,6 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     throw new PulpApiError(deleteResult.status, deleteResult.detail);
   }
 
-  if (deleteResult.data.task) {
-    try {
-      await waitForTask(deleteResult.data.task, auth);
-    } catch (error) {
-      return Response.json(
-        { detail: error instanceof Error ? error.message : "Repository version delete task failed." },
-        { status: 500 }
-      );
-    }
-  }
-
-  return Response.json({ ok: true });
+  // Dispatch-and-return: the task href goes back to the UI to poll instead of being waited on here.
+  return Response.json({ ok: true, task: deleteResult.data.task ?? null });
 });

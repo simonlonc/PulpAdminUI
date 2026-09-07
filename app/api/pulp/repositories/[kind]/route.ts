@@ -2,7 +2,7 @@ import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { buildUpstreamListParams, normalizePulpHrefToApiPath, TaskRefResponse, waitForTask } from "../_server";
+import { buildUpstreamListParams, normalizePulpHrefToApiPath, TaskRefResponse } from "../_server";
 
 type PulpRepositoryRow = {
   name: string;
@@ -187,19 +187,14 @@ export const PATCH = withPulpAuth(async (request, auth, { params }: { params: Pr
     throw new PulpApiError(patchResult.status, patchResult.detail);
   }
 
-  if (patchResult.status === 202 && patchResult.data.task) {
-    try {
-      await waitForTask(patchResult.data.task, auth);
-    } catch (error) {
-      return Response.json(
-        { detail: error instanceof Error ? error.message : "Repository update task failed." },
-        { status: 500 }
-      );
-    }
-  }
-
   const updatedName = patchResult.data.name;
-  return Response.json({ ok: true, name: typeof updatedName === "string" ? updatedName : name });
+
+  // Dispatch-and-return: the task href goes back to the UI to poll.
+  return Response.json({
+    ok: true,
+    name: typeof updatedName === "string" ? updatedName : name,
+    task: patchResult.data.task ?? null,
+  });
 });
 
 export const DELETE = withPulpAuth(async (request, auth, { params }: { params: Promise<{ kind: string }> }) => {
@@ -223,9 +218,6 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     throw new PulpApiError(deleteResult.status, deleteResult.detail);
   }
 
-  if (deleteResult.data.task) {
-    await waitForTask(deleteResult.data.task, auth);
-  }
-
-  return Response.json({ ok: true });
+  // Dispatch-and-return: the task href goes back to the UI to poll.
+  return Response.json({ ok: true, task: deleteResult.data.task ?? null });
 });

@@ -2,7 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { hrefFromCreatedResource, TaskRefResponse, waitForTask } from "../../_server";
+import { TaskRefResponse } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -108,23 +108,12 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
   }
 
   const created = createResult.data;
-  let pulpHref = created.pulp_href ?? created.href ?? null;
 
-  try {
-    if (created.task) {
-      const task = await waitForTask(created.task, auth);
-      pulpHref = hrefFromCreatedResource(task.created_resources?.[0]) ?? pulpHref;
-    }
-  } catch (error) {
-    return Response.json(
-      { detail: error instanceof Error ? error.message : "Repository creation task failed." },
-      { status: 500 }
-    );
-  }
-
+  // Dispatch-and-return: pulp_href is set only when Pulp answered synchronously, otherwise the
+  // task href goes back to the UI to poll and resolve the created repository from.
   return Response.json({
     name,
-    pulp_href: pulpHref,
+    pulp_href: created.pulp_href ?? created.href ?? null,
     task: created.task ?? null,
   });
 });

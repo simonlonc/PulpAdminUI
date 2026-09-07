@@ -1,4 +1,5 @@
 import { readApiDetail } from "./http";
+import { settleDispatchedTask } from "./task-service";
 import {
   PulpAddToRepositoryResult,
   PulpUploadAsRpmResult,
@@ -51,6 +52,10 @@ export const pulpUploadService = {
       return { ok: false, detail: await readApiDetail(response) };
     }
 
-    return { ok: true, data: (await response.json()) as PulpAddToRepositoryResult };
+    const data = (await response.json()) as PulpAddToRepositoryResult;
+    const settled = await settleDispatchedTask(data.task);
+    if (!settled.ok) return { ok: false, detail: settled.detail };
+
+    return { ok: true, data };
   },
 };
