@@ -17,7 +17,7 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { pulpStatusService } from "@/services/pulp/status-service";
-import type { PulpStatus, PulpStatusApp } from "@/services/pulp/types";
+import type { PulpStatusApp, PulpStatusResponse } from "@/services/pulp/types";
 
 function formatIso(iso: string): string {
   const d = new Date(iso);
@@ -87,7 +87,7 @@ export default function StatusPage() {
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
 
-  const [status, setStatus] = useState<PulpStatus | null>(null);
+  const [status, setStatus] = useState<PulpStatusResponse | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
 
   const load = useCallback(async () => {
@@ -222,6 +222,17 @@ export default function StatusPage() {
                     </p>
                   </div>
                 </>
+              )}
+              {status.content_origin_effective !== null && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Effective content origin
+                  </p>
+                  <p className="break-all font-mono text-xs">{status.content_origin_effective}</p>
+                  <p className="text-zinc-500 dark:text-zinc-400">
+                    Overridden by PULP_CONTENT_ORIGIN.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>

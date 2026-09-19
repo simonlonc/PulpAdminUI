@@ -1,3 +1,4 @@
+import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "../../_helpers";
 
@@ -63,7 +64,7 @@ export const GET = withPulpAuth(
       throw new PulpApiError(result.status, result.detail);
     }
 
-    return Response.json(result.data);
+    return Response.json({ ...result.data, base_url: applyContentOrigin(result.data.base_url) });
   }
 );
 

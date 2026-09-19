@@ -1,3 +1,4 @@
+import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
@@ -38,7 +39,10 @@ export const GET = withPulpAuth(async (request, auth) => {
     throw new PulpApiError(result.status, result.detail);
   }
 
-  return Response.json(result.data);
+  return Response.json({
+    ...result.data,
+    results: result.data.results.map((d) => ({ ...d, base_url: applyContentOrigin(d.base_url) })),
+  });
 });
 
 type CreateBody = {
