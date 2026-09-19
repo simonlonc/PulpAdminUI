@@ -4,12 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/components/ui/cn";
-
-const PROJECT_NAME = process.env.NEXT_PUBLIC_PULP_PROJECT_NAME;
-
-if (!PROJECT_NAME) {
-  throw new Error("Missing PULP_PROJECT_NAME environment variable.");
-}
+import { usePulpProjectName } from "@/components/pulp/project-context";
 
 type NavIconName =
   | "dashboard"
@@ -393,6 +388,7 @@ function SidebarIcon({ name }: { name: NavIconName }) {
 
 export function ManagementSidebar() {
   const pathname = usePathname();
+  const projectName = usePulpProjectName();
 
   return (
     <aside className="w-full border-b border-zinc-200/80 bg-zinc-50/80 md:h-screen md:w-[16.75rem] md:shrink-0 md:border-r md:border-b-0 dark:border-zinc-800/80 dark:bg-zinc-950/80">
@@ -415,7 +411,7 @@ export function ManagementSidebar() {
             suppressHydrationWarning
             className="truncate text-sm font-semibold tracking-tight transition-colors duration-200 group-hover/brand:text-zinc-700 dark:group-hover/brand:text-zinc-200"
           >
-            {PROJECT_NAME}
+            {projectName}
           </span>
         </Link>
 
