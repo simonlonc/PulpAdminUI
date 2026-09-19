@@ -1,0 +1,55 @@
+# Pulp Admin UI on Alpine.
+#
+# Build and run:
+#   podman build -f containers/Containerfile.alpine -t pulpadminui:v0.0.6-alpine3.24 .
+#   podman run --rm -p 3000:3000 \
+#     -e PULP_BASE_URL=https://pulp.example.com/pulp/api/v3 \
+#     -e PULP_PROJECT_NAME=Pulp \
+#     -e PULP_SESSION_SECRET="$(openssl rand -base64 32)" \
+#     pulpadminui:v0.0.6-alpine3.24
+#
+# The build stage needs outbound network beyond the package registry:
+# app/layout.tsx uses next/font/google, which downloads Manrope and IBM Plex
+# Mono from fonts.googleapis.com during `npm run build`.
+
+ARG NODE_VERSION=22.23.2
+ARG ALPINE_RELEASE=3.24
+ARG BASE_IMAGE=docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_RELEASE}
+
+FROM ${BASE_IMAGE} AS builder
+
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM ${BASE_IMAGE} AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+# next.config.ts sets output: "standalone", so .next/standalone already carries
+# server.js, the traced node_modules subset and the changelog/ directory that
+# /changelog reads from the working directory at request time.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# OpenShift ignores USER and runs the container as an arbitrary UID in the root
+# group. COPY already leaves the tree owned by root:root, so it is group-owned
+# by gid 0 and group-readable; only the directory Next writes to at runtime
+# needs the group write bit. Narrowing it to that directory keeps this layer at
+# a few kilobytes instead of duplicating the whole app.
+RUN mkdir -p .next/cache && chmod -R g+rwX .next/cache
+
+USER 1001
+EXPOSE 3000
+
+CMD ["node", "server.js"]

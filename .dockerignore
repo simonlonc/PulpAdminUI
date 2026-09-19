@@ -1,0 +1,29 @@
+# Build context for the container images. Keep it small: everything listed here
+# is either rebuilt inside the image, irrelevant to the build, or must not leave
+# the workstation.
+
+.git
+.github
+.gitignore
+.idea
+.vscode
+
+node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+
+# Local secrets. The .env in a working tree holds PULP_SESSION_SECRET, and Next
+# traces a copied .env into .next/standalone, so it would end up in the image.
+.env
+.env.*
+
+# Local working files and artefacts the build does not read.
+TASKS.md
+AGENT_GUIDE.md
+screenshots
+containers
+Containerfile*
+Dockerfile*
+npm-debug.log*

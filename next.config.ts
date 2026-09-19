@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  env: {
-    NEXT_PUBLIC_PULP_PROJECT_NAME: process.env.PULP_PROJECT_NAME,
-  },
+  // Self-contained server bundle for the container images: .next/standalone carries
+  // its own node_modules, so the runtime stage never installs dependencies.
+  output: "standalone",
 };
 
 export default nextConfig;

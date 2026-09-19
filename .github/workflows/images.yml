@@ -1,0 +1,75 @@
+name: Images
+
+# Builds the three container variants. A pull request that touches the build
+# only proves they still build; pushes happen for a v* tag, or for a manual run
+# that asks for them.
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "containers/**"
+      - ".github/workflows/images.yml"
+      - "next.config.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Push the images to ghcr.io"
+        type: boolean
+        default: false
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [debian, alpine, ubi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag $tag does not match package.json $version" >&2
+            exit 1
+          fi
+
+      - name: Decide whether to push
+        id: mode
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ] || [ "${{ inputs.push }}" = "true" ]; then
+            echo "flag=--push" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ghcr.io rejects an uppercase path, and a GitHub owner may contain one.
+      - name: Resolve the registry namespace
+        id: ns
+        run: echo "value=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Packages
+        if: steps.mode.outputs.flag != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.variant }}
+        run: >
+          containers/build.sh
+          --engine docker
+          --registry ${{ steps.ns.outputs.value }}
+          ${{ steps.mode.outputs.flag }}
+          ${{ matrix.variant }}
