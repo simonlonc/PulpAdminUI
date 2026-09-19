@@ -1,0 +1,58 @@
+# Pulp Admin UI on Red Hat UBI.
+#
+# Build and run:
+#   podman build -f containers/Containerfile.ubi -t pulpadminui:v0.0.6-ubi9 .
+#   podman run --rm -p 3000:3000 \
+#     -e PULP_BASE_URL=https://pulp.example.com/pulp/api/v3 \
+#     -e PULP_PROJECT_NAME=Pulp \
+#     -e PULP_SESSION_SECRET="$(openssl rand -base64 32)" \
+#     pulpadminui:v0.0.6-ubi9
+#
+# The build stage needs outbound network beyond the package registry:
+# app/layout.tsx uses next/font/google, which downloads Manrope and IBM Plex
+# Mono from fonts.googleapis.com during `npm run build`.
+
+ARG UBI_RELEASE=9
+ARG NODEJS_STREAM=22
+ARG BUILDER_IMAGE=registry.access.redhat.com/ubi${UBI_RELEASE}/nodejs-${NODEJS_STREAM}
+ARG BASE_IMAGE=registry.access.redhat.com/ubi${UBI_RELEASE}/nodejs-${NODEJS_STREAM}-minimal
+
+FROM ${BUILDER_IMAGE} AS builder
+
+# The UBI Node images already run as UID 1001 and set WORKDIR to
+# /opt/app-root/src, so the copies are chowned to 1001:0 to stay writable.
+WORKDIR /opt/app-root/src
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --chown=1001:0 package.json package-lock.json ./
+RUN npm ci
+
+COPY --chown=1001:0 . .
+RUN npm run build
+
+FROM ${BASE_IMAGE} AS runner
+
+WORKDIR /opt/app-root/src
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+# next.config.ts sets output: "standalone", so .next/standalone already carries
+# server.js, the traced node_modules subset and the changelog/ directory that
+# /changelog reads from the working directory at request time.
+COPY --from=builder --chown=1001:0 /opt/app-root/src/.next/standalone ./
+COPY --from=builder --chown=1001:0 /opt/app-root/src/.next/static ./.next/static
+COPY --from=builder --chown=1001:0 /opt/app-root/src/public ./public
+
+# OpenShift ignores USER and runs the container as an arbitrary UID in the root
+# group. The copies above are already owned by 1001:0 and group-readable, so
+# only the directory Next writes to at runtime needs the group write bit.
+# Narrowing it to that directory keeps this layer at a few kilobytes instead of
+# duplicating the whole app.
+RUN mkdir -p .next/cache && chmod -R g+rwX .next/cache
+
+USER 1001
+EXPOSE 3000
+
+CMD ["node", "server.js"]
