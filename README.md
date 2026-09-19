@@ -99,6 +99,7 @@ The merged registry is cached for 10 minutes with in-flight de-duplication, and 
    - `PULP_PROJECT_NAME` (required): a display name for this deployment, shown next to the sidebar logo. It is read fresh on every request rather than baked in at build time, so one built image can serve different project names for different deployments.
    - `PULP_SESSION_SECRET` (required for login): encrypts the session cookie with AES-256-GCM, keyed by a SHA-256 hash of this value. Generate one with `openssl rand -base64 32`.
    - `PULP_PLUGIN_DIR` (optional, not in `.env.example`): a directory of JSON overlay files that can add or correct plugin family descriptions for this deployment. See "The plugin registry" above. Leave unset to use only the derived and curated tiers.
+   - `PULP_CONTENT_ORIGIN` (optional): overrides the origin (scheme, host, port) of content URLs reported by Pulp (distribution `base_url` and `content_settings.content_origin`). Only the origin is replaced; the path is preserved to maintain Pulp's `content_path_prefix` and the distribution's `base_path`. When unset or malformed, Pulp's own value passes through unchanged. The status page shows both Pulp's reported content origin and the effective content origin when this variable is set. This is read at the server boundary and requires no client rebuild.
 
 2. Install and run:
 
@@ -138,7 +139,7 @@ Container images are built from `containers/Containerfile.{debian,alpine,ubi}` v
 
 Run `containers/build.sh --help` for the full option list. Tags follow `<image>:v<version>-<variant><os-version>` and `<image>:stable-<variant><os-version>`, e.g. `pulpadminui:v0.0.6-debian13` and `pulpadminui:stable-debian13`; the default (Debian) variant also gets the unsuffixed `pulpadminui:v0.0.6`, `pulpadminui:stable`, and `pulpadminui:latest` tags.
 
-All three images declare `USER 1001` and ship their files group-owned by gid 0, so they also run correctly under the arbitrary UID that OpenShift assigns (OpenShift ignores `USER` and runs the container as a random UID in the root group). They listen on port 3000. They need the same environment variables as local development: `PULP_BASE_URL`, `PULP_PROJECT_NAME`, and `PULP_SESSION_SECRET` at minimum, plus `PULP_PLUGIN_DIR` if you use a plugin overlay.
+All three images declare `USER 1001` and ship their files group-owned by gid 0, so they also run correctly under the arbitrary UID that OpenShift assigns (OpenShift ignores `USER` and runs the container as a random UID in the root group). They listen on port 3000. They need the same environment variables as local development: `PULP_BASE_URL`, `PULP_PROJECT_NAME`, and `PULP_SESSION_SECRET` at minimum, plus `PULP_PLUGIN_DIR` if you use a plugin overlay. If running behind a reverse proxy or published TLS endpoint, also set `PULP_CONTENT_ORIGIN` to override how Pulp reports its content URLs.
 
 Building any of the three images requires outbound network access to `fonts.googleapis.com` during the build stage, because the app loads its fonts with `next/font/google`.
 
