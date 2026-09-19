@@ -7,9 +7,9 @@ import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpPublications } from "@/components/pulp/use-pulp-publications";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { type PulpPluginDescriptor, type PulpPluginKind } from "@/lib/pulp-plugins";
 
@@ -204,16 +205,20 @@ function PublicationsListPageContent() {
                           <TableCell>{kind ? getPlugin(kind).label : "Unknown"}</TableCell>
                           <TableCell>{publication.pulp_created}</TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                onClick={() => removePublication(publication.pulp_href)}
-                                disabled={isLoading}
-                              >
-                                Delete
-                              </Button>
+                            <div className="flex justify-end">
+                              <RowActionMenu
+                                label={repositoryName}
+                                items={[
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    disabled: isLoading,
+                                    onSelect: () => removePublication(publication.pulp_href),
+                                  },
+                                ]}
+                              />
                             </div>
                           </TableCell>
                         </TableRow>

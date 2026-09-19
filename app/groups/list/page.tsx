@@ -10,6 +10,7 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,6 +20,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { CreatePulpGroupPayload } from "@/services/pulp/types";
 
 function GroupsListPageContent() {
@@ -166,24 +168,27 @@ function GroupsListPageContent() {
                         <>
                           <TableCell className="font-medium">{group.name}</TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => startEditGroup(group)}
-                                disabled={isLoading}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                onClick={() => removeGroup(group.id)}
-                                disabled={isLoading}
-                              >
-                                Delete
-                              </Button>
+                            <div className="flex justify-end">
+                              <RowActionMenu
+                                label={group.name}
+                                items={[
+                                  {
+                                    key: "edit",
+                                    label: "Edit",
+                                    icon: Pencil,
+                                    disabled: isLoading,
+                                    onSelect: () => startEditGroup(group),
+                                  },
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    disabled: isLoading,
+                                    onSelect: () => removeGroup(group.id),
+                                  },
+                                ]}
+                              />
                             </div>
                           </TableCell>
                         </>
