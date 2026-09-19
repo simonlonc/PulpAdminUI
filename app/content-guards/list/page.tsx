@@ -8,6 +8,7 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { Pencil, ShieldCheck, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -22,6 +23,7 @@ import { ContentGuardCreateModal } from "@/components/pulp/content-guard-create-
 import { ContentGuardEditModal } from "@/components/pulp/content-guard-edit-modal";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import {
   findPulpContentGuardKind,
@@ -162,32 +164,34 @@ function ContentGuardsListPageContent() {
                         <TableCell>{contentGuard.description ?? "-"}</TableCell>
                         <TableCell>{contentGuard.pulp_created}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setEditTarget(contentGuard)}
-                              disabled={isLoading}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setAccessTarget(contentGuard)}
-                              disabled={isLoading}
-                            >
-                              Access
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                              onClick={() => removeContentGuard(contentGuard.pulp_href)}
-                              disabled={isLoading}
-                            >
-                              Delete
-                            </Button>
+                          <div className="flex justify-end">
+                            <RowActionMenu
+                              label={contentGuard.name}
+                              items={[
+                                {
+                                  key: "edit",
+                                  label: "Edit",
+                                  icon: Pencil,
+                                  disabled: isLoading,
+                                  onSelect: () => setEditTarget(contentGuard),
+                                },
+                                {
+                                  key: "access",
+                                  label: "Access",
+                                  icon: ShieldCheck,
+                                  disabled: isLoading,
+                                  onSelect: () => setAccessTarget(contentGuard),
+                                },
+                                {
+                                  key: "delete",
+                                  label: "Delete",
+                                  icon: Trash2,
+                                  destructive: true,
+                                  disabled: isLoading,
+                                  onSelect: () => removeContentGuard(contentGuard.pulp_href),
+                                },
+                              ]}
+                            />
                           </div>
                         </TableCell>
                       </TableRow>
