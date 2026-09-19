@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
@@ -10,6 +9,7 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { Ban, Eye } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import {
@@ -315,24 +316,26 @@ function TasksListPageContent() {
                           {workerIdFromHref(t.worker)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Link
-                              href={`/tasks/detail?pulp_href=${encodeURIComponent(t.pulp_href)}`}
-                              className="inline-flex rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                            >
-                              Details
-                            </Link>
-                            {CANCELABLE_STATES.includes(t.state) ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="px-2.5 py-1 text-xs border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                disabled={cancelingHref === t.pulp_href}
-                                onClick={() => setCancelModalTask(t)}
-                              >
-                                Cancel
-                              </Button>
-                            ) : null}
+                          <div className="flex justify-end">
+                            <RowActionMenu
+                              label={shortTaskName(t.name)}
+                              items={[
+                                {
+                                  key: "details",
+                                  label: "Details",
+                                  icon: Eye,
+                                  href: `/tasks/detail?pulp_href=${encodeURIComponent(t.pulp_href)}`,
+                                },
+                                CANCELABLE_STATES.includes(t.state) && {
+                                  key: "cancel",
+                                  label: "Cancel",
+                                  icon: Ban,
+                                  destructive: true,
+                                  disabled: cancelingHref === t.pulp_href,
+                                  onSelect: () => setCancelModalTask(t),
+                                },
+                              ]}
+                            />
                           </div>
                         </TableCell>
                       </TableRow>

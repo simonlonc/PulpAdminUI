@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpRoles } from "@/components/pulp/use-pulp-roles";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
@@ -400,25 +402,27 @@ function RolesListPageContent() {
                           {r.locked ? (
                             <span className="text-xs text-zinc-400">—</span>
                           ) : (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="px-3 py-1.5 text-xs"
-                                onClick={() => openEditRole(r)}
-                                disabled={isLoading}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-red-300 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                onClick={() => void handleDeleteRole(r)}
-                                disabled={isLoading}
-                              >
-                                Delete
-                              </Button>
+                            <div className="flex justify-end">
+                              <RowActionMenu
+                                label={r.name}
+                                items={[
+                                  {
+                                    key: "edit",
+                                    label: "Edit",
+                                    icon: Pencil,
+                                    disabled: isLoading,
+                                    onSelect: () => openEditRole(r),
+                                  },
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    disabled: isLoading,
+                                    onSelect: () => void handleDeleteRole(r),
+                                  },
+                                ]}
+                              />
                             </div>
                           )}
                         </TableCell>
