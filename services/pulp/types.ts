@@ -192,6 +192,14 @@ export type PulpStatus = {
   domain_enabled: boolean;
 };
 
+/**
+ * What `GET /api/pulp/status` returns: Pulp's status plus the content origin the app will
+ * actually show. `content_origin_effective` is null unless PULP_CONTENT_ORIGIN is set.
+ */
+export type PulpStatusResponse = PulpStatus & {
+  content_origin_effective: string | null;
+};
+
 export type PulpOrphanCleanupResult = {
   task: string;
   state: string;
