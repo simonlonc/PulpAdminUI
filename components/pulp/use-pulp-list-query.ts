@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DEFAULT_PULP_LIST_QUERY,
   PulpListQuery,
+  applyPulpListFilters,
   buildPulpListParams,
   parsePulpListQuery,
   pulpListQueryToUrlParams,
@@ -56,10 +57,6 @@ export function usePulpListQuery(options?: { pageSize?: number }) {
     [pathname, router, searchParams]
   );
 
-  const setSearch = useCallback(
-    (search: string) => pushQuery({ ...query, search, page: DEFAULT_PULP_LIST_QUERY.page }),
-    [pushQuery, query]
-  );
   const setOrdering = useCallback(
     (ordering: string) => pushQuery({ ...query, ordering, page: DEFAULT_PULP_LIST_QUERY.page }),
     [pushQuery, query]
@@ -72,13 +69,8 @@ export function usePulpListQuery(options?: { pageSize?: number }) {
     (pageSize: number) => pushQuery({ ...query, pageSize, page: DEFAULT_PULP_LIST_QUERY.page }),
     [pushQuery, query]
   );
-  const setLabelSelect = useCallback(
-    (labelSelect: string) =>
-      pushQuery({ ...query, labelSelect, page: DEFAULT_PULP_LIST_QUERY.page }),
-    [pushQuery, query]
-  );
-  const setQ = useCallback(
-    (q: string) => pushQuery({ ...query, q, page: DEFAULT_PULP_LIST_QUERY.page }),
+  const setFilters = useCallback(
+    (patch: Partial<PulpListQuery>) => pushQuery(applyPulpListFilters(query, patch)),
     [pushQuery, query]
   );
 
@@ -110,12 +102,10 @@ export function usePulpListQuery(options?: { pageSize?: number }) {
   return {
     query,
     params,
-    setSearch,
     setOrdering,
     setPage,
     setPageSize,
-    setLabelSelect,
-    setQ,
+    setFilters,
     setExtraParams,
   };
 }

@@ -46,8 +46,7 @@ function DistributionsListPageContent() {
     usePulpAuthContext();
   const { getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
-    usePulpListQuery();
+  const { query, params, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
   const { contentGuardOptions } = usePulpContentGuardOptions(hasSession);
   const [repositoryFilter, setRepositoryFilter] = useState("");
@@ -126,14 +125,14 @@ function DistributionsListPageContent() {
             </div>
             <ListQueryBar
               search={query.search}
-              onSearchChange={setSearch}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={isLoading}
               q={query.q}
-              onQChange={setQ}
+              showQ
               labelSelect={query.labelSelect}
-              onLabelSelectChange={setLabelSelect}
+              showLabelSelect
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Repository">

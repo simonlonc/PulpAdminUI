@@ -34,7 +34,9 @@ function ContentListPageContent() {
     usePulpAuthContext();
   const { plugins, getPlugin, findContentForHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, params, setPage, setPageSize, setQ } = usePulpListQuery({ pageSize: PAGE_SIZE });
+  const { query, params, setPage, setPageSize, setFilters } = usePulpListQuery({
+    pageSize: PAGE_SIZE,
+  });
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
   const [repositoryFilter, setRepositoryFilter] = useState("");
   const [contentTypeFilter, setContentTypeFilter] = useState("");
@@ -87,13 +89,13 @@ function ContentListPageContent() {
           <CardContent className="space-y-4">
             <ListQueryBar
               search={query.search}
-              onSearchChange={() => {}}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={loading}
               showSearch={false}
               q={query.q}
-              onQChange={setQ}
+              showQ
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Repository">

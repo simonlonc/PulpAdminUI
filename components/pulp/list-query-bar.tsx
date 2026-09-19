@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
-import { PULP_PAGE_SIZES } from "@/lib/pulp-list-query";
+import { PULP_PAGE_SIZES, type PulpListQuery } from "@/lib/pulp-list-query";
 
 const Q_HELP_TEXT =
   'Combine the endpoint\'s own filters with NOT, AND, OR. Examples: "state=completed AND name__contains=sync", "NOT state=completed". Field names are the same filters this endpoint accepts elsewhere.';
@@ -16,42 +16,44 @@ const LABEL_SELECT_HELP_TEXT =
 /**
  * Search input plus a page-size select for a Pulp list page, driven by
  * usePulpListQuery. The search box holds its own draft text and only calls
- * onSearchChange on submit or when cleared, so typing does not fire a
+ * onFiltersChange on submit or when cleared, so typing does not fire a
  * server request (and a URL write) on every keystroke.
  *
- * Passing q/onQChange adds a collapsed-by-default "advanced filter" row for
+ * Passing showQ adds a collapsed-by-default "advanced filter" row for
  * Pulp's `q` complex filter (NOT/AND/OR over the endpoint's own filters).
- * Omit onQChange for endpoints that do not advertise `q`.
+ * Leave showQ false for endpoints that do not advertise `q`.
  */
 export type ListQueryBarProps = {
   search: string;
-  onSearchChange: (search: string) => void;
   pageSize: number;
   onPageSizeChange: (pageSize: number) => void;
+  onFiltersChange: (filters: Partial<PulpListQuery>) => void;
   disabled?: boolean;
   searchPlaceholder?: string;
   /** Set to false for endpoints with no search param (e.g. the generic /content/ list). */
   showSearch?: boolean;
-  /** Current `q` complex-filter value. Ignored (and the row hidden) unless onQChange is set. */
+  /** Current `q` complex-filter value. Ignored (and the row hidden) unless showQ is set. */
   q?: string;
-  onQChange?: (q: string) => void;
-  /** Current `pulp_label_select` value. Ignored (and the control hidden) unless onLabelSelectChange is set. */
+  /** Set to true for endpoints that advertise Pulp's `q` complex filter. */
+  showQ?: boolean;
+  /** Current `pulp_label_select` value. Ignored (and the control hidden) unless showLabelSelect is set. */
   labelSelect?: string;
-  onLabelSelectChange?: (labelSelect: string) => void;
+  /** Set to true for endpoints that advertise `pulp_label_select`. */
+  showLabelSelect?: boolean;
 };
 
 export function ListQueryBar({
   search,
-  onSearchChange,
   pageSize,
   onPageSizeChange,
+  onFiltersChange,
   disabled,
   searchPlaceholder = "Search by name",
   showSearch = true,
   q = "",
-  onQChange,
+  showQ = false,
   labelSelect = "",
-  onLabelSelectChange,
+  showLabelSelect = false,
 }: ListQueryBarProps) {
   const [draft, setDraft] = useState(search);
   const [qDraft, setQDraft] = useState(q);
@@ -72,24 +74,32 @@ export function ListQueryBar({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSearchChange(draft.trim());
-    onQChange?.(qDraft.trim());
-    onLabelSelectChange?.(labelSelectDraft.trim());
+    const patch: Partial<PulpListQuery> = {};
+    if (showSearch) {
+      patch.search = draft.trim();
+    }
+    if (showQ) {
+      patch.q = qDraft.trim();
+    }
+    if (showLabelSelect) {
+      patch.labelSelect = labelSelectDraft.trim();
+    }
+    onFiltersChange(patch);
   }
 
   function handleClear() {
     setDraft("");
-    onSearchChange("");
+    onFiltersChange({ search: "" });
   }
 
   function handleClearQ() {
     setQDraft("");
-    onQChange?.("");
+    onFiltersChange({ q: "" });
   }
 
   function handleClearLabelSelect() {
     setLabelSelectDraft("");
-    onLabelSelectChange?.("");
+    onFiltersChange({ labelSelect: "" });
   }
 
   return (
@@ -130,7 +140,7 @@ export function ListQueryBar({
             ))}
           </select>
         </FormField>
-        {onLabelSelectChange ? (
+        {showLabelSelect ? (
           <FormField
             label={
               <span className="inline-flex items-center gap-1.5">
@@ -160,7 +170,7 @@ export function ListQueryBar({
             </div>
           </FormField>
         ) : null}
-        {onQChange ? (
+        {showQ ? (
           <Button
             type="button"
             variant="outline"
@@ -171,7 +181,7 @@ export function ListQueryBar({
           </Button>
         ) : null}
       </div>
-      {onQChange && advancedOpen ? (
+      {showQ && advancedOpen ? (
         <FormField
           label={
             <span className="inline-flex items-center gap-1.5">
