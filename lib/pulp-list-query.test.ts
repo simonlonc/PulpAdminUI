@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_PULP_LIST_QUERY,
+  applyPulpListFilters,
   buildPulpListParams,
   parsePulpListQuery,
   pulpListQueryToUrlParams,
@@ -97,6 +98,48 @@ describe("parsePulpListQuery", () => {
     for (const size of [25, 50, 100, 200]) {
       expect(parsePulpListQuery(new URLSearchParams({ size: String(size) })).pageSize).toBe(size);
     }
+  });
+});
+
+describe("applyPulpListFilters", () => {
+  it("applies search, q and labelSelect in one call so all three survive in the resulting URL", () => {
+    // Regression for the list-query-bar bug: three sequential single-key
+    // setter calls each spread the same pre-submit query, so only the last
+    // one's key survived. One applyPulpListFilters call must fold all three
+    // changes into a single query, and that query must serialize to a
+    // single query string containing all three params.
+    const query: PulpListQuery = { ...DEFAULT_PULP_LIST_QUERY, page: 3 };
+    const next = applyPulpListFilters(query, {
+      search: "epel",
+      q: "name=rpm",
+      labelSelect: "env=prod",
+    });
+    const params = pulpListQueryToUrlParams(next);
+    expect(params.get("search")).toBe("epel");
+    expect(params.get("q")).toBe("name=rpm");
+    expect(params.get("label")).toBe("env=prod");
+  });
+
+  it("resets page to the default when a filter changes", () => {
+    const query: PulpListQuery = { ...DEFAULT_PULP_LIST_QUERY, page: 5 };
+    const next = applyPulpListFilters(query, { search: "epel" });
+    expect(next.page).toBe(DEFAULT_PULP_LIST_QUERY.page);
+  });
+
+  it("leaves other filters, ordering and pageSize intact when only one key is patched", () => {
+    const query: PulpListQuery = {
+      ...DEFAULT_PULP_LIST_QUERY,
+      ordering: "-pulp_created",
+      pageSize: 200,
+      labelSelect: "env=prod",
+      q: "name=rpm",
+    };
+    const next = applyPulpListFilters(query, { search: "epel" });
+    expect(next).toEqual({
+      ...query,
+      search: "epel",
+      page: DEFAULT_PULP_LIST_QUERY.page,
+    });
   });
 });
 

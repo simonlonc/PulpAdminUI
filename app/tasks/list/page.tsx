@@ -84,7 +84,7 @@ function TasksListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setExtraParams } =
+  const { query, setOrdering, setPage, setPageSize, setFilters, setExtraParams } =
     usePulpListQuery({ pageSize: PAGE_SIZE });
 
   const searchParams = useSearchParams();
@@ -168,13 +168,13 @@ function TasksListPageContent() {
           <CardContent className="space-y-4">
             <ListQueryBar
               search={query.search}
-              onSearchChange={setSearch}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={loading}
               searchPlaceholder="Search by task name"
               q={query.q}
-              onQChange={setQ}
+              showQ
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="State">

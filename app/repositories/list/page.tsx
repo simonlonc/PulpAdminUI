@@ -76,8 +76,7 @@ function RepositoriesListPageContent() {
     usePulpAuthContext();
   const { plugins, getPlugin } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
-    usePulpListQuery();
+  const { query, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
   const { ensure: ensurePermissions, can: canOnRepo } = usePulpObjectPermissions();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
@@ -400,14 +399,14 @@ function RepositoriesListPageContent() {
 
             <ListQueryBar
               search={query.search}
-              onSearchChange={setSearch}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={isLoadingRepos}
               q={query.q}
-              onQChange={setQ}
+              showQ
               labelSelect={query.labelSelect}
-              onLabelSelectChange={setLabelSelect}
+              showLabelSelect
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Remote">

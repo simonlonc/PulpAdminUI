@@ -47,8 +47,7 @@ function RemotesListPageContent() {
     usePulpAuthContext();
   const { plugins } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, setSearch, setOrdering, setPage, setPageSize, setQ, setLabelSelect } =
-    usePulpListQuery();
+  const { query, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remotes, setRemotes] = useState<RemoteRow[]>([]);
@@ -185,14 +184,14 @@ function RemotesListPageContent() {
           <CardContent className="space-y-4 p-5">
             <ListQueryBar
               search={query.search}
-              onSearchChange={setSearch}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={isLoadingRemotes}
               q={query.q}
-              onQChange={setQ}
+              showQ
               labelSelect={query.labelSelect}
-              onLabelSelectChange={setLabelSelect}
+              showLabelSelect
             />
             <TableWrapper>
               <Table>

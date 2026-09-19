@@ -81,6 +81,19 @@ export function parsePulpListQuery(params: URLSearchParams): PulpListQuery {
 }
 
 /**
+ * Applies a partial filter change to a PulpListQuery, resetting page to the
+ * default the way every individual filter setter already does. Pure so a
+ * single call can fold multiple filter changes (search, q, labelSelect) into
+ * one query update instead of each one clobbering the others.
+ */
+export function applyPulpListFilters(
+  query: PulpListQuery,
+  patch: Partial<PulpListQuery>
+): PulpListQuery {
+  return { ...query, ...patch, page: DEFAULT_PULP_LIST_QUERY.page };
+}
+
+/**
  * Inverse of parsePulpListQuery: serializes a PulpListQuery to the browser
  * URL's query params, omitting values equal to the default so a pristine
  * list page keeps a clean URL.
