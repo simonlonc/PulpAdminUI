@@ -45,8 +45,7 @@ function ContentGuardsListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, params, setSearch, setOrdering, setPage, setPageSize, setQ } =
-    usePulpListQuery();
+  const { query, params, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
   const [typeFilter, setTypeFilter] = useState("");
   const requestParams = useMemo(() => {
     const next = new URLSearchParams(params);
@@ -106,12 +105,12 @@ function ContentGuardsListPageContent() {
             </div>
             <ListQueryBar
               search={query.search}
-              onSearchChange={setSearch}
               pageSize={query.pageSize}
               onPageSizeChange={setPageSize}
+              onFiltersChange={setFilters}
               disabled={isLoading}
               q={query.q}
-              onQChange={setQ}
+              showQ
             />
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Type">
