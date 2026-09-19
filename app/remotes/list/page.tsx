@@ -4,10 +4,12 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
+import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { Pencil, ShieldCheck, Tag, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -22,6 +24,7 @@ import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { RemoteFormModal } from "@/components/pulp/remote-form-modal";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
@@ -48,6 +51,7 @@ function RemotesListPageContent() {
   const { plugins } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { query, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
+  const { ensure: ensurePermissions, can: canOnRemote } = usePulpObjectPermissions();
 
   const [kind, setKind] = useState<PulpPluginKind>("rpm");
   const [remotes, setRemotes] = useState<RemoteRow[]>([]);
@@ -258,43 +262,54 @@ function RemotesListPageContent() {
                           <LabelChips labels={remote.pulp_labels} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="px-3 py-1.5 text-xs"
-                              onClick={() => openEdit(remote)}
+                          <div className="flex justify-end">
+                            <RowActionMenu
+                              label={remote.name}
                               disabled={isLoading || busyHref === remote.pulp_href}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="px-3 py-1.5 text-xs"
-                              onClick={() => setLabelsTarget(remote)}
-                              disabled={isLoading || busyHref === remote.pulp_href}
-                            >
-                              Labels
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="px-3 py-1.5 text-xs"
-                              onClick={() => setAccessTarget(remote)}
-                              disabled={isLoading || busyHref === remote.pulp_href}
-                            >
-                              Access
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="border-red-300 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                              onClick={() => void handleDelete(remote)}
-                              disabled={isLoading || busyHref === remote.pulp_href}
-                            >
-                              Delete
-                            </Button>
+                              onOpenChange={(open) => {
+                                if (open) ensurePermissions(remote.pulp_href);
+                              }}
+                              items={[
+                                {
+                                  key: "edit",
+                                  label: "Edit",
+                                  icon: Pencil,
+                                  disabled:
+                                    isLoading ||
+                                    busyHref === remote.pulp_href ||
+                                    !canOnRemote(remote.pulp_href, "change"),
+                                  onSelect: () => openEdit(remote),
+                                },
+                                {
+                                  key: "labels",
+                                  label: "Labels",
+                                  icon: Tag,
+                                  disabled:
+                                    isLoading ||
+                                    busyHref === remote.pulp_href ||
+                                    !canOnRemote(remote.pulp_href, "change"),
+                                  onSelect: () => setLabelsTarget(remote),
+                                },
+                                {
+                                  key: "access",
+                                  label: "Access",
+                                  icon: ShieldCheck,
+                                  disabled: isLoading || busyHref === remote.pulp_href,
+                                  onSelect: () => setAccessTarget(remote),
+                                },
+                                {
+                                  key: "delete",
+                                  label: "Delete",
+                                  icon: Trash2,
+                                  destructive: true,
+                                  disabled:
+                                    isLoading ||
+                                    busyHref === remote.pulp_href ||
+                                    !canOnRemote(remote.pulp_href, "delete"),
+                                  onSelect: () => void handleDelete(remote),
+                                },
+                              ]}
+                            />
                           </div>
                         </TableCell>
                       </TableRow>

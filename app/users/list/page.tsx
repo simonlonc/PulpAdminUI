@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckboxField, FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { KeyRound, Pencil, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -20,6 +21,7 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 
 export default function UsersListPage() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
@@ -273,32 +275,34 @@ export default function UsersListPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => startEditUser(user)}
-                            disabled={isLoading}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => startChangePassword(user)}
-                            disabled={isLoading}
-                          >
-                            Change password
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                            onClick={() => removeUser(user.id)}
-                            disabled={isLoading}
-                          >
-                            Delete
-                          </Button>
+                        <div className="flex justify-end">
+                          <RowActionMenu
+                            label={user.username}
+                            items={[
+                              {
+                                key: "edit",
+                                label: "Edit",
+                                icon: Pencil,
+                                disabled: isLoading,
+                                onSelect: () => startEditUser(user),
+                              },
+                              {
+                                key: "change-password",
+                                label: "Change password",
+                                icon: KeyRound,
+                                disabled: isLoading,
+                                onSelect: () => startChangePassword(user),
+                              },
+                              {
+                                key: "delete",
+                                label: "Delete",
+                                icon: Trash2,
+                                destructive: true,
+                                disabled: isLoading,
+                                onSelect: () => removeUser(user.id),
+                              },
+                            ]}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>

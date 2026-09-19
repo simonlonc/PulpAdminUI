@@ -6,11 +6,13 @@ import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpDistributions } from "@/components/pulp/use-pulp-distributions";
 import { usePulpPluginsContext } from "@/components/pulp/plugins-context";
 import { usePulpContentGuardOptions } from "@/components/pulp/use-pulp-content-guard-options";
+import { usePulpObjectPermissions } from "@/components/pulp/use-pulp-object-permissions";
 import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-options";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { Pencil, ShieldCheck, Tag, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -26,6 +28,7 @@ import { DistributionEditModal } from "@/components/pulp/distribution-edit-modal
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { PulpDistribution } from "@/services/pulp/types";
 
@@ -49,6 +52,7 @@ function DistributionsListPageContent() {
   const { query, params, setOrdering, setPage, setPageSize, setFilters } = usePulpListQuery();
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
   const { contentGuardOptions } = usePulpContentGuardOptions(hasSession);
+  const { ensure: ensurePermissions, can: canOnDistribution } = usePulpObjectPermissions();
   const [repositoryFilter, setRepositoryFilter] = useState("");
   const requestParams = useMemo(() => {
     const next = new URLSearchParams(params);
@@ -210,40 +214,48 @@ function DistributionsListPageContent() {
                             <LabelChips labels={distribution.pulp_labels} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setEditTarget(distribution)}
+                            <div className="flex justify-end">
+                              <RowActionMenu
+                                label={distribution.name}
                                 disabled={isLoading}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setLabelsTarget(distribution)}
-                                disabled={isLoading}
-                              >
-                                Labels
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setAccessTarget(distribution)}
-                                disabled={isLoading}
-                              >
-                                Access
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
-                                onClick={() => removeDistribution(distribution.pulp_href)}
-                                disabled={isLoading}
-                              >
-                                Delete
-                              </Button>
+                                onOpenChange={(open) => {
+                                  if (open) ensurePermissions(distribution.pulp_href);
+                                }}
+                                items={[
+                                  {
+                                    key: "edit",
+                                    label: "Edit",
+                                    icon: Pencil,
+                                    disabled:
+                                      isLoading || !canOnDistribution(distribution.pulp_href, "change"),
+                                    onSelect: () => setEditTarget(distribution),
+                                  },
+                                  {
+                                    key: "labels",
+                                    label: "Labels",
+                                    icon: Tag,
+                                    disabled:
+                                      isLoading || !canOnDistribution(distribution.pulp_href, "change"),
+                                    onSelect: () => setLabelsTarget(distribution),
+                                  },
+                                  {
+                                    key: "access",
+                                    label: "Access",
+                                    icon: ShieldCheck,
+                                    disabled: isLoading,
+                                    onSelect: () => setAccessTarget(distribution),
+                                  },
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    disabled:
+                                      isLoading || !canOnDistribution(distribution.pulp_href, "delete"),
+                                    onSelect: () => removeDistribution(distribution.pulp_href),
+                                  },
+                                ]}
+                              />
                             </div>
                           </TableCell>
                         </TableRow>

@@ -12,15 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   GitBranch,
-  MoreVertical,
   Package,
   Pencil,
   RefreshCw,
@@ -46,6 +38,7 @@ import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query
 import { RepositoryCreateModal } from "@/components/pulp/repository-create-modal";
 import { RepositoryDeleteModal } from "@/components/pulp/repository-delete-modal";
 import { RepositorySyncModal } from "@/components/pulp/repository-sync-modal";
+import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
@@ -468,100 +461,81 @@ function RepositoriesListPageContent() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
-                          <DropdownMenu
+                          <RowActionMenu
+                            label={repo.name}
+                            disabled={busyHref === repo.pulp_href}
                             onOpenChange={(open) => {
                               if (open) ensurePermissions(repo.pulp_href);
                             }}
-                          >
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                disabled={busyHref === repo.pulp_href}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                                aria-label={`Actions for ${repo.name}`}
-                              >
-                                <MoreVertical className="size-4" strokeWidth={2} />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="min-w-[11rem]">
-                              <DropdownMenuItem
-                                asChild
-                                disabled={!canOnRepo(repo.pulp_href, "change")}
-                              >
-                                <Link
-                                  href={`/repositories/edit?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`}
-                                >
-                                  <Pencil className="size-4" />
-                                  Edit
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/repositories/versions?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`}
-                                >
-                                  <GitBranch className="size-4" />
-                                  Versions
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/repositories/content?pulp_href=${encodeURIComponent(repo.pulp_href)}`}
-                                >
-                                  <Package className="size-4" />
-                                  Content
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={!canOnRepo(repo.pulp_href, "change")}
-                                onSelect={() => setLabelsTarget(repo)}
-                              >
-                                <Tag className="size-4" />
-                                Labels
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => setAccessTarget(repo)}>
-                                <ShieldCheck className="size-4" />
-                                Access
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {getPlugin(kind).supportsSync ? (
-                                <DropdownMenuItem
-                                  disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync")}
-                                  onSelect={() => {
-                                    setSyncResult(null);
-                                    setSyncModalRepo(repo);
-                                  }}
-                                >
-                                  <RefreshCw className="size-4" />
-                                  Sync
-                                </DropdownMenuItem>
-                              ) : null}
-                              {getPlugin(kind).supportsPublish ? (
-                                <DropdownMenuItem
-                                  disabled={busyHref === repo.pulp_href}
-                                  onSelect={() => void handlePublish(repo)}
-                                >
-                                  <Upload className="size-4" />
-                                  Publish
-                                </DropdownMenuItem>
-                              ) : null}
-                              <DropdownMenuItem
-                                disabled={busyHref === repo.pulp_href}
-                                onSelect={() => void handleDistribute(repo)}
-                              >
-                                <Share2 className="size-4" />
-                                Distribute
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                disabled={busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "delete")}
-                                onSelect={() => setDeleteModalRepo(repo)}
-                              >
-                                <Trash2 className="size-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            items={[
+                              {
+                                key: "edit",
+                                label: "Edit",
+                                icon: Pencil,
+                                disabled: !canOnRepo(repo.pulp_href, "change"),
+                                href: `/repositories/edit?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`,
+                              },
+                              {
+                                key: "versions",
+                                label: "Versions",
+                                icon: GitBranch,
+                                href: `/repositories/versions?kind=${kind}&pulp_href=${encodeURIComponent(repo.pulp_href)}`,
+                              },
+                              {
+                                key: "content",
+                                label: "Content",
+                                icon: Package,
+                                href: `/repositories/content?pulp_href=${encodeURIComponent(repo.pulp_href)}`,
+                              },
+                              {
+                                key: "labels",
+                                label: "Labels",
+                                icon: Tag,
+                                disabled: !canOnRepo(repo.pulp_href, "change"),
+                                onSelect: () => setLabelsTarget(repo),
+                              },
+                              {
+                                key: "access",
+                                label: "Access",
+                                icon: ShieldCheck,
+                                onSelect: () => setAccessTarget(repo),
+                              },
+                              { key: "sep-1", separator: true },
+                              getPlugin(kind).supportsSync && {
+                                key: "sync",
+                                label: "Sync",
+                                icon: RefreshCw,
+                                disabled: busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "sync"),
+                                onSelect: () => {
+                                  setSyncResult(null);
+                                  setSyncModalRepo(repo);
+                                },
+                              },
+                              getPlugin(kind).supportsPublish && {
+                                key: "publish",
+                                label: "Publish",
+                                icon: Upload,
+                                disabled: busyHref === repo.pulp_href,
+                                onSelect: () => void handlePublish(repo),
+                              },
+                              {
+                                key: "distribute",
+                                label: "Distribute",
+                                icon: Share2,
+                                disabled: busyHref === repo.pulp_href,
+                                onSelect: () => void handleDistribute(repo),
+                              },
+                              { key: "sep-2", separator: true },
+                              {
+                                key: "delete",
+                                label: "Delete",
+                                icon: Trash2,
+                                destructive: true,
+                                disabled: busyHref === repo.pulp_href || !canOnRepo(repo.pulp_href, "delete"),
+                                onSelect: () => setDeleteModalRepo(repo),
+                              },
+                            ]}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
