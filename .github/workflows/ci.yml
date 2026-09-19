@@ -7,7 +7,9 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # Dummy values: next build reads both, and nothing here contacts a Pulp server.
+    # Dummy values: nothing here contacts a Pulp server. Both are read lazily at
+    # request time rather than during next build, so they are set only to match
+    # how the app runs.
     # PULP_TEST_BASE_URL is deliberately unset, so the opt-in contract tier stays skipped.
     env:
       PULP_PROJECT_NAME: Pulp
