@@ -44,6 +44,30 @@ export class PulpApiError extends Error {
 }
 
 /**
+ * Parses a request body as JSON and requires the result to be a plain, non-null object -- not a
+ * string, number, boolean, or null. Throws a `PulpApiError(400, ...)` for a body that is missing,
+ * truncated, or otherwise not valid JSON, and for JSON that parses to something a route can't use
+ * as a field bag, so `withPulpAuth` turns either case into the same `{ detail }` 400 response
+ * routes already returned by hand for a bad body -- instead of an unguarded `request.json()` (or
+ * an `as` cast around it) letting a `SyntaxError`, or a downstream property read on a non-object,
+ * escape as a raw 500.
+ */
+export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    throw new PulpApiError(400, "Invalid request body.");
+  }
+
+  if (parsed === null || typeof parsed !== "object") {
+    throw new PulpApiError(400, "Invalid request body.");
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+/**
  * Wraps a route handler with the `requirePulpAuth` preamble every Pulp API route repeats: run
  * the auth check, hand the decoded `auth` to the handler, and if it throws a `PulpApiError`,
  * clear the auth cookie on a 401/403 and return the standard `{ detail }` JSON response. The

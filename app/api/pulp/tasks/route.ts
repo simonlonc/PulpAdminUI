@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import { buildUpstreamListParams, normalizePulpHrefToApiPath } from "../repositories/_server";
 import { PulpPaginatedResponse, PulpTask } from "@/services/pulp/types";
 
@@ -45,7 +45,7 @@ function isTaskApiPath(path: string): boolean {
 }
 
 export const PATCH = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as CancelBody;
+  const body = (await readJsonBody(request)) as CancelBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

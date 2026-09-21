@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type SyncBody = {
@@ -20,7 +20,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: `${plugin.label} repositories cannot be synced.` }, { status: 400 });
   }
 
-  const body = (await request.json()) as SyncBody;
+  const body = (await readJsonBody(request)) as SyncBody;
   const repoHref = body.pulp_href?.trim();
   const remoteHref = body.remote?.trim();
   if (!repoHref) {

@@ -92,6 +92,20 @@ describe("labels route", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("F-2: POST rejects a truncated/non-JSON body with 400 instead of throwing a raw SyntaxError", async () => {
+    const request = new Request("http://pulp.test/api/pulp/labels", {
+      method: "POST",
+      body: "{",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request, undefined);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("surfaces a field-keyed Pulp 400 body as a readable detail", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ key: ["This field is required."] }), { status: 400 })

@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "@/app/api/pulp/repositories/_server";
 import { PulpObjectRole, PulpObjectRoleAssignmentPayload } from "@/services/pulp/types";
 
@@ -45,7 +45,7 @@ export const GET = withPulpAuth(async (request, auth) => {
 });
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as ObjectRoleAssignmentBody;
+  const body = (await readJsonBody(request)) as ObjectRoleAssignmentBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
@@ -75,7 +75,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 });
 
 export const DELETE = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as ObjectRoleAssignmentBody;
+  const body = (await readJsonBody(request)) as ObjectRoleAssignmentBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type PublishBody = {
@@ -21,7 +21,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     );
   }
 
-  const body = (await request.json()) as PublishBody;
+  const body = (await readJsonBody(request)) as PublishBody;
   const repoHref = body.pulp_href?.trim();
   if (!repoHref) {
     return Response.json({ detail: "Repository pulp_href is required." }, { status: 400 });

@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse } from "../../_server";
 import { isRepositoryVersionInstancePath, mapPulpRepositoryVersion } from "../../repository-version-map";
 
@@ -55,7 +55,7 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
-  const body = (await request.json()) as DeleteBody;
+  const body = (await readJsonBody(request)) as DeleteBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

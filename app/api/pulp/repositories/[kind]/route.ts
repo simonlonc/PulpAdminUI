@@ -1,7 +1,7 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { buildUpstreamListParams, normalizePulpHrefToApiPath, TaskRefResponse } from "../_server";
 
 type PulpRepositoryRow = {
@@ -161,7 +161,7 @@ export const PATCH = withPulpAuth(async (request, auth, { params }: { params: Pr
   }
   const { plugin } = pluginResult;
 
-  const body = (await request.json()) as RepositoryPatchBody;
+  const body = (await readJsonBody(request)) as RepositoryPatchBody;
   const pulpHref = body.pulp_href?.trim();
   const name = body.name?.trim();
   if (!pulpHref) {
@@ -203,7 +203,7 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     return pluginResult.response;
   }
 
-  const body = (await request.json()) as DeleteBody;
+  const body = (await readJsonBody(request)) as DeleteBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

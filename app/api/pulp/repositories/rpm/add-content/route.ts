@@ -1,5 +1,5 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, TaskRefResponse, toPulpHrefPath } from "../../_server";
 
 type AddToRepositoryBody = {
@@ -54,7 +54,7 @@ async function findOrCreateRepository(
 }
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as AddToRepositoryBody;
+  const body = (await readJsonBody(request)) as AddToRepositoryBody;
   const repositoryName = body.repositoryName?.trim();
   const content = body.content?.trim();
   if (!repositoryName) {
