@@ -70,15 +70,16 @@ describe("encodePulpAuth / decodePulpAuth", () => {
   it("never throws, and returns null or an object with two non-empty string fields, for any string", () => {
     fc.assert(
       fc.property(fc.string(), (value) => {
-        let result: ReturnType<typeof decodePulpAuth>;
+        let result: ReturnType<typeof decodePulpAuth> = null;
         expect(() => {
           result = decodePulpAuth(value);
         }).not.toThrow();
-        if (result !== null) {
-          expect(typeof result!.username).toBe("string");
-          expect(result!.username.length).toBeGreaterThan(0);
-          expect(typeof result!.password).toBe("string");
-          expect(result!.password.length).toBeGreaterThan(0);
+        const decoded = result as ReturnType<typeof decodePulpAuth>;
+        if (decoded !== null) {
+          expect(typeof decoded.username).toBe("string");
+          expect(decoded.username.length).toBeGreaterThan(0);
+          expect(typeof decoded.password).toBe("string");
+          expect(decoded.password.length).toBeGreaterThan(0);
         }
       })
     );

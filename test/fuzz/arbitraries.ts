@@ -27,6 +27,7 @@ import fc from "fast-check";
 
 import { PULP_PAGE_SIZES, type PulpListQuery } from "@/lib/pulp-list-query";
 import type { CreatedResourceEntry, TaskResponse } from "@/app/api/pulp/repositories/_server";
+import type { PulpTaskProgressReport } from "@/services/pulp/types";
 
 /** Bad authority strings that make `new URL()` throw, for the invalid-absolute family below. */
 const badAuthorities = fc.constantFrom(
@@ -146,11 +147,39 @@ const pulpTaskState = fc.oneof(
   fc.string()
 );
 
-/** Values that inhabit TaskResponse, covering the real Pulp task states plus arbitrary strings. */
+/**
+ * Hrefs for TaskResponse.pulp_href/href, built from the same resource-path shape as pulpHref()
+ * but weighted across resource kinds so "/publications/" sometimes appears (and sometimes does
+ * not), since resolvePublicationHrefAfterTask branches on exactly that substring.
+ */
+const taskHref = fc
+  .tuple(fc.constantFrom("publications", "repositories", "distributions"), pulpResourcePath, fc.uuid())
+  .map(([resource, resourcePath, id]) => `/pulp/api/v3/${resource}/${resourcePath}/${id}/`);
+
+const pulpTaskProgressReport: fc.Arbitrary<PulpTaskProgressReport> = fc.record({
+  message: fc.string(),
+  code: fc.string(),
+  state: fc.string(),
+  total: fc.integer(),
+  done: fc.integer(),
+  suffix: fc.oneof(fc.string(), fc.constant(null)),
+});
+
+/**
+ * Values that inhabit TaskResponse, covering the real Pulp task states plus arbitrary strings.
+ * pulp_href, href and progress_reports are optional, matching the type -- and are sometimes
+ * absent -- so resolvePublicationHrefAfterTask's pulp_href/href branches are actually reachable.
+ */
 export function pulpTask(): fc.Arbitrary<TaskResponse> {
-  return fc.record({
-    state: pulpTaskState,
-    created_resources: fc.array(createdResourceEntry),
-    error: fc.jsonValue(),
-  });
+  return fc.record(
+    {
+      state: pulpTaskState,
+      created_resources: fc.array(createdResourceEntry),
+      error: fc.jsonValue(),
+      pulp_href: taskHref,
+      href: taskHref,
+      progress_reports: fc.array(pulpTaskProgressReport),
+    },
+    { requiredKeys: ["state", "created_resources", "error"] }
+  );
 }
