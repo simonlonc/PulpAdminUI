@@ -121,7 +121,16 @@ const deeplyNestedValue = fc
   )
   .map(([keys, leaf]) => keys.reduceRight<unknown>((acc, key) => ({ [key]: acc }), leaf));
 
-const fieldErrorValue = fc.oneof(fc.string(), fc.array(fc.jsonValue()), deeplyNestedValue);
+/**
+ * Depth-bounded on purpose. fc.jsonValue() defaults to unbounded depth, and because the F-8
+ * property genuinely fails, fast-check then tries to SHRINK a deeply nested value -- which does
+ * not terminate in any practical time and hangs the whole `npm run fuzz` run. maxDepth 4 is still
+ * far deeper than any DRF error body Pulp emits, so the finding is preserved; this bounds the
+ * shrink search space, it does not narrow the property past what it is meant to cover.
+ */
+const boundedJsonValue = fc.jsonValue({ maxDepth: 4 });
+
+const fieldErrorValue = fc.oneof(fc.string(), fc.array(boundedJsonValue), deeplyNestedValue);
 
 /**
  * Values biased toward the DRF error shapes lib/pulp.ts:pulpErrorDetailFromBody actually reads,
@@ -130,10 +139,10 @@ const fieldErrorValue = fc.oneof(fc.string(), fc.array(fc.jsonValue()), deeplyNe
 export function pulpErrorBody(): fc.Arbitrary<unknown> {
   return fc.oneof(
     { weight: 2, arbitrary: fc.record({ detail: fc.string() }) },
-    { weight: 2, arbitrary: fc.record({ detail: fc.array(fc.jsonValue()) }) },
-    { weight: 2, arbitrary: fc.record({ non_field_errors: fc.array(fc.jsonValue()) }) },
+    { weight: 2, arbitrary: fc.record({ detail: fc.array(boundedJsonValue) }) },
+    { weight: 2, arbitrary: fc.record({ non_field_errors: fc.array(boundedJsonValue) }) },
     { weight: 2, arbitrary: fc.dictionary(fc.string({ minLength: 1 }), fieldErrorValue, { minKeys: 1 }) },
-    { weight: 1, arbitrary: fc.jsonValue() }
+    { weight: 1, arbitrary: boundedJsonValue }
   );
 }
 

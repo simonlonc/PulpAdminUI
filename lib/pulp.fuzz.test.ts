@@ -99,7 +99,14 @@ describe("pulpErrorDetailFromBody", () => {
           expect((result as string).length).toBeLessThanOrEqual(500);
         }
       }),
-      { examples: [[oversizedNestedBody]] }
+      {
+        examples: [[oversizedNestedBody]],
+        // Safety net: this property FAILS (F-8 is real), so fast-check shrinks. Shrinking a
+        // nested JSON value can run away even with the depth bound in pulpErrorBody(); cap it
+        // so a pathological shrink reports the counterexample it has instead of hanging the run.
+        interruptAfterTimeLimit: 10_000,
+        markInterruptAsFailure: true,
+      }
     );
   });
 });
