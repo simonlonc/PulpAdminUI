@@ -20,6 +20,13 @@ type ObjectRoleAssignmentBody = {
 
 /** Guards against proxying a request to an arbitrary upstream path. */
 function isAllowedObjectRoleApiPath(apiPath: string): boolean {
+  // A relative pulp_href whose query string (or fragment) ends in "/" would otherwise pass the
+  // endsWith("/") check below, and list_roles/add_role/remove_role/ then lands inside the query
+  // string instead of the path -- reject a query/fragment outright rather than trying to sanitize
+  // one.
+  if (apiPath.includes("?") || apiPath.includes("#")) {
+    return false;
+  }
   return apiPath.endsWith("/") && ALLOWED_OBJECT_ROLE_PATH_PREFIXES.some((prefix) => apiPath.startsWith(prefix));
 }
 

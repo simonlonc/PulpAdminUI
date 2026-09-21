@@ -24,6 +24,12 @@ type UnsetLabelBody = {
 
 /** Guards against proxying a POST to an arbitrary upstream path. */
 function isAllowedLabelApiPath(apiPath: string): boolean {
+  // A relative pulp_href whose query string (or fragment) ends in "/" would otherwise pass the
+  // endsWith("/") check below, and set_label/unset_label/ then lands inside the query string
+  // instead of the path -- reject a query/fragment outright rather than trying to sanitize one.
+  if (apiPath.includes("?") || apiPath.includes("#")) {
+    return false;
+  }
   return apiPath.endsWith("/") && ALLOWED_LABEL_PATH_PREFIXES.some((prefix) => apiPath.startsWith(prefix));
 }
 

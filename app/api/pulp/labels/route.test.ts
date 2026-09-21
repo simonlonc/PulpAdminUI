@@ -152,4 +152,19 @@ describe("labels route", () => {
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // A relative pulp_href whose query string ends in "/" passes the naive endsWith("/") +
+  // startsWith(prefix) allowlist check, then `${apiPath}set_label/` appends "set_label/" into the
+  // query string instead of the path, landing on a different upstream endpoint than intended.
+  it("F-3: rejects a pulp_href carrying a query string instead of forwarding it into the upstream path", async () => {
+    const request = new Request("http://pulp.test/api/pulp/labels", {
+      method: "POST",
+      body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/?a=/", key: "env", value: "prod" }),
+    });
+
+    const response = await POST(request, undefined);
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
