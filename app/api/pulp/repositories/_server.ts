@@ -79,10 +79,24 @@ export function getBaseApiPath(): string {
   return new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
 }
 
+/**
+ * Parses an absolute URL, returning null instead of throwing for a malformed one (bad port
+ * punctuation, an unterminated "[", invalid percent-encoding, etc). ~20 routes hand a
+ * client-supplied `pulp_href` straight to the functions below, so `new URL(...)` must never
+ * throw here.
+ */
+function parseHrefOrNull(href: string): URL | null {
+  try {
+    return new URL(href);
+  } catch {
+    return null;
+  }
+}
+
 export function normalizePulpHrefToApiPath(href: string): string {
   let rawPath: string;
   if (href.startsWith("http://") || href.startsWith("https://")) {
-    rawPath = new URL(href).pathname;
+    rawPath = parseHrefOrNull(href)?.pathname ?? "";
   } else {
     // Resolve against a dummy base so "../" segments are collapsed before the allowlist
     // checks below see the path, while pathname + search keeps the query string intact.
@@ -101,7 +115,10 @@ export function normalizePulpHrefToApiPath(href: string): string {
 }
 
 export function toPulpHrefPath(href: string): string {
-  const rawPath = href.startsWith("http://") || href.startsWith("https://") ? new URL(href).pathname : href;
+  const rawPath =
+    href.startsWith("http://") || href.startsWith("https://")
+      ? (parseHrefOrNull(href)?.pathname ?? "")
+      : href;
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 

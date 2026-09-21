@@ -107,6 +107,12 @@ describe("with PULP_BASE_URL stubbed", () => {
         normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/../../x/")
       ).toBe("/repositories/x/");
     });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => normalizePulpHrefToApiPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("http://[/repositories/")).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("https://%%/repositories/")).not.toThrow();
+    });
   });
 
   describe("toPulpHrefPath", () => {
@@ -123,6 +129,12 @@ describe("with PULP_BASE_URL stubbed", () => {
       expect(toPulpHrefPath("http://localhost:8080/pulp/api/v3/repositories/x/")).toBe(
         "/pulp/api/v3/repositories/x/"
       );
+    });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => toPulpHrefPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => toPulpHrefPath("http://[/repositories/")).not.toThrow();
+      expect(() => toPulpHrefPath("https://%%/repositories/")).not.toThrow();
     });
   });
 
@@ -147,6 +159,12 @@ describe("with PULP_BASE_URL stubbed", () => {
       expect(extractNextApiPath("/pulp/api/v3/repositories/?offset=10")).toBe(
         "/repositories/?offset=10"
       );
+    });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => extractNextApiPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => extractNextApiPath("http://[/repositories/")).not.toThrow();
+      expect(() => extractNextApiPath("https://%%/repositories/")).not.toThrow();
     });
   });
 });
