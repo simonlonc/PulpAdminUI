@@ -287,6 +287,11 @@ describe("parseConcurrency", () => {
   it("parses a valid integer", () => {
     expect(parseConcurrency("10")).toBe(10);
   });
+
+  it("returns null for a huge digit string instead of overflowing to a non-safe-integer (F-9)", () => {
+    // Repro: "9".repeat(56) previously produced 1e+56 via Number.trunc, silently overflowing.
+    expect(parseConcurrency("9".repeat(56))).toBeNull();
+  });
 });
 
 describe("parseNullableInteger", () => {
@@ -312,6 +317,11 @@ describe("parseNullableInteger", () => {
 
   it("truncates a valid fractional value", () => {
     expect(parseNullableInteger("7.9")).toBe(7);
+  });
+
+  it("returns null for a huge digit string instead of overflowing to a non-safe-integer (F-9)", () => {
+    // Repro: "9".repeat(56) previously produced 1e+56 via Number.trunc, silently overflowing.
+    expect(parseNullableInteger("9".repeat(56))).toBeNull();
   });
 });
 

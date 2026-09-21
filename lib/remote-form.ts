@@ -105,7 +105,8 @@ export function parseConcurrency(value: string): number | null {
   const t = value.trim();
   if (t === "") return null;
   const n = Number(t);
-  return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : null;
+  const truncated = Math.trunc(n);
+  return Number.isFinite(n) && n >= 1 && Number.isSafeInteger(truncated) ? truncated : null;
 }
 
 /** Parses an "integer" extra field. Unlike download concurrency, 0 is a valid value here. */
@@ -113,7 +114,8 @@ export function parseNullableInteger(value: string): number | null {
   const t = value.trim();
   if (t === "") return null;
   const n = Number(t);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+  const truncated = Math.trunc(n);
+  return Number.isFinite(n) && Number.isSafeInteger(truncated) ? truncated : null;
 }
 
 /** The plugin's extra fields, coerced to the shapes Pulp expects. Assumes JSON fields already validated. */
