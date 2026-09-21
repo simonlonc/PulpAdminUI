@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { toPulpHrefPath } from "../_server";
 
 type ReclaimBody = {
@@ -8,7 +8,7 @@ type ReclaimBody = {
 };
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json().catch(() => ({}))) as ReclaimBody;
+  const body = (await readJsonBody(request)) as ReclaimBody;
 
   if (!Array.isArray(body.repo_hrefs) || body.repo_hrefs.length === 0) {
     return Response.json({ detail: "repo_hrefs is required." }, { status: 400 });

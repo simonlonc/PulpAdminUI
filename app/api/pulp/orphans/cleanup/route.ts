@@ -1,12 +1,12 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 
 type CleanupBody = {
   orphan_protection_time?: number | null;
 };
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json().catch(() => ({}))) as CleanupBody;
+  const body = (await readJsonBody(request)) as CleanupBody;
 
   const payload: Record<string, unknown> = {};
   if (typeof body.orphan_protection_time === "number" && Number.isFinite(body.orphan_protection_time)) {
