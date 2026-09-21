@@ -191,4 +191,47 @@ describe("pulpFetch", () => {
       detail: "Could not reach Pulp server at http://pulp.test/pulp/api/v3: connect ECONNREFUSED",
     });
   });
+
+  it("F-13: returns ok:false with a detail when a 2xx response body is the literal null", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("null", { status: 200, headers: { "Content-Type": "application/json" } }))
+    );
+
+    const result = await pulpFetch("/repositories/rpm/rpm/abc/", auth);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(502);
+      expect(typeof result.detail).toBe("string");
+      expect(result.detail.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("F-13: returns ok:false with a detail when a 2xx response body is empty/unparseable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{", { status: 200, headers: { "Content-Type": "application/json" } }))
+    );
+
+    const result = await pulpFetch("/repositories/rpm/rpm/abc/", auth);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(502);
+      expect(typeof result.detail).toBe("string");
+      expect(result.detail.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps returning ok:true with no data for a 204 No Content body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 }))
+    );
+
+    const result = await pulpFetch("/users/1/", auth, { method: "DELETE" });
+
+    expect(result).toEqual({ ok: true, status: 204, data: undefined });
+  });
 });
