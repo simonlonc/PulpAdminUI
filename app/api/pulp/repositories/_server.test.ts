@@ -138,6 +138,12 @@ describe("with PULP_BASE_URL stubbed", () => {
       );
     });
 
+    it("collapses dot-segments in a relative path, the same way normalizePulpHrefToApiPath does (F-7)", () => {
+      expect(toPulpHrefPath("/repositories/../../signing-services/")).toBe(
+        "/pulp/api/v3/signing-services/"
+      );
+    });
+
     it("F-1: never throws for an absolute href with a malformed authority", () => {
       expect(() => toPulpHrefPath("http://h:8080;/repositories/")).not.toThrow();
       expect(() => toPulpHrefPath("http://[/repositories/")).not.toThrow();

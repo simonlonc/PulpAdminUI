@@ -105,16 +105,23 @@ function parseHrefOrNull(href: string): URL | null {
   }
 }
 
-export function normalizePulpHrefToApiPath(href: string): string {
-  let rawPath: string;
+/**
+ * The raw path (plus query string, for a relative href) for an absolute or relative pulp_href,
+ * with any dot-segments already collapsed. Shared by normalizePulpHrefToApiPath and
+ * toPulpHrefPath so the two agree on this step instead of one resolving ".." and the other not.
+ */
+function resolveHrefPath(href: string): string {
   if (href.startsWith("http://") || href.startsWith("https://")) {
-    rawPath = parseHrefOrNull(href)?.pathname ?? "";
-  } else {
-    // Resolve against a dummy base so "../" segments are collapsed before the allowlist
-    // checks below see the path, while pathname + search keeps the query string intact.
-    const resolved = new URL(href, "http://x");
-    rawPath = resolved.pathname + resolved.search;
+    return parseHrefOrNull(href)?.pathname ?? "";
   }
+  // Resolve against a dummy base so "../" segments are collapsed before the allowlist
+  // checks below see the path, while pathname + search keeps the query string intact.
+  const resolved = new URL(href, "http://x");
+  return resolved.pathname + resolved.search;
+}
+
+export function normalizePulpHrefToApiPath(href: string): string {
+  const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 
@@ -127,10 +134,7 @@ export function normalizePulpHrefToApiPath(href: string): string {
 }
 
 export function toPulpHrefPath(href: string): string {
-  const rawPath =
-    href.startsWith("http://") || href.startsWith("https://")
-      ? (parseHrefOrNull(href)?.pathname ?? "")
-      : href;
+  const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 
