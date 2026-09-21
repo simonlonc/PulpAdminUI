@@ -28,6 +28,7 @@ import fc from "fast-check";
 import { PULP_PAGE_SIZES, type PulpListQuery } from "@/lib/pulp-list-query";
 import type { CreatedResourceEntry, TaskResponse } from "@/app/api/pulp/repositories/_server";
 import type { PulpTaskProgressReport } from "@/services/pulp/types";
+import pulpSpec from "@/openapi/pulp.json";
 
 /** Bad authority strings that make `new URL()` throw, for the invalid-absolute family below. */
 const badAuthorities = fc.constantFrom(
@@ -182,4 +183,136 @@ export function pulpTask(): fc.Arbitrary<TaskResponse> {
     },
     { requiredKeys: ["state", "created_resources", "error"] }
   );
+}
+
+// --- Response-side arbitraries (X5: fuzzing what Pulp sends back) ----------
+
+/** Truncated/malformed JSON text -- never valid JSON, exercises the JSON.parse-failure paths. */
+export function pulpMalformedJsonText(): fc.Arbitrary<string> {
+  const midStringCut = fc
+    .string({ minLength: 5, maxLength: 30 })
+    .map((s) => JSON.stringify({ name: s }))
+    .chain((full) => fc.integer({ min: 1, max: Math.max(1, full.length - 2) }).map((n) => full.slice(0, n)));
+
+  return fc.oneof(
+    fc.constantFrom("{", "[1,", "[", '{"a":', '{"a":1,}', "not json", ""),
+    midStringCut
+  );
+}
+
+/** Valid JSON whose top-level value is not an object -- null/number/string/array/boolean. */
+export function pulpNonObjectJsonText(): fc.Arbitrary<string> {
+  return fc.constantFrom("null", "42", '"just a string"', "[]", "true", "-17.5");
+}
+
+/** A 500-shaped HTML error page body, the way a proxy/app-server error page (not Pulp/DRF) looks. */
+export function pulpHtmlErrorPage(): fc.Arbitrary<string> {
+  return fc.constantFrom(
+    "<html><head><title>500 Internal Server Error</title></head><body><h1>Internal Server Error</h1></body></html>",
+    "<!DOCTYPE html><html><body><h1>502 Bad Gateway</h1><p>nginx</p></body></html>"
+  );
+}
+
+/**
+ * The two schemas pulled from the committed `openapi/pulp.json` (561 paths, 430 schemas) that
+ * back `PulpPaginatedJson<T>` (app/api/pulp/repositories/_server.ts) for a real Pulp list
+ * endpoint: a paginated list wrapper and its detail item. Read with a narrow query, not loaded
+ * wholesale. The committed spec has no deb/apt schemas (that plugin was absent from the server
+ * that generated it, see openapi/pulp.json's info block) -- rpm stands in for "a real paginated
+ * detail resource" everywhere below; nothing here is deb-specific.
+ */
+type OpenApiSchema = {
+  type?: string;
+  format?: string;
+  nullable?: boolean;
+  properties?: Record<string, OpenApiSchema>;
+  $ref?: string;
+};
+
+type OpenApiDoc = { components: { schemas: Record<string, OpenApiSchema> } };
+
+function resolveSchemaRef(schema: OpenApiSchema): OpenApiSchema {
+  if (schema.$ref) {
+    const name = schema.$ref.replace("#/components/schemas/", "");
+    return (pulpSpec as unknown as OpenApiDoc).components.schemas[name] ?? {};
+  }
+  return schema;
+}
+
+const REPOSITORY_LIST_SCHEMA = resolveSchemaRef({
+  $ref: "#/components/schemas/Paginatedrpm.RpmRepositoryResponseList",
+});
+const REPOSITORY_DETAIL_SCHEMA = resolveSchemaRef({
+  $ref: "#/components/schemas/rpm.RpmRepositoryResponse",
+});
+
+/** Builds an arbitrary that inhabits a single OpenAPI property schema's declared type. */
+function arbForOpenApiProperty(schema: OpenApiSchema | undefined): fc.Arbitrary<unknown> {
+  if (!schema) {
+    return fc.constant(undefined);
+  }
+  const resolved = resolveSchemaRef(schema);
+  let base: fc.Arbitrary<unknown>;
+  switch (resolved.type) {
+    case "integer":
+      base = fc.integer();
+      break;
+    case "boolean":
+      base = fc.boolean();
+      break;
+    case "object":
+      base = fc.dictionary(fc.string(), fc.oneof(fc.string(), fc.constant(null)));
+      break;
+    case "string":
+    default:
+      base = resolved.format === "uri" ? pulpHref() : fc.string();
+  }
+  return resolved.nullable ? fc.oneof(base, fc.constant(null)) : base;
+}
+
+/** Fields pulled straight from rpm.RpmRepositoryResponse's own `properties` keys. */
+const REPOSITORY_DETAIL_FIELDS = [
+  "pulp_href",
+  "name",
+  "description",
+  "retain_repo_versions",
+  "autopublish",
+  "pulp_labels",
+] as const;
+
+/** A conforming repository detail object, typed per openapi/pulp.json's rpm.RpmRepositoryResponse. */
+export function pulpConformingRepositoryDetail(): fc.Arbitrary<Record<string, unknown>> {
+  const shape: Record<string, fc.Arbitrary<unknown>> = {};
+  for (const key of REPOSITORY_DETAIL_FIELDS) {
+    shape[key] = arbForOpenApiProperty(REPOSITORY_DETAIL_SCHEMA.properties?.[key]);
+  }
+  return fc.record(shape);
+}
+
+/** A conforming paginated list, typed per openapi/pulp.json's Paginatedrpm.RpmRepositoryResponseList. */
+export function pulpConformingRepositoryList(): fc.Arbitrary<Record<string, unknown>> {
+  return fc.record({
+    count: arbForOpenApiProperty(REPOSITORY_LIST_SCHEMA.properties?.count),
+    next: arbForOpenApiProperty(REPOSITORY_LIST_SCHEMA.properties?.next),
+    previous: arbForOpenApiProperty(REPOSITORY_LIST_SCHEMA.properties?.previous),
+    results: fc.array(pulpConformingRepositoryDetail(), { maxLength: 5 }),
+  });
+}
+
+const WRONG_TYPE_VALUES = fc.oneof(
+  fc.integer(),
+  fc.boolean(),
+  fc.dictionary(fc.string(), fc.string()),
+  fc.constant(null)
+);
+
+/** The conforming paginated list with exactly one of count/next/previous/results wrong-typed. */
+export function pulpMutatedRepositoryList(): fc.Arbitrary<Record<string, unknown>> {
+  return fc
+    .tuple(
+      pulpConformingRepositoryList(),
+      fc.constantFrom("count", "next", "previous", "results"),
+      WRONG_TYPE_VALUES
+    )
+    .map(([obj, key, wrongValue]) => ({ ...obj, [key]: wrongValue }));
 }
