@@ -52,6 +52,18 @@ export async function readDetail(response: Response): Promise<string> {
 /** List-query params forwarded from an incoming request to a Pulp list endpoint. */
 const FORWARDED_LIST_PARAMS = ["ordering", "name__icontains", "pulp_label_select", "q"] as const;
 
+const NON_NEGATIVE_INTEGER = /^\d+$/;
+
+/** `searchParams.get(key)` if it is a non-negative integer, otherwise `fallback`. */
+function nonNegativeIntegerParam(
+  searchParams: URLSearchParams,
+  key: string,
+  fallback: string
+): string {
+  const value = searchParams.get(key);
+  return value !== null && NON_NEGATIVE_INTEGER.test(value) ? value : fallback;
+}
+
 /**
  * Builds the query string for a Pulp list endpoint from an incoming request's search params:
  * limit/offset (with their existing defaults) plus an allowlist of ordering/search/label params.
@@ -64,8 +76,8 @@ export function buildUpstreamListParams(
   extraAllowedParams: readonly string[] = []
 ): URLSearchParams {
   const params = new URLSearchParams();
-  params.set("limit", searchParams.get("limit") ?? "200");
-  params.set("offset", searchParams.get("offset") ?? "0");
+  params.set("limit", nonNegativeIntegerParam(searchParams, "limit", "200"));
+  params.set("offset", nonNegativeIntegerParam(searchParams, "offset", "0"));
   for (const key of [...FORWARDED_LIST_PARAMS, ...extraAllowedParams]) {
     const value = searchParams.get(key);
     if (value !== null) {

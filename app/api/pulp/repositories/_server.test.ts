@@ -35,6 +35,13 @@ describe("buildUpstreamListParams", () => {
     expect(params.get("q")).toBe("name=rpm");
   });
 
+  it("falls back to the default limit/offset when their values are not non-negative integers (F-6)", () => {
+    // Repro: ?limit=abc&offset=../../x previously forwarded both values unchanged.
+    const params = buildUpstreamListParams(new URLSearchParams({ limit: "abc", offset: "../../x" }));
+    expect(params.get("limit")).toBe("200");
+    expect(params.get("offset")).toBe("0");
+  });
+
   it("drops a param that is not on the allowlist instead of forwarding it", () => {
     const params = buildUpstreamListParams(new URLSearchParams({ arbitrary_field: "1" }));
     expect(params.has("arbitrary_field")).toBe(false);
