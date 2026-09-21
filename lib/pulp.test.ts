@@ -70,6 +70,36 @@ describe("pulpErrorDetailFromBody", () => {
       'context: {"field":"name","reason":"duplicate"}'
     );
   });
+
+  it("caps an oversized detail at 500 characters, like pulpFetch's own non-JSON snippet cap (F-8)", () => {
+    // Reproduces the exploratory run's 887-char counterexample: a deeply-nested field value
+    // whose JSON.stringify'd form alone is already well past 500 characters.
+    const oversizedNestedBody = {
+      field: {
+        aaaaaa: {
+          bbbbbb: {
+            cccccc: {
+              dddddd: {
+                eeeeee: [
+                  "a".repeat(100),
+                  "b".repeat(100),
+                  "c".repeat(100),
+                  "d".repeat(100),
+                  "e".repeat(100),
+                  "f".repeat(100),
+                  "g".repeat(100),
+                  "h".repeat(100),
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    const result = pulpErrorDetailFromBody(oversizedNestedBody);
+    expect(result).not.toBeNull();
+    expect((result as string).length).toBeLessThanOrEqual(500);
+  });
 });
 
 describe("encodePulpAuth / decodePulpAuth", () => {
