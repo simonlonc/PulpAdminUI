@@ -117,8 +117,19 @@ describeLive("(c) pulp_href round-trip: normalizePulpHrefToApiPath must not mang
     // base path, trailing slash) rather than an assumed one. Looping every plugin kind (not just
     // rpm) so a bare/fresh server that only has, say, file repositories still yields something.
     const collected: string[] = [];
-    for (const plugin of PULP_PLUGINS) {
-      const response = await liveGet(`${plugin.repositoryPath}?limit=5`);
+    // Every plugin's repository list, PLUS the generic cross-plugin lists. A bare or freshly
+    // provisioned server frequently has zero repositories (verified: a live Pulp 3.119.1 with
+    // 0 repositories but 1 distribution), which would leave this property passing vacuously.
+    // Reading the generic lists too means the round-trip is actually exercised on such a server.
+    const sources = [
+      ...PULP_PLUGINS.map((plugin) => plugin.repositoryPath),
+      "/distributions/",
+      "/remotes/",
+      "/publications/",
+      "/content/",
+    ];
+    for (const path of sources) {
+      const response = await liveGet(`${path}?limit=5`);
       if (response.status !== 200) {
         continue;
       }
@@ -147,8 +158,11 @@ describeLive("(c) pulp_href round-trip: normalizePulpHrefToApiPath must not mang
     if (realHrefs.length === 0) {
       // Tolerate an empty result set rather than creating fixture data to force this branch --
       // nothing to round-trip this run is not a failure, just nothing this run could check.
+      // Said out loud, because a silent vacuous pass is indistinguishable from a real one.
+      console.log("  (c) SKIPPED: the server returned no pulp_href to round-trip");
       return;
     }
+    console.log(`  (c) round-tripping ${realHrefs.length} real pulp_href value(s)`);
     fc.assert(
       fc.property(fc.constantFrom(...realHrefs), (href) => {
         const normalized = normalizePulpHrefToApiPath(href);
