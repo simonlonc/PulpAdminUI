@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../../_helpers";
 import {
   PutPulpRolePayload,
   PulpRole,
@@ -34,12 +34,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "Invalid role id." }, { status: 400 });
     }
 
-    let payload: Partial<UpdatePulpRolePayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<UpdatePulpRolePayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<UpdatePulpRolePayload>;
 
     const updateBody: Record<string, unknown> = {};
 

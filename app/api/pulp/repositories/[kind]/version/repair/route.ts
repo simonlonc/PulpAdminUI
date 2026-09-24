@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "../../../_server";
 import { isRepositoryVersionInstancePath } from "../../../repository-version-map";
 
@@ -17,7 +17,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
-  const body = (await request.json()) as RepairBody;
+  const body = (await readJsonBody(request)) as RepairBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

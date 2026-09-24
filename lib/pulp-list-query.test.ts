@@ -27,6 +27,14 @@ describe("buildPulpListParams", () => {
     expect(params.get("offset")).toBe("50");
   });
 
+  it("emits a digit-string offset for a page parsed from a huge URL value (F-5)", () => {
+    // Repro: ?page=41091115912422540000 previously produced
+    // offset=4.1091115912422537e+21 -- exponential notation, not a digit string.
+    const query = parsePulpListQuery(new URLSearchParams({ page: "41091115912422540000" }));
+    const params = buildPulpListParams(query);
+    expect(params.get("offset")).toMatch(/^\d+$/);
+  });
+
   it("sends search as name__icontains by default", () => {
     const query: PulpListQuery = { ...DEFAULT_PULP_LIST_QUERY, search: "epel" };
     const params = buildPulpListParams(query);
@@ -86,6 +94,11 @@ describe("parsePulpListQuery", () => {
 
   it("accepts a leading-integer page value the same way Number.parseInt does", () => {
     expect(parsePulpListQuery(new URLSearchParams({ page: "3abc" })).page).toBe(3);
+  });
+
+  it("clamps a page beyond Number.MAX_SAFE_INTEGER instead of losing precision (F-5)", () => {
+    const query = parsePulpListQuery(new URLSearchParams({ page: "41091115912422540000" }));
+    expect(Number.isSafeInteger(query.page)).toBe(true);
   });
 
   it("falls back to the default page size for a size outside the allowed set", () => {

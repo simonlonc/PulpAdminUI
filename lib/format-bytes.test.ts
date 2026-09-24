@@ -28,9 +28,27 @@ describe("formatBytes", () => {
     expect(formatBytes(Number.NaN)).toBe("-");
   });
 
-  it("does not handle negative numbers gracefully (suspected bug)", () => {
-    // Math.log of a negative number is NaN, so both the exponent and the formatted
-    // value become NaN, and units[NaN] is undefined.
-    expect(formatBytes(-1024)).toBe("NaN undefined");
+  it("returns a dash for a negative number instead of 'NaN undefined' (F-4)", () => {
+    expect(formatBytes(-1024)).toBe("-");
+  });
+
+  it("returns a dash for a value between 0 and 1, which has no representable unit (F-4)", () => {
+    // Counterexamples from the fuzz run: Math.log of a fraction is negative, so the
+    // exponent indexes the fixed `units` array out of bounds and renders "undefined".
+    expect(formatBytes(0.5)).toBe("-");
+    expect(formatBytes(0.001)).toBe("-");
+    expect(formatBytes(5e-324)).toBe("-");
+  });
+
+  it("returns a dash for non-finite input instead of 'Infinity TB' (F-4)", () => {
+    expect(formatBytes(Infinity)).toBe("-");
+    expect(formatBytes(-Infinity)).toBe("-");
+  });
+
+  it("returns a dash instead of exponential notation for an astronomically large value (F-4)", () => {
+    // toFixed() itself switches to exponential notation for a magnitude >= 1e21, and
+    // dividing an enormous byte count by 1024**4 (TB) can still land above that threshold.
+    expect(formatBytes(2e33)).toBe("-");
+    expect(formatBytes(1e300)).toBe("-");
   });
 });

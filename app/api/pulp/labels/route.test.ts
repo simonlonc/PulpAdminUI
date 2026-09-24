@@ -92,6 +92,20 @@ describe("labels route", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("F-2: POST rejects a truncated/non-JSON body with 400 instead of throwing a raw SyntaxError", async () => {
+    const request = new Request("http://pulp.test/api/pulp/labels", {
+      method: "POST",
+      body: "{",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request, undefined);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("surfaces a field-keyed Pulp 400 body as a readable detail", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ key: ["This field is required."] }), { status: 400 })
@@ -134,6 +148,21 @@ describe("labels route", () => {
     });
 
     const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // A relative pulp_href whose query string ends in "/" passes the naive endsWith("/") +
+  // startsWith(prefix) allowlist check, then `${apiPath}set_label/` appends "set_label/" into the
+  // query string instead of the path, landing on a different upstream endpoint than intended.
+  it("F-3: rejects a pulp_href carrying a query string instead of forwarding it into the upstream path", async () => {
+    const request = new Request("http://pulp.test/api/pulp/labels", {
+      method: "POST",
+      body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/?a=/", key: "env", value: "prod" }),
+    });
+
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();

@@ -18,15 +18,18 @@ export function pulpErrorDetailFromBody(body: unknown): string | null {
   const o = body as Record<string, unknown>;
   const detail = o.detail;
 
+  // Capped at 500 characters, the same as pulpFetch's own non-JSON error snippet below: a
+  // deeply-nested field value (or a very long detail string) can otherwise run to thousands of
+  // characters and land straight in the UI.
   if (typeof detail === "string" && detail.trim().length > 0) {
-    return detail.trim();
+    return detail.trim().slice(0, 500);
   }
 
   if (Array.isArray(detail)) {
     const parts = detail.map((x) => (typeof x === "string" ? x : JSON.stringify(x)));
     const joined = parts.filter((p) => p.length > 0).join(" ");
     if (joined.length > 0) {
-      return joined;
+      return joined.slice(0, 500);
     }
   }
 
@@ -60,7 +63,7 @@ export function pulpErrorDetailFromBody(body: unknown): string | null {
   }
 
   if (fieldParts.length > 0) {
-    return fieldParts.join(" ");
+    return fieldParts.join(" ").slice(0, 500);
   }
 
   return null;
@@ -215,8 +218,22 @@ export async function pulpFetch<TData>(
     return { ok: false, status: response.status, detail };
   }
 
-  if (parsed === undefined) {
-    return { ok: true, status: response.status, data: {} as TData };
+  if (response.status === 204) {
+    // No Content: callers that expect a body never read `.data` for this status (see
+    // users/groups/roles/contentguards/publications DELETE), so there is nothing to validate.
+    return { ok: true, status: response.status, data: undefined as TData };
+  }
+
+  if (parsed === undefined || parsed === null) {
+    // A 2xx with a missing, unparseable, or literal-null body is not a shape any caller can use:
+    // every other 2xx caller immediately dereferences `.data`, so returning it as `TData` here
+    // only trades a clean error now for an uncaught TypeError at the call site. Report it the
+    // same way an upstream failure is reported instead.
+    return {
+      ok: false,
+      status: 502,
+      detail: `Pulp returned an empty or unparseable body for a ${response.status} response.`,
+    };
   }
 
   return {

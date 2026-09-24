@@ -1,5 +1,5 @@
 import { getPulpBaseUrl, pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { hrefFromCreatedResource, waitForTask } from "@/app/api/pulp/repositories/_server";
 
 type CreateRpmRequestBody = {
@@ -92,7 +92,7 @@ async function findExistingRpmContent(
 }
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as CreateRpmRequestBody;
+  const body = (await readJsonBody(request)) as CreateRpmRequestBody;
   const artifact = body.artifact?.trim();
   if (!artifact) {
     return Response.json({ detail: "Artifact is required." }, { status: 400 });

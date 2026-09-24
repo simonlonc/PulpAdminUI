@@ -52,6 +52,18 @@ export async function readDetail(response: Response): Promise<string> {
 /** List-query params forwarded from an incoming request to a Pulp list endpoint. */
 const FORWARDED_LIST_PARAMS = ["ordering", "name__icontains", "pulp_label_select", "q"] as const;
 
+const NON_NEGATIVE_INTEGER = /^\d+$/;
+
+/** `searchParams.get(key)` if it is a non-negative integer, otherwise `fallback`. */
+function nonNegativeIntegerParam(
+  searchParams: URLSearchParams,
+  key: string,
+  fallback: string
+): string {
+  const value = searchParams.get(key);
+  return value !== null && NON_NEGATIVE_INTEGER.test(value) ? value : fallback;
+}
+
 /**
  * Builds the query string for a Pulp list endpoint from an incoming request's search params:
  * limit/offset (with their existing defaults) plus an allowlist of ordering/search/label params.
@@ -64,8 +76,8 @@ export function buildUpstreamListParams(
   extraAllowedParams: readonly string[] = []
 ): URLSearchParams {
   const params = new URLSearchParams();
-  params.set("limit", searchParams.get("limit") ?? "200");
-  params.set("offset", searchParams.get("offset") ?? "0");
+  params.set("limit", nonNegativeIntegerParam(searchParams, "limit", "200"));
+  params.set("offset", nonNegativeIntegerParam(searchParams, "offset", "0"));
   for (const key of [...FORWARDED_LIST_PARAMS, ...extraAllowedParams]) {
     const value = searchParams.get(key);
     if (value !== null) {
@@ -79,16 +91,37 @@ export function getBaseApiPath(): string {
   return new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
 }
 
-export function normalizePulpHrefToApiPath(href: string): string {
-  let rawPath: string;
-  if (href.startsWith("http://") || href.startsWith("https://")) {
-    rawPath = new URL(href).pathname;
-  } else {
-    // Resolve against a dummy base so "../" segments are collapsed before the allowlist
-    // checks below see the path, while pathname + search keeps the query string intact.
-    const resolved = new URL(href, "http://x");
-    rawPath = resolved.pathname + resolved.search;
+/**
+ * Parses an absolute URL, returning null instead of throwing for a malformed one (bad port
+ * punctuation, an unterminated "[", invalid percent-encoding, etc). ~20 routes hand a
+ * client-supplied `pulp_href` straight to the functions below, so `new URL(...)` must never
+ * throw here.
+ */
+function parseHrefOrNull(href: string): URL | null {
+  try {
+    return new URL(href);
+  } catch {
+    return null;
   }
+}
+
+/**
+ * The raw path (plus query string, for a relative href) for an absolute or relative pulp_href,
+ * with any dot-segments already collapsed. Shared by normalizePulpHrefToApiPath and
+ * toPulpHrefPath so the two agree on this step instead of one resolving ".." and the other not.
+ */
+function resolveHrefPath(href: string): string {
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return parseHrefOrNull(href)?.pathname ?? "";
+  }
+  // Resolve against a dummy base so "../" segments are collapsed before the allowlist
+  // checks below see the path, while pathname + search keeps the query string intact.
+  const resolved = new URL(href, "http://x");
+  return resolved.pathname + resolved.search;
+}
+
+export function normalizePulpHrefToApiPath(href: string): string {
+  const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 
@@ -101,7 +134,7 @@ export function normalizePulpHrefToApiPath(href: string): string {
 }
 
 export function toPulpHrefPath(href: string): string {
-  const rawPath = href.startsWith("http://") || href.startsWith("https://") ? new URL(href).pathname : href;
+  const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
   const baseApiPath = getBaseApiPath();
 

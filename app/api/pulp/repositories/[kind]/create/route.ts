@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { TaskRefResponse } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
@@ -83,7 +83,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: `Unknown repository kind: ${kind}` }, { status: 400 });
   }
 
-  const raw = (await request.json()) as Record<string, unknown>;
+  const raw = (await readJsonBody(request)) as Record<string, unknown>;
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (!name) {
     return Response.json({ detail: "Repository name is required." }, { status: 400 });

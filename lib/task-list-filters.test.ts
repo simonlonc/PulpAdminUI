@@ -40,6 +40,15 @@ describe("applyPulpTaskFilters", () => {
     applyPulpTaskFilters(params, DEFAULT_PULP_TASK_FILTERS);
     expect(params.get("limit")).toBe("100");
   });
+
+  it("ignores a startedAfter/startedBefore that is not a real YYYY-MM-DD date instead of sending Pulp an unparseable timestamp (F-11)", () => {
+    // Repro: ?started_after=x parses to startedAfter: "x", which previously became
+    // started_at__gte=xT00:00:00.000Z.
+    const params = new URLSearchParams();
+    applyPulpTaskFilters(params, { ...DEFAULT_PULP_TASK_FILTERS, startedAfter: "x", startedBefore: "x" });
+    expect(params.has("started_at__gte")).toBe(false);
+    expect(params.has("started_at__lte")).toBe(false);
+  });
 });
 
 describe("parsePulpTaskFilters", () => {

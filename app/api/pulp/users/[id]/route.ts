@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../../_helpers";
 
 type PulpUser = {
   pulp_href: string;
@@ -29,12 +29,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "User id is required." }, { status: 400 });
     }
 
-    let payload: Partial<UpdatePulpUserPayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<UpdatePulpUserPayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<UpdatePulpUserPayload>;
 
     const updatePayload: UpdatePulpUserPayload = {};
     if (typeof payload.username === "string") updatePayload.username = payload.username.trim();

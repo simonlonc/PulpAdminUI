@@ -72,7 +72,10 @@ export function parsePulpListQuery(params: URLSearchParams): PulpListQuery {
   const q = params.get("q") ?? DEFAULT_PULP_LIST_QUERY.q;
 
   const rawPage = Number.parseInt(params.get("page") ?? "", 10);
-  const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : DEFAULT_PULP_LIST_QUERY.page;
+  const page =
+    Number.isFinite(rawPage) && rawPage >= 1
+      ? Math.min(rawPage, Number.MAX_SAFE_INTEGER)
+      : DEFAULT_PULP_LIST_QUERY.page;
 
   const rawSize = Number.parseInt(params.get("size") ?? "", 10);
   const pageSize = isPulpPageSize(rawSize) ? rawSize : DEFAULT_PULP_LIST_QUERY.pageSize;

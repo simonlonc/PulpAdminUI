@@ -1,7 +1,7 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
   buildUpstreamListParams,
@@ -187,7 +187,7 @@ export const POST = withPulpAuth(
     }
     const { plugin } = pluginResult;
 
-    const body = (await request.json()) as RemoteBody;
+    const body = (await readJsonBody(request)) as RemoteBody;
     const name = body.name?.trim();
     const remoteUrl = body.url?.trim();
     if (!name) {
@@ -236,7 +236,7 @@ export const PATCH = withPulpAuth(
     }
     const { plugin } = pluginResult;
 
-    const body = (await request.json()) as RemoteBody;
+    const body = (await readJsonBody(request)) as RemoteBody;
     const pulpHref = body.pulp_href?.trim();
     if (!pulpHref) {
       return Response.json({ detail: "pulp_href is required." }, { status: 400 });
@@ -315,7 +315,7 @@ export const DELETE = withPulpAuth(
     }
     const { plugin } = pluginResult;
 
-    const body = (await request.json()) as { pulp_href?: string };
+    const body = (await readJsonBody(request)) as { pulp_href?: string };
     const pulpHref = body.pulp_href?.trim();
     if (!pulpHref) {
       return Response.json({ detail: "pulp_href is required." }, { status: 400 });

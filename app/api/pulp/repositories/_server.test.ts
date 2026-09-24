@@ -35,6 +35,13 @@ describe("buildUpstreamListParams", () => {
     expect(params.get("q")).toBe("name=rpm");
   });
 
+  it("falls back to the default limit/offset when their values are not non-negative integers (F-6)", () => {
+    // Repro: ?limit=abc&offset=../../x previously forwarded both values unchanged.
+    const params = buildUpstreamListParams(new URLSearchParams({ limit: "abc", offset: "../../x" }));
+    expect(params.get("limit")).toBe("200");
+    expect(params.get("offset")).toBe("0");
+  });
+
   it("drops a param that is not on the allowlist instead of forwarding it", () => {
     const params = buildUpstreamListParams(new URLSearchParams({ arbitrary_field: "1" }));
     expect(params.has("arbitrary_field")).toBe(false);
@@ -107,6 +114,12 @@ describe("with PULP_BASE_URL stubbed", () => {
         normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/../../x/")
       ).toBe("/repositories/x/");
     });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => normalizePulpHrefToApiPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("http://[/repositories/")).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("https://%%/repositories/")).not.toThrow();
+    });
   });
 
   describe("toPulpHrefPath", () => {
@@ -123,6 +136,18 @@ describe("with PULP_BASE_URL stubbed", () => {
       expect(toPulpHrefPath("http://localhost:8080/pulp/api/v3/repositories/x/")).toBe(
         "/pulp/api/v3/repositories/x/"
       );
+    });
+
+    it("collapses dot-segments in a relative path, the same way normalizePulpHrefToApiPath does (F-7)", () => {
+      expect(toPulpHrefPath("/repositories/../../signing-services/")).toBe(
+        "/pulp/api/v3/signing-services/"
+      );
+    });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => toPulpHrefPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => toPulpHrefPath("http://[/repositories/")).not.toThrow();
+      expect(() => toPulpHrefPath("https://%%/repositories/")).not.toThrow();
     });
   });
 
@@ -147,6 +172,12 @@ describe("with PULP_BASE_URL stubbed", () => {
       expect(extractNextApiPath("/pulp/api/v3/repositories/?offset=10")).toBe(
         "/repositories/?offset=10"
       );
+    });
+
+    it("F-1: never throws for an absolute href with a malformed authority", () => {
+      expect(() => extractNextApiPath("http://h:8080;/repositories/")).not.toThrow();
+      expect(() => extractNextApiPath("http://[/repositories/")).not.toThrow();
+      expect(() => extractNextApiPath("https://%%/repositories/")).not.toThrow();
     });
   });
 });

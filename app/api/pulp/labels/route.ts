@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath } from "@/app/api/pulp/repositories/_server";
 
 /** Resource kinds Pulp's set_label/unset_label endpoints exist on. */
@@ -24,11 +24,17 @@ type UnsetLabelBody = {
 
 /** Guards against proxying a POST to an arbitrary upstream path. */
 function isAllowedLabelApiPath(apiPath: string): boolean {
+  // A relative pulp_href whose query string (or fragment) ends in "/" would otherwise pass the
+  // endsWith("/") check below, and set_label/unset_label/ then lands inside the query string
+  // instead of the path -- reject a query/fragment outright rather than trying to sanitize one.
+  if (apiPath.includes("?") || apiPath.includes("#")) {
+    return false;
+  }
   return apiPath.endsWith("/") && ALLOWED_LABEL_PATH_PREFIXES.some((prefix) => apiPath.startsWith(prefix));
 }
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as SetLabelBody;
+  const body = (await readJsonBody(request)) as SetLabelBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
@@ -56,7 +62,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 });
 
 export const DELETE = withPulpAuth(async (request, auth) => {
-  const body = (await request.json()) as UnsetLabelBody;
+  const body = (await readJsonBody(request)) as UnsetLabelBody;
   const pulpHref = body.pulp_href?.trim();
   if (!pulpHref) {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });

@@ -29,6 +29,30 @@ const PULP_API_MARKER = "/pulp/api/v3/";
 const PRN_PATTERN = /^prn:[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+:.+$/;
 
 /**
+ * The raw path for an absolute or relative href, always rooted. An absolute (http/https) href
+ * that fails to parse (malformed authority etc.) resolves to "", the same as a well-formed
+ * absolute href never falls through to the relative branch below. A relative href -- including
+ * one with a leading dot-segment like "..//pulp/api/v3/" -- is resolved against a dummy absolute
+ * base so ".." is collapsed instead of surviving unrooted into the returned href; that collapse
+ * can itself leave a doubled leading slash (RFC 3986 5.2.4), which is folded back to one.
+ */
+function resolveHrefPath(trimmed: string): string {
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      return new URL(trimmed).pathname;
+    } catch {
+      return "";
+    }
+  }
+  const withoutQueryOrFragment = trimmed.split(/[?#]/)[0];
+  try {
+    return new URL(withoutQueryOrFragment, "http://x").pathname.replace(/^\/+/, "/");
+  } catch {
+    return withoutQueryOrFragment;
+  }
+}
+
+/**
  * What a pasted string names: a Pulp href (normalised to a relative, trailing-slash path) or a
  * PRN. Returns null when the input is empty or matches neither shape.
  */
@@ -44,12 +68,7 @@ export function parsePulpResourceRef(
     return { kind: "prn", prn: trimmed };
   }
 
-  let path: string;
-  try {
-    path = new URL(trimmed).pathname;
-  } catch {
-    path = trimmed.split(/[?#]/)[0];
-  }
+  const path = resolveHrefPath(trimmed);
 
   if (!path.includes(PULP_API_MARKER)) {
     return null;

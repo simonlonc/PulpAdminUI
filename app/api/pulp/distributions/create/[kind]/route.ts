@@ -1,7 +1,7 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   normalizePulpHrefToApiPath,
   TaskRefResponse,
@@ -84,7 +84,7 @@ export const POST = withPulpAuth(
       return Response.json({ detail: `Unknown distribution kind: ${kind}` }, { status: 400 });
     }
 
-    const body = (await request.json()) as CreateBody;
+    const body = (await readJsonBody(request)) as CreateBody;
     const repoHref = body.repository?.trim();
     const name = body.name?.trim();
     const basePath = body.base_path?.trim();

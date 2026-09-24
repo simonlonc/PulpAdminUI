@@ -30,15 +30,29 @@ function dateInputToIsoEnd(value: string): string {
   return `${value}T23:59:59.999Z`;
 }
 
+const DATE_INPUT_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether `value` is a real calendar date in "YYYY-MM-DD" shape. Date itself is the authority,
+ * not a hand-rolled calendar: Date.parse must accept the ISO timestamp built from it, and
+ * round-tripping through Date must reproduce that same timestamp (Date.parse silently rolls an
+ * out-of-range day like "2024-02-30" over into the next month instead of rejecting it).
+ */
+function isValidDateInput(value: string): boolean {
+  if (!DATE_INPUT_SHAPE.test(value)) return false;
+  const iso = dateInputToIsoStart(value);
+  return !Number.isNaN(Date.parse(iso)) && new Date(iso).toISOString() === iso;
+}
+
 /** Applies the task filters to a Pulp GET /tasks/ request's query params, in place. */
 export function applyPulpTaskFilters(params: URLSearchParams, filters: PulpTaskFilters): void {
   if (filters.state) {
     params.set("state", filters.state);
   }
-  if (filters.startedAfter) {
+  if (filters.startedAfter && isValidDateInput(filters.startedAfter)) {
     params.set("started_at__gte", dateInputToIsoStart(filters.startedAfter));
   }
-  if (filters.startedBefore) {
+  if (filters.startedBefore && isValidDateInput(filters.startedBefore)) {
     params.set("started_at__lte", dateInputToIsoEnd(filters.startedBefore));
   }
 }

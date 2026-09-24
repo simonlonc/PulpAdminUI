@@ -90,7 +90,13 @@ export async function POST(request: Request) {
     return authResult.response;
   }
 
-  const formData = await request.formData();
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return Response.json({ detail: "Invalid multipart form data." }, { status: 400 });
+  }
+
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return Response.json({ detail: "Missing file." }, { status: 400 });
