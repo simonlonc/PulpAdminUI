@@ -94,12 +94,7 @@ export const PUT = withPulpAuth(
       return Response.json({ detail: "Invalid role id." }, { status: 400 });
     }
 
-    let payload: Partial<PutPulpRolePayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<PutPulpRolePayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<PutPulpRolePayload>;
 
     const name = typeof payload?.name === "string" ? payload.name.trim() : "";
     const permissions = normalizePermissions(payload?.permissions);

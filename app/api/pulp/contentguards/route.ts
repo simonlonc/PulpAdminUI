@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import { findPulpContentGuardKind } from "@/services/pulp/content-guard-kinds";
 import { buildUpstreamListParams, toPulpHrefPath } from "../repositories/_server";
 
@@ -52,12 +52,7 @@ type CreateBody = {
 /** Content-guard create: dispatches on `kind` to the matching typed upstream path. Unlike
  * distributions, every contentguards endpoint is synchronous (201, no task href). */
 export const POST = withPulpAuth(async (request, auth) => {
-  let body: CreateBody;
-  try {
-    body = (await request.json()) as CreateBody;
-  } catch {
-    return Response.json({ detail: "Invalid request body." }, { status: 400 });
-  }
+  const body = (await readJsonBody(request)) as CreateBody;
 
   const descriptor = findPulpContentGuardKind(body.kind ?? "");
   if (!descriptor) {

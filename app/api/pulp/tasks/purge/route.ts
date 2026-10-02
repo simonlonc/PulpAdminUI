@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpTaskPurgeState } from "@/services/pulp/types";
 
 const PURGE_STATES = ["skipped", "completed", "failed", "canceled"] as const;
@@ -19,7 +19,7 @@ function normalizeStates(value: unknown): PulpTaskPurgeState[] {
 }
 
 export const POST = withPulpAuth(async (request, auth) => {
-  const body = (await request.json().catch(() => ({}))) as PurgeBody;
+  const body = (await readJsonBody(request)) as PurgeBody;
 
   const finishedBefore = body.finished_before?.trim();
   if (!finishedBefore) {

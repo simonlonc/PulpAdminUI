@@ -1,6 +1,6 @@
 import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
-import { decodeRefOrNull, PulpApiError, withPulpAuth } from "../../_helpers";
+import { decodeRefOrNull, PulpApiError, readJsonBody, withPulpAuth } from "../../_helpers";
 
 type PulpDistribution = {
   pulp_href: string;
@@ -79,12 +79,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "Invalid distribution identifier." }, { status: 400 });
     }
 
-    let payload: Partial<UpdatePulpDistributionPayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<UpdatePulpDistributionPayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<UpdatePulpDistributionPayload>;
 
     const updatePayload: UpdatePulpDistributionPayload = {};
     if (typeof payload.name === "string") updatePayload.name = payload.name.trim();

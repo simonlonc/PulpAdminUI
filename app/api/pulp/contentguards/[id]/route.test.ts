@@ -80,3 +80,36 @@ describe("decodeURIComponent guard for /api/pulp/contentguards/[id] (F-17)", () 
     expect(body.detail.length).toBeGreaterThan(0);
   });
 });
+
+describe("PATCH /api/pulp/contentguards/[id] null body (F-18)", () => {
+  const contentGuardId = encodeURIComponent("/pulp/api/v3/contentguards/core/header/abc/");
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    deleteCookieMock.mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }))
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects a literal null body with 400 instead of throwing a raw TypeError", async () => {
+    const request = new Request(`http://pulp.test/api/pulp/contentguards/${contentGuardId}`, {
+      method: "PATCH",
+      body: "null",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, paramsFor(contentGuardId));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+  });
+});
