@@ -3,9 +3,16 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    # Daily, low-frequency: keeps the unseeded fuzz job below finding new inputs over time
+    # without burning CI minutes on every push. Time of day is arbitrary.
+    - cron: "17 3 * * *"
 
 jobs:
   check:
+    # Only on push/pull_request: the schedule trigger above exists for the fuzz job below,
+    # not to re-run the (much more expensive) lint/build/test gate on a timer.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # Dummy values: nothing here contacts a Pulp server. Both are read lazily at
     # request time rather than during next build, so they are set only to match
@@ -22,3 +29,39 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  # Kept out of `check`: `check` is also the local pre-commit gate, and the fuzz tier is
+  # slower and conceptually a different tier (property-based, not example-based).
+  #
+  # Two triggers:
+  # - `fuzz` below runs on the same push/pull_request events as `check`, with a fixed seed,
+  #   so a CI failure is reproducible and the job itself is deterministic.
+  # - `fuzz-scheduled` runs on the cron above with no seed, so it keeps discovering new
+  #   inputs over time instead of only ever re-checking the same fixed-seed cases.
+  fuzz:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FUZZ_SEED: "424242"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fuzz
+
+  fuzz-scheduled:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fuzz
