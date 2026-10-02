@@ -58,6 +58,28 @@ describe("resolvePublicationHrefAfterTask", () => {
       resolvePublicationHrefAfterTask({ pulp_href: "/pulp/api/v3/repositories/rpm/rpm/abc/" }, "/fallback/")
     ).toBe("/fallback/");
   });
+
+  it("falls through to the fallback branches instead of throwing when created_resources is not an array (recurring finding)", () => {
+    // Recorded reproduction: a plain object with a truthy, non-integer `length` passed the old
+    // `resources?.length` check and then threw on `for (const r of resources)` (not iterable).
+    const task = { created_resources: { length: -5e-324 } };
+    expect(resolvePublicationHrefAfterTask(task as never, "/fallback/")).toBe("/fallback/");
+  });
+
+  it("falls through for other non-array created_resources shapes", () => {
+    expect(
+      resolvePublicationHrefAfterTask({ created_resources: "oops" } as never, "/fallback/")
+    ).toBe("/fallback/");
+    expect(
+      resolvePublicationHrefAfterTask({ created_resources: {} } as never, "/fallback/")
+    ).toBe("/fallback/");
+    expect(
+      resolvePublicationHrefAfterTask(
+        { created_resources: 5 as never, pulp_href: "/pulp/api/v3/publications/rpm/rpm/abc/" },
+        "/fallback/"
+      )
+    ).toBe("/pulp/api/v3/publications/rpm/rpm/abc/");
+  });
 });
 
 describe("isPulpTaskFinished", () => {

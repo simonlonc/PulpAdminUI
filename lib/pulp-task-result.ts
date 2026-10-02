@@ -26,7 +26,7 @@ export function resolvePublicationHrefAfterTask(
   fallback: string | null
 ): string | null {
   const resources = task.created_resources;
-  if (resources?.length) {
+  if (Array.isArray(resources) && resources.length) {
     for (const r of resources) {
       const h = hrefFromCreatedResource(r);
       if (h && h.includes("/publications/")) {
