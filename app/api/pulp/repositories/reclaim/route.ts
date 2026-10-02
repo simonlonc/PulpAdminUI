@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, readStringArrayField, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { toPulpHrefPath } from "../_server";
 
 type ReclaimBody = {
@@ -10,15 +10,17 @@ type ReclaimBody = {
 export const POST = withPulpAuth(async (request, auth) => {
   const body = (await readJsonBody(request)) as ReclaimBody;
 
-  if (!Array.isArray(body.repo_hrefs) || body.repo_hrefs.length === 0) {
+  const repoHrefs = readStringArrayField(body as Record<string, unknown>, "repo_hrefs");
+  if (repoHrefs.length === 0) {
     return Response.json({ detail: "repo_hrefs is required." }, { status: 400 });
   }
 
   const payload: Record<string, unknown> = {
-    repo_hrefs: body.repo_hrefs.map((href) => (href === "*" ? href : toPulpHrefPath(href))),
+    repo_hrefs: repoHrefs.map((href) => (href === "*" ? href : toPulpHrefPath(href))),
   };
-  if (Array.isArray(body.repo_versions_keeplist) && body.repo_versions_keeplist.length > 0) {
-    payload.repo_versions_keeplist = body.repo_versions_keeplist.map((href) => toPulpHrefPath(href));
+  const repoVersionsKeeplist = readStringArrayField(body as Record<string, unknown>, "repo_versions_keeplist");
+  if (repoVersionsKeeplist.length > 0) {
+    payload.repo_versions_keeplist = repoVersionsKeeplist.map((href) => toPulpHrefPath(href));
   }
 
   const reclaimResult = await pulpFetch<{ task: string }>("/repositories/reclaim_space/", auth, {

@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
+import { PulpApiError, readJsonBody, readStringArrayField, withPulpAuth } from "../_helpers";
 import { findPulpContentGuardKind } from "@/services/pulp/content-guard-kinds";
 import { buildUpstreamListParams, toPulpHrefPath } from "../repositories/_server";
 
@@ -89,7 +89,9 @@ export const POST = withPulpAuth(async (request, auth) => {
     }
     createPayload.ca_certificate = body.ca_certificate;
   } else if (descriptor.kind === "core.composite" && body.guards !== undefined) {
-    createPayload.guards = body.guards.map((guard) => toPulpHrefPath(guard));
+    createPayload.guards = readStringArrayField(body as Record<string, unknown>, "guards").map((guard) =>
+      toPulpHrefPath(guard)
+    );
   }
 
   const result = await pulpFetch<PulpContentGuard>(`/contentguards/${descriptor.path}/`, auth, {

@@ -95,6 +95,27 @@ export function expectPulpListBody(data: unknown): void {
 }
 
 /**
+ * Reads an optional array-of-strings field off an already-parsed request body. Returns `[]` when
+ * the field is absent, matching every existing `body.field ?? []` call site, so a caller that
+ * branches on "was this provided?" keeps doing that against the original body. Throws
+ * `PulpApiError(400, ...)` when the field is present but is not an array, or is an array
+ * containing a non-string element -- `readJsonBody` only guarantees the body itself is an object,
+ * so `{"guards": [null]}` or `{"repo_hrefs": 42}` otherwise reach a handler's unguarded
+ * `.map`/`.trim()` over the field and throw a raw `TypeError` instead of the `{ detail }` 400
+ * every other malformed-body shape already gets here (F-19, F-20).
+ */
+export function readStringArrayField(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key];
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new PulpApiError(400, `${key} must be an array of strings.`);
+  }
+  return value as string[];
+}
+
+/**
  * Decodes a URI-encoded `pulp_href`, returning null instead of throwing for a malformed
  * percent-encoding (e.g. a lone "%"). The `[id]` route segments that call this hand
  * `decodeURIComponent` a client-supplied, URL-routed string, so it must never throw a
