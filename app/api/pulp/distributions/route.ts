@@ -2,7 +2,7 @@ import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
+import { expectPulpListBody, PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import {
   buildUpstreamListParams,
   toPulpHrefPath,
@@ -38,6 +38,7 @@ export const GET = withPulpAuth(async (request, auth) => {
   if (!result.ok) {
     throw new PulpApiError(result.status, result.detail);
   }
+  expectPulpListBody(result.data);
 
   return Response.json({
     ...result.data,

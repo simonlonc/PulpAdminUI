@@ -68,6 +68,33 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
 }
 
 /**
+ * True only when `data` is a non-null object whose `results` is an array -- the one shape every
+ * paginated-list consumer actually needs. `pulpFetch<TData>`'s `data: parsed as TData` is an
+ * unchecked cast, so a 2xx body of `42` or `{}` parses fine and satisfies that cast at compile
+ * time while having no `results` to read at runtime (F-16). Checked once here instead of per
+ * shape: every current caller only ever reads `.results` (and `.count`/`.next` alongside it), so
+ * there is nothing yet to gain from a field-level or object-shape guard.
+ */
+export function isPulpListBody(data: unknown): data is { results: unknown[] } {
+  return (
+    typeof data === "object" && data !== null && Array.isArray((data as { results?: unknown }).results)
+  );
+}
+
+/**
+ * Throwing wrapper over `isPulpListBody` for `withPulpAuth` handlers that already throw
+ * `PulpApiError` on a failed `pulpFetch` call: a 2xx response whose body parses but isn't a
+ * results list would otherwise reach a `.map`/`for...of`/index read on `undefined` and escape
+ * `withPulpAuth` as an unstyled 500 with no `detail` (F-16). Matches the wording of F-13's
+ * `pulpFetch` message in lib/pulp.ts for the same "Pulp returned something unusable" family.
+ */
+export function expectPulpListBody(data: unknown): void {
+  if (!isPulpListBody(data)) {
+    throw new PulpApiError(502, "Pulp returned a response body with no results list.");
+  }
+}
+
+/**
  * Decodes a URI-encoded `pulp_href`, returning null instead of throwing for a malformed
  * percent-encoding (e.g. a lone "%"). The `[id]` route segments that call this hand
  * `decodeURIComponent` a client-supplied, URL-routed string, so it must never throw a

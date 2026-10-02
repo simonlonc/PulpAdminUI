@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { expectPulpListBody, PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
 import type { PulpRepositoryVersion } from "@/services/pulp/types";
 import { mapPulpRepositoryVersion } from "../../repository-version-map";
 import { extractNextApiPath, normalizePulpHrefToApiPath, PulpPaginatedJson } from "../../_server";
@@ -61,6 +61,7 @@ export const GET = withPulpAuth(async (request, auth, { params }: { params: Prom
     if (!result.ok) {
       throw new PulpApiError(result.status, result.detail);
     }
+    expectPulpListBody(result.data);
 
     for (const row of result.data.results) {
       allResults.push(mapPulpRepositoryVersion(row));

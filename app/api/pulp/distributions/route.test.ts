@@ -82,6 +82,42 @@ describe("GET /api/pulp/distributions", () => {
   });
 });
 
+describe("GET /api/pulp/distributions response-shape guard (F-16)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    deleteCookieMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body is a bare number", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("42", { status: 200 })));
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+
+  it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body has no results array", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+});
+
 describe("POST /api/pulp/distributions null body (F-18)", () => {
   beforeEach(() => {
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");

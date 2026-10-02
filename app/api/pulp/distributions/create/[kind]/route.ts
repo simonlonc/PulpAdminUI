@@ -1,7 +1,7 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { isPulpListBody, PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
 import {
   normalizePulpHrefToApiPath,
   TaskRefResponse,
@@ -50,6 +50,9 @@ async function findFirstLinkedDistributionHref(
   const pageResult = await pulpFetch<DistListResult>(listPath, auth);
   if (!pageResult.ok) {
     return { ok: false, status: pageResult.status, detail: pageResult.detail };
+  }
+  if (!isPulpListBody(pageResult.data)) {
+    return { ok: false, status: 502, detail: "Pulp returned a response body with no results list." };
   }
   const row = pageResult.data.results[0];
   if (row && row.repository && repoRefKey(row.repository) === want) {

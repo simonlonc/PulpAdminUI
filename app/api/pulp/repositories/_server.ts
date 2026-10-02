@@ -153,7 +153,10 @@ export function authHeaders(authHeader: string): Headers {
 }
 
 export function extractNextApiPath(next: string | null): string | null {
-  if (!next) return null;
+  // `next` is typed `string | null`, but it comes straight off an unchecked `pulpFetch` cast
+  // (F-16): a paginated body whose `results` is a real array can still carry a wrong-typed
+  // `next` (a number, an object, ...), which would otherwise throw on the `.match` call below.
+  if (!next || typeof next !== "string") return null;
   const hrefMatch = next.match(/href="([^"]+)"/i);
   const normalized = hrefMatch?.[1] ?? next;
   try {

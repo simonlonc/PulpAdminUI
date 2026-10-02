@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../_helpers";
+import { isPulpListBody, PulpApiError, withPulpAuth } from "../_helpers";
 import { PulpResourceFamily } from "@/lib/pulp-resource-ref";
 
 /**
@@ -73,6 +73,14 @@ export const GET = withPulpAuth(async (request, auth) => {
     const result = outcome.value;
     if (!result.ok) {
       return { family, count: 0, results: [], error: result.detail };
+    }
+    if (!isPulpListBody(result.data)) {
+      return {
+        family,
+        count: 0,
+        results: [],
+        error: "Pulp returned a response body with no results list.",
+      };
     }
 
     return {
