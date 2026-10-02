@@ -1,8 +1,11 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../../_helpers";
+import { decodeRefOrNull, PulpApiError, withPulpAuth } from "../../_helpers";
 
 function resolvePublicationPath(encodedRef: string): string | null {
-  const decodedRef = decodeURIComponent(encodedRef).trim();
+  const decodedRef = decodeRefOrNull(encodedRef);
+  if (decodedRef === null) {
+    return null;
+  }
   if (decodedRef.length === 0) {
     return null;
   }

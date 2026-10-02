@@ -19,7 +19,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { GET } from "@/app/api/pulp/distributions/[id]/route";
+import { DELETE, GET, PATCH } from "@/app/api/pulp/distributions/[id]/route";
 
 function paramsFor(id: string) {
   return { params: Promise.resolve({ id }) };
@@ -77,5 +77,61 @@ describe("GET /api/pulp/distributions/[id]", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.base_url).toBe("https://pulp.example.com/pulp/content/my-repo/");
+  });
+});
+
+describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    deleteCookieMock.mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 500 }))
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a 400 with a detail instead of throwing for GET when id is '%'", async () => {
+    const request = new Request("http://pulp.test/api/pulp/distributions/%");
+
+    const response = await GET(request, paramsFor("%"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+
+  it("returns a 400 with a detail instead of throwing for PATCH when id is '%'", async () => {
+    const request = new Request("http://pulp.test/api/pulp/distributions/%", {
+      method: "PATCH",
+      body: JSON.stringify({ name: "new-name" }),
+    });
+
+    const response = await PATCH(request, paramsFor("%"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+
+  it("returns a 400 with a detail instead of throwing for DELETE when id is '%'", async () => {
+    const request = new Request("http://pulp.test/api/pulp/distributions/%", {
+      method: "DELETE",
+    });
+
+    const response = await DELETE(request, paramsFor("%"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
   });
 });

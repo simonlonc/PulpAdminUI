@@ -68,6 +68,20 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
 }
 
 /**
+ * Decodes a URI-encoded `pulp_href`, returning null instead of throwing for a malformed
+ * percent-encoding (e.g. a lone "%"). The `[id]` route segments that call this hand
+ * `decodeURIComponent` a client-supplied, URL-routed string, so it must never throw a
+ * `URIError` that would otherwise escape as a body-less 500.
+ */
+export function decodeRefOrNull(encodedRef: string): string | null {
+  try {
+    return decodeURIComponent(encodedRef).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Wraps a route handler with the `requirePulpAuth` preamble every Pulp API route repeats: run
  * the auth check, hand the decoded `auth` to the handler, and if it throws a `PulpApiError`,
  * clear the auth cookie on a 401/403 and return the standard `{ detail }` JSON response. The
