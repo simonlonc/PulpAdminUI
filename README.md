@@ -100,6 +100,7 @@ The merged registry is cached for 10 minutes with in-flight de-duplication, and 
    - `PULP_SESSION_SECRET` (required for login): encrypts the session cookie with AES-256-GCM, keyed by a SHA-256 hash of this value. Generate one with `openssl rand -base64 32`.
    - `PULP_PLUGIN_DIR` (optional, not in `.env.example`): a directory of JSON overlay files that can add or correct plugin family descriptions for this deployment. See "The plugin registry" above. Leave unset to use only the derived and curated tiers.
    - `PULP_CONTENT_ORIGIN` (optional): overrides the origin (scheme, host, port) of content URLs reported by Pulp (distribution `base_url` and `content_settings.content_origin`). Only the origin is replaced; the path is preserved to maintain Pulp's `content_path_prefix` and the distribution's `base_path`. When unset or malformed, Pulp's own value passes through unchanged. The status page shows both Pulp's reported content origin and the effective content origin when this variable is set. This is read at the server boundary and requires no client rebuild.
+   - `LOG_LEVEL` (optional): `error`, `warn` or `info` (default). The server writes one JSON object per line to stdout, and this sets the least severe level written: `warn` drops `info` lines, `error` drops both. Any other value falls back to `info`. Passwords, `Authorization` headers and `pulp_auth` cookie values are redacted before a line is written.
 
 2. Install and run:
 
