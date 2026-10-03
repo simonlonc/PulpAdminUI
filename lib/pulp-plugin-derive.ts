@@ -467,7 +467,7 @@ const BASE_HINT_FIELDS = {
     "total_timeout",
   ],
   repository: ["retain_checkpoints", "retain_repo_versions"],
-  distribution: ["hidden"],
+  distribution: ["hidden", "repository_version"],
 } as const;
 
 /** The hints for BASE_HINT_FIELDS read off one family's remote, repository and distribution POST schemas. */

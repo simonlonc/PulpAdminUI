@@ -233,6 +233,7 @@ export type PulpDistribution = {
 /** Detail row from GET {distribution_href}. The generic list serializer omits `publication`. */
 export type PulpDistributionDetail = PulpDistribution & {
   publication: string | null;
+  repository_version?: string | null;
   hidden?: boolean;
 };
 
@@ -731,6 +732,7 @@ export type UpdatePulpDistributionPayload = {
   base_path?: string;
   repository?: string | null;
   publication?: string | null;
+  repository_version?: string | null;
   content_guard?: string | null;
   hidden?: boolean;
 };

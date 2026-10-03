@@ -125,6 +125,11 @@ export function pulpResourceFamilyFromHref(href: string): PulpResourceFamily | n
   }
 }
 
+/** True when `href` names one repository version (.../repositories/.../versions/{number}/). */
+export function isRepositoryVersionHref(href: string): boolean {
+  return pulpResourceFamilyFromHref(href) === "repositoryVersion" && /\/versions\/\d+\/?$/.test(href);
+}
+
 /**
  * The relative Pulp list path to query with `prn__in` for a PRN's model, e.g.
  * "prn:rpm.rpmrepository:<uuid>" -> "/repositories/". Exact core models are checked before the

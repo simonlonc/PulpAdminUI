@@ -112,6 +112,15 @@ export function getBaseFieldHint(plugin: PulpPluginDescriptor, field: string): P
   return plugin.baseFieldHints?.[field] ?? FALLBACK_BASE_FIELD_HINT;
 }
 
+/**
+ * Whether the plugin's distribution can be pinned to a repository version. A descriptor with
+ * derived hints answers from its distribution POST schema; the static seed has none, so it is
+ * assumed to (every distribution schema in the spec declares repository_version).
+ */
+export function supportsRepositoryVersionBinding(plugin: PulpPluginDescriptor | undefined): boolean {
+  return !plugin?.baseFieldHints || "repository_version" in plugin.baseFieldHints;
+}
+
 export type PulpPluginDescriptor = {
   kind: PulpPluginKind;
   /** Display name used in page headings, tabs and messages. */

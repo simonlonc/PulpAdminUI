@@ -1,5 +1,6 @@
 import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
+import { isRepositoryVersionHref } from "@/lib/pulp-resource-ref";
 import { decodeRefOrNull, PulpApiError, readJsonBody, withPulpAuth } from "../../_helpers";
 
 type PulpDistribution = {
@@ -12,6 +13,7 @@ type PulpDistribution = {
   name: string;
   repository: string | null;
   publication?: string | null;
+  repository_version?: string | null;
   hidden?: boolean;
 };
 
@@ -20,6 +22,7 @@ type UpdatePulpDistributionPayload = {
   base_path?: string;
   repository?: string | null;
   publication?: string | null;
+  repository_version?: string | null;
   content_guard?: string | null;
   hidden?: boolean;
 };
@@ -92,6 +95,22 @@ export const PATCH = withPulpAuth(
     }
     if ("publication" in (payload ?? {})) {
       updatePayload.publication = payload.publication ?? null;
+    }
+    if ("repository_version" in (payload ?? {})) {
+      const version = payload.repository_version ?? null;
+      if (version !== null && (typeof version !== "string" || !isRepositoryVersionHref(version))) {
+        return Response.json(
+          { detail: "repository_version must be a repository version href." },
+          { status: 400 }
+        );
+      }
+      if (version !== null && (updatePayload.repository || updatePayload.publication)) {
+        return Response.json(
+          { detail: "Only one of repository, publication and repository_version may be set." },
+          { status: 400 }
+        );
+      }
+      updatePayload.repository_version = version;
     }
     if ("content_guard" in (payload ?? {})) {
       updatePayload.content_guard = payload.content_guard ?? null;

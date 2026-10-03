@@ -8,15 +8,16 @@ import { Input } from "@/components/ui/input";
 import { usePulpRepositoryOptions } from "./use-pulp-repository-options";
 import { usePulpPublicationOptions } from "./use-pulp-publication-options";
 import { usePulpPluginsContext } from "./plugins-context";
+import { DistributionVersionFields } from "./distribution-version-fields";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { getBaseFieldHint, type PulpPluginKind } from "@/lib/pulp-plugins";
+import { getBaseFieldHint, supportsRepositoryVersionBinding, type PulpPluginKind } from "@/lib/pulp-plugins";
 import { PulpContentGuard } from "@/services/pulp/types";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
-type Binding = "none" | "repository" | "publication";
+type Binding = "none" | "repository" | "publication" | "repository_version";
 
 export type DistributionCreateModalProps = {
   onClose: () => void;
@@ -38,6 +39,8 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
   const [binding, setBinding] = useState<Binding>("none");
   const [repository, setRepository] = useState("");
   const [publication, setPublication] = useState("");
+  const [versionRepository, setVersionRepository] = useState("");
+  const [repositoryVersion, setRepositoryVersion] = useState("");
   const [contentGuard, setContentGuard] = useState("");
   // null until the user touches the checkbox, so it follows the spec default of the chosen type.
   const [hiddenChoice, setHiddenChoice] = useState<boolean | null>(null);
@@ -113,6 +116,10 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
       setModalError("Select a publication.");
       return;
     }
+    if (binding === "repository_version" && !repositoryVersion) {
+      setModalError("Select a repository version.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -121,6 +128,7 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
         base_path: trimmedBasePath,
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
+        repository_version: binding === "repository_version" ? repositoryVersion : null,
         content_guard: contentGuard || null,
         hidden,
       });
@@ -169,7 +177,13 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
           <FormField label="Type">
             <select
               value={kind}
-              onChange={(event) => setKind(event.target.value as PulpPluginKind)}
+              onChange={(event) => {
+                const nextKind = event.target.value as PulpPluginKind;
+                setKind(nextKind);
+                if (!supportsRepositoryVersionBinding(getPlugin(nextKind)) && binding === "repository_version") {
+                  setBinding("none");
+                }
+              }}
               disabled={isSaving}
               className={selectClassName}
             >
@@ -200,6 +214,9 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
               <option value="none">None</option>
               <option value="repository">Repository</option>
               <option value="publication">Publication</option>
+              {supportsRepositoryVersionBinding(getPlugin(kind)) ? (
+                <option value="repository_version">Repository version</option>
+              ) : null}
             </select>
           </FormField>
           {binding === "repository" ? (
@@ -235,6 +252,19 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
                 ))}
               </select>
             </FormField>
+          ) : null}
+          {binding === "repository_version" ? (
+            <DistributionVersionFields
+              repositoryOptions={repositoryOptions}
+              repository={versionRepository}
+              version={repositoryVersion}
+              disabled={isSaving}
+              onRepositoryChange={(href) => {
+                setVersionRepository(href);
+                setRepositoryVersion("");
+              }}
+              onVersionChange={setRepositoryVersion}
+            />
           ) : null}
           <FormField label="Content guard">
             <select

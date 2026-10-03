@@ -8,15 +8,16 @@ import { Input } from "@/components/ui/input";
 import { usePulpRepositoryOptions } from "./use-pulp-repository-options";
 import { usePulpPublicationOptions } from "./use-pulp-publication-options";
 import { usePulpPluginsContext } from "./plugins-context";
+import { DistributionVersionFields, repositoryHrefOfVersion } from "./distribution-version-fields";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { getBaseFieldHint } from "@/lib/pulp-plugins";
+import { getBaseFieldHint, supportsRepositoryVersionBinding } from "@/lib/pulp-plugins";
 import { PulpContentGuard, PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
-type Binding = "none" | "repository" | "publication";
+type Binding = "none" | "repository" | "publication" | "repository_version";
 
 export type DistributionEditModalProps = {
   distribution: PulpDistribution;
@@ -43,6 +44,8 @@ export function DistributionEditModal({
   const [binding, setBinding] = useState<Binding>("none");
   const [repository, setRepository] = useState("");
   const [publication, setPublication] = useState("");
+  const [versionRepository, setVersionRepository] = useState("");
+  const [repositoryVersion, setRepositoryVersion] = useState("");
   const [contentGuard, setContentGuard] = useState("");
   const distributionPlugin = plugins.find((p) => distribution.pulp_href.includes(p.distributionPath));
   const hiddenDefault =
@@ -61,7 +64,11 @@ export function DistributionEditModal({
         ]);
         if (!active) return;
 
-        if (detail.repository) {
+        if (detail.repository_version) {
+          setBinding("repository_version");
+          setVersionRepository(repositoryHrefOfVersion(detail.repository_version));
+          setRepositoryVersion(detail.repository_version);
+        } else if (detail.repository) {
           setBinding("repository");
           setRepository(detail.repository);
         } else if (detail.publication) {
@@ -136,6 +143,10 @@ export function DistributionEditModal({
       setModalError("Select a publication.");
       return;
     }
+    if (binding === "repository_version" && !repositoryVersion) {
+      setModalError("Select a repository version.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -144,6 +155,7 @@ export function DistributionEditModal({
         base_path: trimmedBasePath,
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
+        repository_version: binding === "repository_version" ? repositoryVersion : null,
         content_guard: contentGuard || null,
         hidden,
       });
@@ -214,6 +226,9 @@ export function DistributionEditModal({
                 <option value="none">None</option>
                 <option value="repository">Repository</option>
                 <option value="publication">Publication</option>
+              {binding === "repository_version" || supportsRepositoryVersionBinding(distributionPlugin) ? (
+                <option value="repository_version">Repository version</option>
+              ) : null}
               </select>
             </FormField>
             {binding === "repository" ? (
@@ -249,6 +264,19 @@ export function DistributionEditModal({
                   ))}
                 </select>
               </FormField>
+            ) : null}
+            {binding === "repository_version" ? (
+              <DistributionVersionFields
+                repositoryOptions={repositoryOptions}
+                repository={versionRepository}
+                version={repositoryVersion}
+                disabled={isSaving}
+                onRepositoryChange={(href) => {
+                  setVersionRepository(href);
+                  setRepositoryVersion("");
+                }}
+                onVersionChange={setRepositoryVersion}
+              />
             ) : null}
             <FormField label="Content guard">
               <select
