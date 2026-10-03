@@ -42,8 +42,7 @@
  *      hang.
  *   2. Auth succeeds in every test (cookie via encodePulpAuth + PULP_SESSION_SECRET/PULP_BASE_URL
  *      stubbed), so every handler gets past requirePulpAuth/withPulpAuth.
- *   3. uploads/route.ts calls requirePulpAuth directly (not withPulpAuth) and reads
- *      request.formData(); it's excluded from the generic JSON-bodied sweep (a JSON body always
+ *   3. uploads/route.ts reads request.formData(); it's excluded from the generic JSON-bodied sweep (a JSON body always
  *      throws at request.formData(), a pre-existing, already-cataloged request-shape issue, not a
  *      response-shape one -- see routes.fuzz.test.ts's FORMDATA_SEEDS) and driven with a real
  *      multipart request in its own dedicated test instead.

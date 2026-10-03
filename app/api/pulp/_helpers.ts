@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { logError, logWarn } from "@/lib/log";
 import { decodePulpAuth, PULP_AUTH_COOKIE, type PulpAuth } from "@/lib/pulp";
 
 export async function requirePulpAuth(): Promise<
@@ -136,9 +137,11 @@ export function decodeRefOrNull(encodedRef: string): string | null {
  * dynamic-segment `context` argument (`{ params: Promise<...> }`) is passed through untouched
  * so wrapped handlers can destructure it exactly as they did before.
  *
- * A handful of routes do something genuinely different in their failure path (a non-pulpFetch
- * status fallback, a raw `fetch` alongside `pulpFetch`, ...) and call `requirePulpAuth` directly
- * instead of using this wrapper.
+ * Every failure that gets past the auth check is logged here, once: a `PulpApiError` at `warn`
+ * (an expected failure such as a 404 or 403) and anything else at `error` with its stack before
+ * it is rethrown. The route is the method and pathname, never the query string. A missing or
+ * invalid session is routine and is not logged, and neither is a response a handler returns
+ * itself (the 400s a route builds from its own validation): only a throw reaches these lines.
  */
 export function withPulpAuth<Context = unknown>(
   handler: (request: Request, auth: PulpAuth, context: Context) => Promise<Response>
@@ -152,9 +155,18 @@ export function withPulpAuth<Context = unknown>(
     try {
       return await handler(request, authResult.auth, context);
     } catch (error) {
+      const route = `${request.method} ${new URL(request.url).pathname}`;
+
       if (!(error instanceof PulpApiError)) {
+        logError("pulp_route_crashed", {
+          route,
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         throw error;
       }
+
+      logWarn("pulp_route_failed", { route, status: error.status, detail: error.detail });
 
       if (error.status === 401 || error.status === 403) {
         const cookieStore = await cookies();
