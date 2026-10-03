@@ -309,6 +309,16 @@ export type PulpRemote = {
   client_cert: string | null;
   proxy_url: string | null;
   download_concurrency: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  /** Which write-only fields (secrets, proxy credentials) are set; their values are never returned. */
+  hidden_fields?: { name: string; is_set: boolean }[];
   /** Debian APT only: whitespace-separated list of distributions to sync. */
   distributions?: string | null;
   /** Debian APT only: whitespace-separated list of components; null syncs all available. */
@@ -354,6 +364,16 @@ export type RemoteCreatePayload = {
   client_cert: string | null;
   client_key: string | null;
   download_concurrency: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  proxy_username?: string | null;
+  proxy_password?: string | null;
   /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
   /** Debian APT only. */
@@ -399,6 +419,16 @@ export type RemoteUpdatePayload = {
   client_cert?: string | null;
   client_key?: string | null;
   download_concurrency?: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  proxy_username?: string | null;
+  proxy_password?: string | null;
   /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
   /** Debian APT only. */

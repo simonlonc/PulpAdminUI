@@ -416,29 +416,25 @@ export const RENDERED_REMOTE_BASE_FIELDS: readonly string[] = [
   "proxy_url",
   "username",
   "password",
-];
-
-/**
- * Base remote fields the deriver excludes that no form renders. Z4 empties this, moving each
- * entry into RENDERED_REMOTE_BASE_FIELDS as its input lands. ca_cert, client_cert and client_key
- * are held in the form state and sent in the payload, but the modal has no input for them.
- * pulp_labels is sent as {} on create and never edited.
- */
-export const KNOWN_UNRENDERED_REMOTE_BASE_FIELDS: readonly string[] = [
-  "ca_cert",
-  "client_cert",
-  "client_key",
-  "connect_timeout",
-  "headers",
-  "max_retries",
-  "proxy_password",
-  "proxy_username",
-  "pulp_labels",
   "rate_limit",
+  "max_retries",
+  "connect_timeout",
   "sock_connect_timeout",
   "sock_read_timeout",
   "total_timeout",
+  "proxy_username",
+  "proxy_password",
+  "headers",
+  "ca_cert",
+  "client_cert",
+  "client_key",
 ];
+
+/**
+ * Base remote fields the deriver excludes that no form renders. pulp_labels is sent as {} on
+ * create and is managed by the separate labels UI, not the remote form.
+ */
+export const KNOWN_UNRENDERED_REMOTE_BASE_FIELDS: readonly string[] = ["pulp_labels"];
 
 /**
  * Properties of every repository POST schema that a repository form renders an input for. The

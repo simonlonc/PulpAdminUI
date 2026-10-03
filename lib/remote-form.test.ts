@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  advancedInputProblem,
+  advancedSetCount,
+  headersProblem,
   emptyExtraFields,
   emptyRemoteForm,
   extraFieldsFromRemote,
@@ -156,6 +159,15 @@ describe("emptyRemoteForm", () => {
       client_cert: "",
       client_key: "",
       download_concurrency: "",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {},
     });
   });
@@ -210,6 +222,15 @@ describe("formFromRemote", () => {
       client_cert: "CLIENT-CERT-TEXT",
       client_key: "",
       download_concurrency: "5",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {
         sync_sources: true,
         package_types: ["sdist", "bdist_wheel"],
@@ -234,6 +255,15 @@ describe("formFromRemote", () => {
       client_cert: "",
       client_key: "",
       download_concurrency: "",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {
         sync_sources: false,
         package_types: [],
@@ -626,5 +656,149 @@ describe("formToUpdatePayload", () => {
 
     const payload = formToUpdatePayload(form, booleanFieldPlugin);
     expect(payload.sync_sources).toBe(true);
+  });
+});
+
+describe("remote tuning fields", () => {
+  const hinted: PulpPluginDescriptor = {
+    ...noExtraFieldsPlugin,
+    baseFieldHints: {
+      connect_timeout: { placeholder: "Pulp default", minimum: 0 },
+      total_timeout: { placeholder: "Pulp default", minimum: 0 },
+    },
+  };
+  const filled = (over: Partial<RemoteFormState> = {}): RemoteFormState => ({
+    ...baseForm(hinted),
+    name: "r",
+    url: "https://example.com/",
+    ...over,
+  });
+
+  it("create: blank tuning fields are null, headers an empty array", () => {
+    const payload = formToCreatePayload(filled(), hinted);
+    expect(payload).toMatchObject({
+      rate_limit: null,
+      max_retries: null,
+      connect_timeout: null,
+      sock_connect_timeout: null,
+      sock_read_timeout: null,
+      total_timeout: null,
+      proxy_username: null,
+      proxy_password: null,
+      headers: [],
+    });
+  });
+
+  it("create: sends integers as integers, floats as floats, secrets and headers as typed", () => {
+    const payload = formToCreatePayload(
+      filled({
+        rate_limit: "7",
+        max_retries: "0",
+        connect_timeout: "1.5",
+        sock_connect_timeout: "0",
+        sock_read_timeout: "2.25",
+        total_timeout: "30",
+        proxy_username: " pu ",
+        proxy_password: "pp",
+        headers: '[{"X-A": "b"}]',
+      }),
+      hinted
+    );
+    expect(payload).toMatchObject({
+      rate_limit: 7,
+      max_retries: 0,
+      connect_timeout: 1.5,
+      sock_connect_timeout: 0,
+      sock_read_timeout: 2.25,
+      total_timeout: 30,
+      proxy_username: "pu",
+      proxy_password: "pp",
+      headers: [{ "X-A": "b" }],
+    });
+  });
+
+  it("edit: blank numbers clear (null) and blank headers clear ([]), blank secrets are omitted", () => {
+    const payload = formToUpdatePayload(filled(), hinted);
+    expect(payload.rate_limit).toBeNull();
+    expect(payload.total_timeout).toBeNull();
+    expect(payload.headers).toEqual([]);
+    expect("proxy_username" in payload).toBe(false);
+    expect("proxy_password" in payload).toBe(false);
+    expect("client_key" in payload).toBe(false);
+  });
+
+  it("edit: proxy secrets and the key are sent only when typed", () => {
+    const payload = formToUpdatePayload(
+      filled({ proxy_username: "pu", proxy_password: "  ", client_key: "K" }),
+      hinted
+    );
+    expect(payload.proxy_username).toBe("pu");
+    expect("proxy_password" in payload).toBe(false);
+    expect(payload.client_key).toBe("K");
+  });
+
+  it("edit: a blank ca_cert or client_cert is sent as null, which clears the stored one", () => {
+    const payload = formToUpdatePayload(filled({ ca_cert: "", client_cert: "C" }), hinted);
+    expect(payload.ca_cert).toBeNull();
+    expect(payload.client_cert).toBe("C");
+  });
+
+  it("formFromRemote reads the stored numbers and headers, never the proxy secrets", () => {
+    const form = formFromRemote(
+      {
+        ...minimalRemote,
+        rate_limit: 5,
+        max_retries: 0,
+        total_timeout: 1.5,
+        headers: [{ "X-A": "b" }],
+      },
+      hinted
+    );
+    expect(form.rate_limit).toBe("5");
+    expect(form.max_retries).toBe("0");
+    expect(form.total_timeout).toBe("1.5");
+    expect(form.connect_timeout).toBe("");
+    expect(JSON.parse(form.headers)).toEqual([{ "X-A": "b" }]);
+    expect(form.proxy_username).toBe("");
+    expect(form.proxy_password).toBe("");
+  });
+
+  it("names a bad tuning number with the spec minimum from the hint", () => {
+    expect(numericInputProblem(filled({ connect_timeout: "-1" }), hinted)).toBe(
+      "Connect timeout must be a number of at least 0."
+    );
+    expect(numericInputProblem(filled({ rate_limit: "1.5" }), hinted)).toBe(
+      "Rate limit must be a whole number."
+    );
+    expect(numericInputProblem(filled({ max_retries: "abc" }), hinted)).toBe(
+      "Max retries must be a whole number."
+    );
+    expect(numericInputProblem(filled({ total_timeout: "0.5", max_retries: "0" }), hinted)).toBeNull();
+  });
+
+  it("headers must be an array of objects", () => {
+    expect(headersProblem(filled())).toBeNull();
+    expect(headersProblem(filled({ headers: '[{"a": "b"}]' }))).toBeNull();
+    for (const bad of ["{not json", '{"a": "b"}', "[1]", "[[]]", "[null]"]) {
+      expect(headersProblem(filled({ headers: bad }))).toBe(
+        "Headers must be a JSON array of objects."
+      );
+    }
+    expect(advancedInputProblem(filled({ headers: "x" }), hinted)).toMatch(/Headers/);
+    expect(advancedInputProblem(filled({ rate_limit: "x" }), hinted)).toMatch(/Rate limit/);
+    expect(advancedInputProblem(filled(), hinted)).toBeNull();
+  });
+
+  it("counts filled fields and stored secrets for the section summary", () => {
+    expect(advancedSetCount(filled(), null)).toBe(0);
+    expect(advancedSetCount(filled({ rate_limit: "5", headers: "[]", client_key: "K" }), null)).toBe(3);
+    const remote: PulpRemote = {
+      ...minimalRemote,
+      hidden_fields: [
+        { name: "proxy_username", is_set: true },
+        { name: "proxy_password", is_set: false },
+      ],
+    };
+    expect(advancedSetCount(formFromRemote(remote, hinted), remote)).toBe(1);
   });
 });

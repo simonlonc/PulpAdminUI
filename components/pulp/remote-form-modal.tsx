@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -8,13 +9,17 @@ import { usePulpPluginsContext } from "./plugins-context";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import { getBaseFieldHint, type PulpPluginKind } from "@/lib/pulp-plugins";
 import {
+  advancedInputProblem,
+  advancedSetCount,
   emptyRemoteForm,
   formFromRemote,
   formToCreatePayload,
   formToUpdatePayload,
+  headersProblem,
   invalidJsonExtraField,
   numericInputProblem,
   missingRequiredExtraField,
+  REMOTE_TUNING_NUMBER_FIELDS,
   type RemoteFormState,
 } from "@/lib/remote-form";
 import { PulpRemote, PulpRemotePolicy } from "@/services/pulp/types";
@@ -26,6 +31,12 @@ const selectClassName =
 
 const textareaClassName =
   "min-h-[4rem] w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm font-mono dark:border-zinc-700";
+
+/** Pulp never returns a secret, only whether it is set (`hidden_fields`); say so on an edit. */
+function secretPlaceholder(editing: PulpRemote | null, name: string): string {
+  const isSet = editing?.hidden_fields?.some((h) => h.name === name && h.is_set);
+  return isSet ? "Set. Leave blank to keep current" : "";
+}
 
 export type RemoteFormModalProps = {
   kind: PulpPluginKind;
@@ -85,6 +96,12 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
     const invalidJsonField = invalidJsonExtraField(form, plugin);
     if (invalidJsonField) {
       setModalError(`${invalidJsonField.label} must be valid JSON.`);
+      return;
+    }
+
+    const headersError = headersProblem(form);
+    if (headersError) {
+      setModalError(headersError);
       return;
     }
 
@@ -339,17 +356,6 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
             />
             Validate TLS certificate of the upstream server
           </label>
-          <FormField label="Download concurrency (optional)">
-            <Input
-              value={form.download_concurrency}
-              onChange={(event) => {
-                setModalError(null);
-                setForm((f) => ({ ...f, download_concurrency: event.target.value }));
-              }}
-              inputMode="numeric"
-              placeholder={getBaseFieldHint(plugin, "download_concurrency").placeholder}
-            />
-          </FormField>
           <FormField label="Proxy URL (optional)">
             <Input
               value={form.proxy_url}
@@ -376,6 +382,102 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
               />
             </FormField>
           </div>
+          <AdvancedSection
+            setCount={advancedSetCount(form, editing)}
+            hasError={modalError !== null && modalError === advancedInputProblem(form, plugin)}
+          >
+            <FormField label="Download concurrency (optional)">
+              <Input
+                value={form.download_concurrency}
+                onChange={(event) => {
+                  setModalError(null);
+                  setForm((f) => ({ ...f, download_concurrency: event.target.value }));
+                }}
+                inputMode="numeric"
+                placeholder={getBaseFieldHint(plugin, "download_concurrency").placeholder}
+              />
+            </FormField>
+            {REMOTE_TUNING_NUMBER_FIELDS.map((field) => {
+              const hint = getBaseFieldHint(plugin, field.name);
+              return (
+                <FormField key={field.name} label={`${field.label} (optional)`}>
+                  <Input
+                    value={form[field.name]}
+                    onChange={(event) => {
+                      setModalError(null);
+                      setForm((f) => ({ ...f, [field.name]: event.target.value }));
+                    }}
+                    inputMode={field.whole ? "numeric" : "decimal"}
+                    min={hint.minimum}
+                    placeholder={hint.placeholder}
+                  />
+                </FormField>
+              );
+            })}
+            <FormField label="Headers (optional)">
+              <textarea
+                value={form.headers}
+                onChange={(event) => {
+                  setModalError(null);
+                  setForm((f) => ({ ...f, headers: event.target.value }));
+                }}
+                className={textareaClassName}
+                rows={3}
+                placeholder='[{"X-Header": "value"}]'
+              />
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Proxy username (optional)">
+                <Input
+                  value={form.proxy_username}
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, proxy_username: event.target.value }))
+                  }
+                  autoComplete="off"
+                  placeholder={secretPlaceholder(editing, "proxy_username")}
+                />
+              </FormField>
+              <FormField label="Proxy password (optional)">
+                <Input
+                  type="password"
+                  value={form.proxy_password}
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, proxy_password: event.target.value }))
+                  }
+                  autoComplete="new-password"
+                  placeholder={secretPlaceholder(editing, "proxy_password")}
+                />
+              </FormField>
+            </div>
+            <FormField label="CA certificate (optional)">
+              <textarea
+                value={form.ca_cert}
+                onChange={(event) => setForm((f) => ({ ...f, ca_cert: event.target.value }))}
+                className={textareaClassName}
+                rows={3}
+                placeholder="-----BEGIN CERTIFICATE-----"
+              />
+            </FormField>
+            <FormField label="Client certificate (optional)">
+              <textarea
+                value={form.client_cert}
+                onChange={(event) => setForm((f) => ({ ...f, client_cert: event.target.value }))}
+                className={textareaClassName}
+                rows={3}
+                placeholder="-----BEGIN CERTIFICATE-----"
+              />
+            </FormField>
+            <FormField label="Client key (optional)">
+              <textarea
+                value={form.client_key}
+                onChange={(event) => setForm((f) => ({ ...f, client_key: event.target.value }))}
+                className={textareaClassName}
+                rows={3}
+                autoComplete="off"
+                placeholder={secretPlaceholder(editing, "client_key") || "-----BEGIN PRIVATE KEY-----"}
+              />
+            </FormField>
+          </AdvancedSection>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={close} disabled={isSaving}>
               Cancel
