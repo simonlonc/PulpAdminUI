@@ -19,7 +19,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { GET } from "@/app/api/pulp/distributions/route";
+import { GET, POST } from "@/app/api/pulp/distributions/route";
 
 describe("GET /api/pulp/distributions", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -79,5 +79,71 @@ describe("GET /api/pulp/distributions", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.results[0].base_url).toBe("https://pulp.example.com/pulp/content/my-repo/");
+  });
+});
+
+describe("GET /api/pulp/distributions response-shape guard (F-16)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    deleteCookieMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body is a bare number", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("42", { status: 200 })));
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+
+  it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body has no results array", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(typeof body.detail).toBe("string");
+    expect(body.detail.length).toBeGreaterThan(0);
+  });
+});
+
+describe("POST /api/pulp/distributions null body (F-18)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    deleteCookieMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects a literal null body with 400 instead of throwing a raw TypeError", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const request = new Request("http://pulp.test/api/pulp/distributions", {
+      method: "POST",
+      body: "null",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request, undefined);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

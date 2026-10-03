@@ -19,68 +19,13 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { DELETE, GET, PATCH } from "@/app/api/pulp/distributions/[id]/route";
+import { DELETE, GET, PATCH } from "@/app/api/pulp/contentguards/[id]/route";
 
 function paramsFor(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-describe("GET /api/pulp/distributions/[id]", () => {
-  let fetchMock: ReturnType<typeof vi.fn>;
-  const distributionId = encodeURIComponent("/pulp/api/v3/distributions/rpm/rpm/abc/");
-
-  beforeEach(() => {
-    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
-    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
-    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
-    deleteCookieMock.mockClear();
-    fetchMock = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            pulp_href: "/pulp/api/v3/distributions/rpm/rpm/abc/",
-            pulp_created: "2024-01-01T00:00:00Z",
-            base_path: "my-repo",
-            base_url: "http://lenovo-ideapad-gaming-3:8080/pulp/content/my-repo/",
-            content_guard: null,
-            pulp_labels: {},
-            name: "my-repo",
-            repository: null,
-          }),
-          { status: 200 }
-        )
-    );
-    vi.stubGlobal("fetch", fetchMock);
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-  });
-
-  it("leaves base_url identical to Pulp's when PULP_CONTENT_ORIGIN is unset", async () => {
-    const request = new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`);
-
-    const response = await GET(request, paramsFor(distributionId));
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.base_url).toBe("http://lenovo-ideapad-gaming-3:8080/pulp/content/my-repo/");
-  });
-
-  it("replaces the origin while preserving the content path when PULP_CONTENT_ORIGIN is set", async () => {
-    vi.stubEnv("PULP_CONTENT_ORIGIN", "https://pulp.example.com");
-    const request = new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`);
-
-    const response = await GET(request, paramsFor(distributionId));
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.base_url).toBe("https://pulp.example.com/pulp/content/my-repo/");
-  });
-});
-
-describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () => {
+describe("decodeURIComponent guard for /api/pulp/contentguards/[id] (F-17)", () => {
   beforeEach(() => {
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
@@ -98,7 +43,7 @@ describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () 
   });
 
   it("returns a 400 with a detail instead of throwing for GET when id is '%'", async () => {
-    const request = new Request("http://pulp.test/api/pulp/distributions/%");
+    const request = new Request("http://pulp.test/api/pulp/contentguards/%");
 
     const response = await GET(request, paramsFor("%"));
 
@@ -109,7 +54,7 @@ describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () 
   });
 
   it("returns a 400 with a detail instead of throwing for PATCH when id is '%'", async () => {
-    const request = new Request("http://pulp.test/api/pulp/distributions/%", {
+    const request = new Request("http://pulp.test/api/pulp/contentguards/%", {
       method: "PATCH",
       body: JSON.stringify({ name: "new-name" }),
     });
@@ -123,7 +68,7 @@ describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () 
   });
 
   it("returns a 400 with a detail instead of throwing for DELETE when id is '%'", async () => {
-    const request = new Request("http://pulp.test/api/pulp/distributions/%", {
+    const request = new Request("http://pulp.test/api/pulp/contentguards/%", {
       method: "DELETE",
     });
 
@@ -136,8 +81,8 @@ describe("decodeURIComponent guard for /api/pulp/distributions/[id] (F-17)", () 
   });
 });
 
-describe("PATCH /api/pulp/distributions/[id] null body (F-18)", () => {
-  const distributionId = encodeURIComponent("/pulp/api/v3/distributions/rpm/rpm/abc/");
+describe("PATCH /api/pulp/contentguards/[id] null body (F-18)", () => {
+  const contentGuardId = encodeURIComponent("/pulp/api/v3/contentguards/core/header/abc/");
 
   beforeEach(() => {
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
@@ -156,13 +101,13 @@ describe("PATCH /api/pulp/distributions/[id] null body (F-18)", () => {
   });
 
   it("rejects a literal null body with 400 instead of throwing a raw TypeError", async () => {
-    const request = new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`, {
+    const request = new Request(`http://pulp.test/api/pulp/contentguards/${contentGuardId}`, {
       method: "PATCH",
       body: "null",
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await PATCH(request, paramsFor(distributionId));
+    const response = await PATCH(request, paramsFor(contentGuardId));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Invalid request body." });

@@ -13,6 +13,8 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.fuzz.test.ts"],
     exclude: ["**/node_modules/**", "**/.next/**"],
+    // Pins the seed when FUZZ_SEED is set (see test/fuzz/setup.ts); otherwise a no-op.
+    setupFiles: ["./test/fuzz/setup.ts"],
   },
   resolve: {
     // Mirrors the "@/*" path mapping in tsconfig.json.

@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../../_helpers";
+import { decodeRefOrNull, PulpApiError, readJsonBody, withPulpAuth } from "../../_helpers";
 
 type PulpContentGuardDetail = {
   pulp_href: string;
@@ -28,7 +28,10 @@ type UpdatePulpContentGuardPayload = {
 };
 
 function resolveContentGuardPath(encodedRef: string): string | null {
-  const decodedRef = decodeURIComponent(encodedRef).trim();
+  const decodedRef = decodeRefOrNull(encodedRef);
+  if (decodedRef === null) {
+    return null;
+  }
   if (decodedRef.length === 0) {
     return null;
   }
@@ -81,12 +84,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "Invalid content guard identifier." }, { status: 400 });
     }
 
-    let payload: Partial<UpdatePulpContentGuardPayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<UpdatePulpContentGuardPayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<UpdatePulpContentGuardPayload>;
 
     const updatePayload: UpdatePulpContentGuardPayload = {};
     if (typeof payload.name === "string") updatePayload.name = payload.name.trim();

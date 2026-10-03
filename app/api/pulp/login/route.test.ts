@@ -104,6 +104,34 @@ describe("login route", () => {
     });
   });
 
+  it("F-18: rejects a literal null body with 400 instead of throwing a raw TypeError", async () => {
+    const request = new Request("http://pulp.test/api/pulp/login", {
+      method: "POST",
+      body: "null",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("F-18: rejects a bare number body with 400 instead of throwing a raw TypeError", async () => {
+    const request = new Request("http://pulp.test/api/pulp/login", {
+      method: "POST",
+      body: "42",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("percent-encodes special characters in username", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ count: 1 }), { status: 200 })

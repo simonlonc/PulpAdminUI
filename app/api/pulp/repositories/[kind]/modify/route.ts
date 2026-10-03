@@ -1,7 +1,7 @@
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { PulpApiError, readJsonBody, readStringArrayField, withPulpAuth } from "@/app/api/pulp/_helpers";
 import { normalizePulpHrefToApiPath, toPulpHrefPath } from "../../_server";
 
 type ModifyBody = {
@@ -30,8 +30,12 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
   }
 
-  const addContentUnits = (body.add_content_units ?? []).map((h) => h.trim()).filter(Boolean);
-  const removeContentUnits = (body.remove_content_units ?? []).map((h) => h.trim()).filter(Boolean);
+  const addContentUnits = readStringArrayField(body as Record<string, unknown>, "add_content_units")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  const removeContentUnits = readStringArrayField(body as Record<string, unknown>, "remove_content_units")
+    .map((h) => h.trim())
+    .filter(Boolean);
   const baseVersion = body.base_version?.trim();
 
   if (addContentUnits.length === 0 && removeContentUnits.length === 0 && !baseVersion) {

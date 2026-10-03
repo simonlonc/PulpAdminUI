@@ -6,16 +6,18 @@ import {
   PulpAuth,
   pulpFetch,
 } from "@/lib/pulp";
+import { PulpApiError, readJsonBody } from "../_helpers";
 
 type PulpUserCountResponse = { count: number };
 
 export async function POST(request: Request) {
-  let payload: Partial<PulpAuth> | null = null;
+  let payload: Partial<PulpAuth>;
 
   try {
-    payload = (await request.json()) as Partial<PulpAuth>;
-  } catch {
-    return Response.json({ detail: "Invalid request body." }, { status: 400 });
+    payload = (await readJsonBody(request)) as Partial<PulpAuth>;
+  } catch (error) {
+    const detail = error instanceof PulpApiError ? error.detail : "Invalid request body.";
+    return Response.json({ detail }, { status: 400 });
   }
 
   if (!payload?.username || !payload?.password) {

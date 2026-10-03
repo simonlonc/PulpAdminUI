@@ -68,6 +68,68 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
 }
 
 /**
+ * True only when `data` is a non-null object whose `results` is an array -- the one shape every
+ * paginated-list consumer actually needs. `pulpFetch<TData>`'s `data: parsed as TData` is an
+ * unchecked cast, so a 2xx body of `42` or `{}` parses fine and satisfies that cast at compile
+ * time while having no `results` to read at runtime (F-16). Checked once here instead of per
+ * shape: every current caller only ever reads `.results` (and `.count`/`.next` alongside it), so
+ * there is nothing yet to gain from a field-level or object-shape guard.
+ */
+export function isPulpListBody(data: unknown): data is { results: unknown[] } {
+  return (
+    typeof data === "object" && data !== null && Array.isArray((data as { results?: unknown }).results)
+  );
+}
+
+/**
+ * Throwing wrapper over `isPulpListBody` for `withPulpAuth` handlers that already throw
+ * `PulpApiError` on a failed `pulpFetch` call: a 2xx response whose body parses but isn't a
+ * results list would otherwise reach a `.map`/`for...of`/index read on `undefined` and escape
+ * `withPulpAuth` as an unstyled 500 with no `detail` (F-16). Matches the wording of F-13's
+ * `pulpFetch` message in lib/pulp.ts for the same "Pulp returned something unusable" family.
+ */
+export function expectPulpListBody(data: unknown): void {
+  if (!isPulpListBody(data)) {
+    throw new PulpApiError(502, "Pulp returned a response body with no results list.");
+  }
+}
+
+/**
+ * Reads an optional array-of-strings field off an already-parsed request body. Returns `[]` when
+ * the field is absent, matching every existing `body.field ?? []` call site, so a caller that
+ * branches on "was this provided?" keeps doing that against the original body. Throws
+ * `PulpApiError(400, ...)` when the field is present but is not an array, or is an array
+ * containing a non-string element -- `readJsonBody` only guarantees the body itself is an object,
+ * so `{"guards": [null]}` or `{"repo_hrefs": 42}` otherwise reach a handler's unguarded
+ * `.map`/`.trim()` over the field and throw a raw `TypeError` instead of the `{ detail }` 400
+ * every other malformed-body shape already gets here (F-19, F-20).
+ */
+export function readStringArrayField(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key];
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new PulpApiError(400, `${key} must be an array of strings.`);
+  }
+  return value as string[];
+}
+
+/**
+ * Decodes a URI-encoded `pulp_href`, returning null instead of throwing for a malformed
+ * percent-encoding (e.g. a lone "%"). The `[id]` route segments that call this hand
+ * `decodeURIComponent` a client-supplied, URL-routed string, so it must never throw a
+ * `URIError` that would otherwise escape as a body-less 500.
+ */
+export function decodeRefOrNull(encodedRef: string): string | null {
+  try {
+    return decodeURIComponent(encodedRef).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Wraps a route handler with the `requirePulpAuth` preamble every Pulp API route repeats: run
  * the auth check, hand the decoded `auth` to the handler, and if it throws a `PulpApiError`,
  * clear the auth cookie on a 401/403 and return the standard `{ detail }` JSON response. The

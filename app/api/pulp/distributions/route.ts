@@ -2,7 +2,7 @@ import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
-import { PulpApiError, withPulpAuth } from "../_helpers";
+import { expectPulpListBody, PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import {
   buildUpstreamListParams,
   toPulpHrefPath,
@@ -38,6 +38,7 @@ export const GET = withPulpAuth(async (request, auth) => {
   if (!result.ok) {
     throw new PulpApiError(result.status, result.detail);
   }
+  expectPulpListBody(result.data);
 
   return Response.json({
     ...result.data,
@@ -62,12 +63,7 @@ type CreateBody = {
  * patches it instead of creating a duplicate — this route always creates.
  */
 export const POST = withPulpAuth(async (request, auth) => {
-  let body: CreateBody;
-  try {
-    body = (await request.json()) as CreateBody;
-  } catch {
-    return Response.json({ detail: "Invalid request body." }, { status: 400 });
-  }
+  const body = (await readJsonBody(request)) as CreateBody;
 
   const plugin = findPulpPluginIn(await getPulpPluginRegistry(auth), body.kind ?? "");
   if (!plugin) {

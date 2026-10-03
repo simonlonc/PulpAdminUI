@@ -17,7 +17,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { PATCH } from "@/app/api/pulp/roles/[id]/route";
+import { PATCH, PUT } from "@/app/api/pulp/roles/[id]/route";
 
 function paramsFor(id: string) {
   return { params: Promise.resolve({ id }) };
@@ -49,6 +49,36 @@ describe("PATCH /api/pulp/roles/[id]", () => {
     });
 
     const response = await PATCH(request, paramsFor(VALID_ROLE_ID));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "Invalid request body." });
+  });
+});
+
+describe("PUT /api/pulp/roles/[id]", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }))
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("F-18: rejects a literal null body with 400 instead of throwing a raw TypeError", async () => {
+    const request = new Request(`http://pulp.test/api/pulp/roles/${VALID_ROLE_ID}`, {
+      method: "PUT",
+      body: "null",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PUT(request, paramsFor(VALID_ROLE_ID));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Invalid request body." });

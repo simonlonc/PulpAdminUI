@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../../../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../../../_helpers";
 
 type PulpUser = {
   pulp_href: string;
@@ -24,12 +24,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "User id is required." }, { status: 400 });
     }
 
-    let payload: Partial<ChangePasswordPayload> | null = null;
-    try {
-      payload = (await request.json()) as Partial<ChangePasswordPayload>;
-    } catch {
-      return Response.json({ detail: "Invalid request body." }, { status: 400 });
-    }
+    const payload = (await readJsonBody(request)) as Partial<ChangePasswordPayload>;
 
     if (typeof payload.password !== "string" || payload.password.length === 0) {
       return Response.json({ detail: "Password is required." }, { status: 400 });

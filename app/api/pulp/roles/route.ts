@@ -1,5 +1,5 @@
 import { pulpFetch } from "@/lib/pulp";
-import { PulpApiError, withPulpAuth } from "../_helpers";
+import { PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import {
   CreatePulpRolePayload,
   PulpPaginatedResponse,
@@ -58,12 +58,7 @@ function normalizePermissions(value: unknown): string[] {
 }
 
 export const POST = withPulpAuth(async (request, auth) => {
-  let payload: Partial<CreatePulpRolePayload> | null = null;
-  try {
-    payload = (await request.json()) as Partial<CreatePulpRolePayload>;
-  } catch {
-    return Response.json({ detail: "Invalid request body." }, { status: 400 });
-  }
+  const payload = (await readJsonBody(request)) as Partial<CreatePulpRolePayload>;
 
   const name = typeof payload?.name === "string" ? payload.name.trim() : "";
   const permissions = normalizePermissions(payload?.permissions);
