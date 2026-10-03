@@ -82,6 +82,13 @@ function listResourcePaths(paths: SchemaRecord, resource: string): PathEntry[] {
   return entries;
 }
 
+function isDerivableRepository(paths: SchemaRecord, entry: PathEntry): boolean {
+  return (
+    entry.app !== "core" && // core is the server itself, not a content family
+    hasPostOperation(paths, entry.path) // e.g. container/container-push: created by `podman push`, not this UI
+  );
+}
+
 function groupByApp(entries: PathEntry[]): Map<string, { type: string; path: string }[]> {
   const map = new Map<string, { type: string; path: string }[]>();
   for (const entry of entries) {
@@ -371,6 +378,92 @@ function stripPrefix(path: string): string {
   return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
 }
 
+/** Properties of every remote POST schema that the remote modal actually renders an input for. */
+export const RENDERED_REMOTE_BASE_FIELDS: readonly string[] = [
+  "name",
+  "url",
+  "policy",
+  "tls_validation",
+  "download_concurrency",
+  "proxy_url",
+  "username",
+  "password",
+];
+
+/**
+ * Base remote fields the deriver excludes that no form renders. Z4 empties this, moving each
+ * entry into RENDERED_REMOTE_BASE_FIELDS as its input lands. ca_cert, client_cert and client_key
+ * are held in the form state and sent in the payload, but the modal has no input for them.
+ * pulp_labels is sent as {} on create and never edited.
+ */
+export const KNOWN_UNRENDERED_REMOTE_BASE_FIELDS: readonly string[] = [
+  "ca_cert",
+  "client_cert",
+  "client_key",
+  "connect_timeout",
+  "headers",
+  "max_retries",
+  "proxy_password",
+  "proxy_username",
+  "pulp_labels",
+  "rate_limit",
+  "sock_connect_timeout",
+  "sock_read_timeout",
+  "total_timeout",
+];
+
+/**
+ * Properties of every repository POST schema that a repository form renders an input for. The
+ * create modal sends retain_repo_versions as null, but all three edit forms render it.
+ */
+export const RENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
+  "name",
+  "description",
+  "remote",
+  "retain_repo_versions",
+];
+
+/**
+ * Base repository fields the deriver excludes that no form renders. Z5 empties this by moving
+ * retain_checkpoints into RENDERED_REPOSITORY_BASE_FIELDS. pulp_labels is sent as {} on create
+ * and never edited.
+ */
+export const KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
+  "pulp_labels",
+  "retain_checkpoints",
+];
+
+/**
+ * The property names the deriver leaves out of the extra remote and repository fields because
+ * every schema of the resource has them: the hand-written forms are assumed to cover them, which
+ * the constants above check.
+ */
+function excludedBaseFieldsOf(
+  paths: SchemaRecord,
+  schemas: SchemaRecord
+): { remote: Set<string>; repository: Set<string> } {
+  const postSchemas = (resource: string, filter: (entry: PathEntry) => boolean) =>
+    listResourcePaths(paths, resource)
+      .filter(filter)
+      .map((entry) => postRequestSchema(paths, schemas, entry.path))
+      .filter((s): s is SchemaRecord => s !== null);
+
+  // Excluded on top of the computed base: policy is a download-policy enum almost every remote
+  // declares, but PulpRemoteField has no control for a string enum, so deriving it would render
+  // a free-text box that lets a user post an invalid value. Deliberate exclusion, to revisit.
+  const remote = new Set([...commonPropertyNames(postSchemas("remotes", () => true)), "policy"]);
+  const repository = commonPropertyNames(postSchemas("repositories", (entry) => isDerivableRepository(paths, entry)));
+  return { remote, repository };
+}
+
+/** `excludedBaseFieldsOf` for a whole OpenAPI document; empty sets when it has no usable shape. */
+export function derivedExcludedBaseFields(spec: unknown): { remote: Set<string>; repository: Set<string> } {
+  const root = asRecord(spec);
+  const paths = asRecord(root?.paths);
+  if (!paths) return { remote: new Set(), repository: new Set() };
+  return excludedBaseFieldsOf(paths, asRecord(asRecord(root?.components)?.schemas) ?? {});
+}
+
 /**
  * Turns a Pulp OpenAPI document into PulpPluginDescriptor values. Never throws: an unexpected
  * shape at any step just drops that field, that family, or the whole result.
@@ -387,10 +480,8 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
   if (!paths) return [];
   const schemas = asRecord(asRecord(root?.components)?.schemas) ?? {};
 
-  const repositories = listResourcePaths(paths, "repositories").filter(
-    (entry) =>
-      entry.app !== "core" && // core is the server itself, not a content family
-      hasPostOperation(paths, entry.path) // e.g. container/container-push: created by `podman push`, not this UI
+  const repositories = listResourcePaths(paths, "repositories").filter((entry) =>
+    isDerivableRepository(paths, entry)
   );
 
   const remotesByApp = groupByApp(listResourcePaths(paths, "remotes"));
@@ -398,19 +489,7 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
   const distributionsByApp = groupByApp(listResourcePaths(paths, "distributions"));
   const contentByApp = groupByApp(listResourcePaths(paths, "content"));
 
-  const remoteSchemas = [...remotesByApp.values()]
-    .flat()
-    .map((entry) => postRequestSchema(paths, schemas, entry.path))
-    .filter((s): s is SchemaRecord => s !== null);
-  // Excluded on top of the computed base: policy is a download-policy enum almost every remote
-  // declares, but PulpRemoteField has no control for a string enum, so deriving it would render
-  // a free-text box that lets a user post an invalid value. Deliberate exclusion, to revisit.
-  const remoteExcluded = new Set([...commonPropertyNames(remoteSchemas), "policy"]);
-
-  const repoSchemas = repositories
-    .map((entry) => postRequestSchema(paths, schemas, entry.path))
-    .filter((s): s is SchemaRecord => s !== null);
-  const repoExcluded = commonPropertyNames(repoSchemas);
+  const { remote: remoteExcluded, repository: repoExcluded } = excludedBaseFieldsOf(paths, schemas);
 
   const typeEnum = pulpTypeEnum(paths);
 
