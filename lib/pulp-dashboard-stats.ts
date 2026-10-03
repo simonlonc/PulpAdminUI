@@ -130,6 +130,12 @@ async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStat
   };
 }
 
+// Cache dashboard stats (users, groups, repositories, activity) for 60s to avoid
+// fanning out ~1 list call per repository family plus 5 more to Pulp per page load.
+// Cached to .next/cache via Next's IncrementalCache.set; a failed disk write logs a
+// non-fatal warning; the in-memory copy continues to serve. Runtime user must be able
+// to write .next/cache relative to the working directory; the in-repo Containerfiles
+// set up the required permissions.
 export function getCachedPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
   return unstable_cache(
     async () => loadPulpDashboardStats(auth),
