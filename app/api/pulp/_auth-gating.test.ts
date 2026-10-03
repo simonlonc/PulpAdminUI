@@ -146,6 +146,7 @@ describe("withPulpAuth logging", () => {
   let encodedCookie: string;
 
   beforeEach(() => {
+    vi.stubEnv("LOG_LEVEL", "info");
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     encodedCookie = encodePulpAuth({ username: "admin", password: PASSWORD });
     cookieState.value = encodedCookie;

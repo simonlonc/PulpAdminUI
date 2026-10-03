@@ -387,9 +387,13 @@ beforeEach(() => {
       new Response(JSON.stringify({ count: 0, next: null, previous: null, results: [] }), { status: 200 })
   );
   vi.stubGlobal("fetch", fetchMock);
+  // The "throw" responses are an unreachable Pulp on purpose, which pulpFetch logs at error
+  // level; nothing in this file asserts on that line, so keep it out of the test output.
+  vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });

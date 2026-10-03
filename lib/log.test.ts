@@ -7,6 +7,7 @@ let lines: string[] = [];
 
 beforeEach(() => {
   lines = [];
+  vi.stubEnv("LOG_LEVEL", "info");
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     lines.push(String(chunk));
     return true;
@@ -60,9 +61,11 @@ describe("LOG_LEVEL", () => {
     });
   }
 
-  it("defaults to info when unset", () => {
-    vi.stubEnv("LOG_LEVEL", "");
+  it("defaults to info when unset or empty", () => {
+    vi.stubEnv("LOG_LEVEL", undefined);
+    expect(resolveLogLevel()).toBe("info");
 
+    vi.stubEnv("LOG_LEVEL", "");
     expect(resolveLogLevel()).toBe("info");
   });
 

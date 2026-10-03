@@ -20,6 +20,7 @@ let lines: string[] = [];
 
 beforeEach(() => {
   lines = [];
+  vi.stubEnv("LOG_LEVEL", "info");
   vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     lines.push(String(chunk));
