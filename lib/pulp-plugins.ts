@@ -22,16 +22,18 @@ export type PulpRemoteField = {
   name: string;
   /**
    * "string_list": string[], entered one value per line (or a multi-select when `options`
-   * is set). "integer": number | null. "json": a JSON object typed as text, used only by
+   * is set). "integer": a safe integer | null. "float": a finite number | null. "json": a JSON object typed as text, used only by
    * gem's `includes`/`excludes`.
    */
-  type: "string" | "boolean" | "string_list" | "integer" | "json";
+  type: "string" | "boolean" | "string_list" | "integer" | "float" | "json";
   /** Rejected before the request when blank. Pulp requires it on create. */
   required?: boolean;
   label: string;
   placeholder?: string;
   /** "string_list" only: render a multi-select of these values instead of a textarea. */
   options?: readonly string[];
+  /** "integer" and "float" only: the spec's `minimum`; a smaller value is rejected before the request. */
+  minimum?: number;
 };
 
 /**

@@ -20,7 +20,7 @@ export type RemoteFormState = {
   download_concurrency: string;
   /**
    * Plugin-specific fields, keyed by Pulp field name (see PulpPluginDescriptor.extraRemoteFields).
-   * "string_list" fields are held as string[]; "string", "integer" and "json" fields are held
+   * "string_list" fields are held as string[]; "string", "integer", "float" and "json" fields are held
    * as the raw text typed into their input, parsed when the payload is built.
    */
   extra: Record<string, string | boolean | string[]>;
@@ -51,7 +51,7 @@ export function extraFieldsFromRemote(
       extra[field.name] = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
     } else if (field.type === "json") {
       extra[field.name] = value && typeof value === "object" ? JSON.stringify(value, null, 2) : "";
-    } else if (field.type === "integer") {
+    } else if (field.type === "integer" || field.type === "float") {
       extra[field.name] = typeof value === "number" ? String(value) : "";
     } else {
       extra[field.name] = typeof value === "string" ? value : "";
@@ -101,24 +101,86 @@ export function trimOrNull(value: string): string | null {
   return t === "" ? null : t;
 }
 
+/** A parsed numeric input: blank is `value: null` (leave Pulp's default alone), bad input is `ok: false`. */
+export type NumberParse = { ok: true; value: number | null } | { ok: false };
+
+const INTEGER_TEXT = /^[+-]?\d+$/;
+const FLOAT_TEXT = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+
+/** Parses a whole number: a safe integer at or above `minimum`, or blank. Anything else is not ok. */
+export function parseIntegerInput(value: string, minimum?: number): NumberParse {
+  const t = value.trim();
+  if (t === "") return { ok: true, value: null };
+  if (!INTEGER_TEXT.test(t)) return { ok: false };
+  const n = Number(t);
+  if (!Number.isSafeInteger(n) || (minimum !== undefined && n < minimum)) return { ok: false };
+  return { ok: true, value: n };
+}
+
+/** Parses a decimal number: a finite value at or above `minimum`, or blank. Anything else is not ok. */
+export function parseFloatInput(value: string, minimum?: number): NumberParse {
+  const t = value.trim();
+  if (t === "") return { ok: true, value: null };
+  if (!FLOAT_TEXT.test(t)) return { ok: false };
+  const n = Number(t);
+  if (!Number.isFinite(n) || (minimum !== undefined && n < minimum)) return { ok: false };
+  return { ok: true, value: n };
+}
+
+/** Download concurrency is a whole number of at least 1 (the spec's `minimum`). */
+export const DOWNLOAD_CONCURRENCY_MINIMUM = 1;
+
+/** The concurrency, or null when blank or invalid. Use `numericInputProblem` to tell those apart. */
 export function parseConcurrency(value: string): number | null {
-  const t = value.trim();
-  if (t === "") return null;
-  const n = Number(t);
-  const truncated = Math.trunc(n);
-  return Number.isFinite(n) && n >= 1 && Number.isSafeInteger(truncated) ? truncated : null;
+  const parsed = parseIntegerInput(value, DOWNLOAD_CONCURRENCY_MINIMUM);
+  return parsed.ok ? parsed.value : null;
 }
 
-/** Parses an "integer" extra field. Unlike download concurrency, 0 is a valid value here. */
-export function parseNullableInteger(value: string): number | null {
-  const t = value.trim();
-  if (t === "") return null;
-  const n = Number(t);
-  const truncated = Math.trunc(n);
-  return Number.isFinite(n) && Number.isSafeInteger(truncated) ? truncated : null;
+/** Parses an "integer" extra field, or null when blank or invalid. 0 is valid here unless the field has a minimum. */
+export function parseNullableInteger(value: string, minimum?: number): number | null {
+  const parsed = parseIntegerInput(value, minimum);
+  return parsed.ok ? parsed.value : null;
 }
 
-/** The plugin's extra fields, coerced to the shapes Pulp expects. Assumes JSON fields already validated. */
+/** Parses a "float" extra field, or null when blank or invalid. */
+export function parseNullableFloat(value: string, minimum?: number): number | null {
+  const parsed = parseFloatInput(value, minimum);
+  return parsed.ok ? parsed.value : null;
+}
+
+function numericProblem(label: string, whole: boolean, minimum?: number): string {
+  const kind = whole ? "a whole number" : "a number";
+  return minimum === undefined
+    ? `${label} must be ${kind}.`
+    : `${label} must be ${kind} of at least ${minimum}.`;
+}
+
+/**
+ * A message for the first numeric input (download concurrency, then the plugin's "integer" and
+ * "float" extra fields) that holds text which is not valid, or null when all are valid or blank.
+ * Without it a bad value parses to null and is dropped from the payload, so the save looks fine.
+ */
+export function numericInputProblem(
+  form: RemoteFormState,
+  plugin: PulpPluginDescriptor
+): string | null {
+  if (!parseIntegerInput(form.download_concurrency, DOWNLOAD_CONCURRENCY_MINIMUM).ok) {
+    return numericProblem("Download concurrency", true, DOWNLOAD_CONCURRENCY_MINIMUM);
+  }
+  for (const field of plugin.extraRemoteFields) {
+    if (field.type !== "integer" && field.type !== "float") continue;
+    const value = form.extra[field.name];
+    const text = typeof value === "string" ? value : "";
+    const parsed =
+      field.type === "integer"
+        ? parseIntegerInput(text, field.minimum)
+        : parseFloatInput(text, field.minimum);
+    if (!parsed.ok) return numericProblem(field.label, field.type === "integer", field.minimum);
+  }
+  return null;
+}
+
+/** The plugin's extra fields, coerced to the shapes Pulp expects. Assumes JSON and numeric fields already validated. */
 export function extraFieldsPayload(
   form: RemoteFormState,
   plugin: PulpPluginDescriptor
@@ -131,9 +193,13 @@ export function extraFieldsPayload(
     } else if (field.type === "string_list") {
       // Pulp rejects null for these array fields; an empty array is how they are cleared.
       payload[field.name] = Array.isArray(value) ? value.filter((v) => v.trim() !== "") : [];
-    } else if (field.type === "integer") {
+    } else if (field.type === "integer" || field.type === "float") {
       // Null is rejected too, so a blank input leaves the field out and Pulp's default stands.
-      const parsed = parseNullableInteger(typeof value === "string" ? value : "");
+      const text = typeof value === "string" ? value : "";
+      const parsed =
+        field.type === "integer"
+          ? parseNullableInteger(text, field.minimum)
+          : parseNullableFloat(text, field.minimum);
       if (parsed !== null) {
         payload[field.name] = parsed;
       }

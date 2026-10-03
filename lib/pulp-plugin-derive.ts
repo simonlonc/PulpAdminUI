@@ -184,8 +184,9 @@ function mapRemoteFieldType(type: string | null): PulpRemoteField["type"] {
     case "boolean":
       return "boolean";
     case "integer":
-    case "number":
       return "integer";
+    case "number":
+      return "float";
     case "array":
       return "string_list";
     case "object":
@@ -212,6 +213,10 @@ function buildExtraRemoteFields(
     if (type === "string_list") {
       const options = propItemsEnum(prop);
       if (options) field.options = options;
+    }
+    if (type === "integer" || type === "float") {
+      const minimum = asRecord(prop)?.minimum;
+      if (typeof minimum === "number" && Number.isFinite(minimum)) field.minimum = minimum;
     }
     fields.push(field);
   }

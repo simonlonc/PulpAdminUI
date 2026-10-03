@@ -63,6 +63,13 @@ function parseNullableInteger(value: unknown): number | null {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
+/** Parses a "float" field, or null when blank/absent. */
+function parseNullableFloat(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Parses a "json" field: a JSON object, or null when blank/absent. Throws on invalid JSON. */
 function parseJsonObject(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined) return null;
@@ -102,6 +109,14 @@ function assignExtraRemoteFields(
     if (field.type === "integer") {
       // Pulp rejects null here, so a blank value leaves the field out and its default stands.
       const parsed = parseNullableInteger(source[field.name]);
+      if (parsed !== null) {
+        target[field.name] = parsed;
+      }
+      continue;
+    }
+    if (field.type === "float") {
+      // Same as "integer": null is rejected, so a blank value leaves the field out.
+      const parsed = parseNullableFloat(source[field.name]);
       if (parsed !== null) {
         target[field.name] = parsed;
       }

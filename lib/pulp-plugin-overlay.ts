@@ -55,7 +55,7 @@ function arrayProblem(key: string, value: unknown, entryProblem: Validator): str
 }
 
 const SYNC_FIELD_TYPES = new Set(["boolean", "enum", "string_list"]);
-const REMOTE_FIELD_TYPES = new Set(["string", "boolean", "string_list", "integer", "json"]);
+const REMOTE_FIELD_TYPES = new Set(["string", "boolean", "string_list", "integer", "float", "json"]);
 
 function contentEndpointProblem(value: unknown): string | null {
   const record = asRecord(value);

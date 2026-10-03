@@ -9,7 +9,12 @@ import {
   formToUpdatePayload,
   invalidJsonExtraField,
   missingRequiredExtraField,
+  extraFieldsPayload,
+  numericInputProblem,
   parseConcurrency,
+  parseFloatInput,
+  parseIntegerInput,
+  parseNullableFloat,
   parseNullableInteger,
   trimOrNull,
   type RemoteFormState,
@@ -280,8 +285,8 @@ describe("parseConcurrency", () => {
     expect(parseConcurrency("-5")).toBeNull();
   });
 
-  it("truncates a valid fractional value", () => {
-    expect(parseConcurrency("10.7")).toBe(10);
+  it("rejects a fractional value rather than truncating it", () => {
+    expect(parseConcurrency("10.7")).toBeNull();
   });
 
   it("parses a valid integer", () => {
@@ -315,13 +320,155 @@ describe("parseNullableInteger", () => {
     expect(parseNullableInteger("-3")).toBe(-3);
   });
 
-  it("truncates a valid fractional value", () => {
-    expect(parseNullableInteger("7.9")).toBe(7);
+  it("rejects a fractional value rather than truncating it", () => {
+    expect(parseNullableInteger("7.9")).toBeNull();
+  });
+
+  it("enforces a minimum when given", () => {
+    expect(parseNullableInteger("-3", -3)).toBe(-3);
+    expect(parseNullableInteger("-4", -3)).toBeNull();
   });
 
   it("returns null for a huge digit string instead of overflowing to a non-safe-integer (F-9)", () => {
     // Repro: "9".repeat(56) previously produced 1e+56 via Number.trunc, silently overflowing.
     expect(parseNullableInteger("9".repeat(56))).toBeNull();
+  });
+});
+
+describe("parseIntegerInput", () => {
+  it("treats blank as ok with no value, never zero", () => {
+    expect(parseIntegerInput("")).toEqual({ ok: true, value: null });
+    expect(parseIntegerInput("  ")).toEqual({ ok: true, value: null });
+  });
+
+  it("accepts a safe integer and the safe-integer boundary", () => {
+    expect(parseIntegerInput("42")).toEqual({ ok: true, value: 42 });
+    expect(parseIntegerInput(String(Number.MAX_SAFE_INTEGER))).toEqual({
+      ok: true,
+      value: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it("rejects one past the safe-integer boundary, 1e+56, exponent and hex forms", () => {
+    expect(parseIntegerInput("9007199254740992")).toEqual({ ok: false });
+    expect(parseIntegerInput("9".repeat(56))).toEqual({ ok: false });
+    expect(parseIntegerInput("1e+56")).toEqual({ ok: false });
+    expect(parseIntegerInput("0x10")).toEqual({ ok: false });
+    expect(parseIntegerInput("Infinity")).toEqual({ ok: false });
+  });
+
+  it("rejects 1.5 and non-numeric text", () => {
+    expect(parseIntegerInput("1.5")).toEqual({ ok: false });
+    expect(parseIntegerInput("abc")).toEqual({ ok: false });
+  });
+
+  it("enforces the minimum: 1 rejects 0, 0 accepts 0 and rejects -1", () => {
+    expect(parseIntegerInput("0", 1)).toEqual({ ok: false });
+    expect(parseIntegerInput("1", 1)).toEqual({ ok: true, value: 1 });
+    expect(parseIntegerInput("0", 0)).toEqual({ ok: true, value: 0 });
+    expect(parseIntegerInput("-1", 0)).toEqual({ ok: false });
+  });
+});
+
+describe("parseFloatInput", () => {
+  it("treats blank as ok with no value, never zero", () => {
+    expect(parseFloatInput("")).toEqual({ ok: true, value: null });
+  });
+
+  it("accepts 1.5 without truncating, and forms like .5, 2. and 1e3", () => {
+    expect(parseFloatInput("1.5")).toEqual({ ok: true, value: 1.5 });
+    expect(parseFloatInput(".5")).toEqual({ ok: true, value: 0.5 });
+    expect(parseFloatInput("2.")).toEqual({ ok: true, value: 2 });
+    expect(parseFloatInput("1e3")).toEqual({ ok: true, value: 1000 });
+  });
+
+  it("rejects non-finite results and non-numeric text", () => {
+    expect(parseFloatInput("1e999")).toEqual({ ok: false });
+    expect(parseFloatInput("Infinity")).toEqual({ ok: false });
+    expect(parseFloatInput("NaN")).toEqual({ ok: false });
+    expect(parseFloatInput("1.5s")).toEqual({ ok: false });
+    expect(parseFloatInput("0x10")).toEqual({ ok: false });
+  });
+
+  it("enforces a minimum of 0: accepts 0 and 0.5, rejects a negative", () => {
+    expect(parseFloatInput("0", 0)).toEqual({ ok: true, value: 0 });
+    expect(parseFloatInput("0.5", 0)).toEqual({ ok: true, value: 0.5 });
+    expect(parseFloatInput("-0.5", 0)).toEqual({ ok: false });
+  });
+
+  it("accepts a negative when there is no minimum", () => {
+    expect(parseFloatInput("-2.5")).toEqual({ ok: true, value: -2.5 });
+  });
+});
+
+describe("parseNullableFloat", () => {
+  it("returns the number, or null for blank or invalid", () => {
+    expect(parseNullableFloat("1.5")).toBe(1.5);
+    expect(parseNullableFloat("")).toBeNull();
+    expect(parseNullableFloat("abc")).toBeNull();
+    expect(parseNullableFloat("-1", 0)).toBeNull();
+  });
+});
+
+describe("numericInputProblem", () => {
+  const numericPlugin: PulpPluginDescriptor = {
+    ...baseDescriptor,
+    extraRemoteFields: [
+      { name: "total_timeout", type: "float", label: "Total Timeout", minimum: 0 },
+      { name: "max_retries", type: "integer", label: "Max Retries" },
+    ],
+  };
+  const numericForm = (over: Partial<RemoteFormState> = {}, extra = {}): RemoteFormState => ({
+    ...baseForm(numericPlugin),
+    ...over,
+    extra: { total_timeout: "", max_retries: "", ...extra },
+  });
+
+  it("is null when everything is blank or valid", () => {
+    expect(numericInputProblem(numericForm(), numericPlugin)).toBeNull();
+    expect(
+      numericInputProblem(
+        numericForm({ download_concurrency: "4" }, { total_timeout: "0.5", max_retries: "0" }),
+        numericPlugin
+      )
+    ).toBeNull();
+  });
+
+  it("names a bad download concurrency instead of dropping it", () => {
+    expect(numericInputProblem(numericForm({ download_concurrency: "abc" }), numericPlugin)).toBe(
+      "Download concurrency must be a whole number of at least 1."
+    );
+    expect(numericInputProblem(numericForm({ download_concurrency: "0" }), numericPlugin)).toMatch(
+      /at least 1/
+    );
+    expect(
+      numericInputProblem(numericForm({ download_concurrency: "9".repeat(56) }), numericPlugin)
+    ).toMatch(/Download concurrency/);
+  });
+
+  it("names a bad extra field with its minimum", () => {
+    expect(numericInputProblem(numericForm({}, { total_timeout: "-1" }), numericPlugin)).toBe(
+      "Total Timeout must be a number of at least 0."
+    );
+    expect(numericInputProblem(numericForm({}, { max_retries: "1.5" }), numericPlugin)).toBe(
+      "Max Retries must be a whole number."
+    );
+  });
+});
+
+describe("extraFieldsPayload float and minimum", () => {
+  const floatPlugin: PulpPluginDescriptor = {
+    ...baseDescriptor,
+    extraRemoteFields: [{ name: "total_timeout", type: "float", label: "Total", minimum: 0 }],
+  };
+
+  it("sends a float untruncated, and omits a blank one", () => {
+    const form = (text: string): RemoteFormState => ({
+      ...baseForm(floatPlugin),
+      extra: { total_timeout: text },
+    });
+    expect(extraFieldsPayload(form("1.5"), floatPlugin)).toEqual({ total_timeout: 1.5 });
+    expect(extraFieldsPayload(form(""), floatPlugin)).toEqual({});
   });
 });
 

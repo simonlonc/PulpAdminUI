@@ -151,6 +151,9 @@ const spec = {
           url: { type: "string" },
           policy: { type: "string" },
           alpha_remote_field: { type: "boolean" },
+          alpha_timeout: { type: "number", minimum: 0.0 },
+          alpha_count: { type: "integer", minimum: 1 },
+          alpha_free: { type: "integer" },
         },
         required: ["url", "alpha_remote_field"],
       },
@@ -241,7 +244,10 @@ describe("derivePulpPlugins", () => {
     ]);
     expect(alpha?.extraRepoFields).toEqual(["alpha_only_field"]);
     expect(alpha?.extraRemoteFields).toEqual([
+      { name: "alpha_count", type: "integer", label: "Alpha Count", minimum: 1 },
+      { name: "alpha_free", type: "integer", label: "Alpha Free" },
       { name: "alpha_remote_field", type: "boolean", label: "Alpha Remote Field", required: true },
+      { name: "alpha_timeout", type: "float", label: "Alpha Timeout", minimum: 0 },
     ]);
   });
 

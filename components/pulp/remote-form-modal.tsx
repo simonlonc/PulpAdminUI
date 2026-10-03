@@ -13,6 +13,7 @@ import {
   formToCreatePayload,
   formToUpdatePayload,
   invalidJsonExtraField,
+  numericInputProblem,
   missingRequiredExtraField,
   type RemoteFormState,
 } from "@/lib/remote-form";
@@ -84,6 +85,12 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
     const invalidJsonField = invalidJsonExtraField(form, plugin);
     if (invalidJsonField) {
       setModalError(`${invalidJsonField.label} must be valid JSON.`);
+      return;
+    }
+
+    const numericProblem = numericInputProblem(form, plugin);
+    if (numericProblem) {
+      setModalError(numericProblem);
       return;
     }
 
@@ -290,7 +297,13 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
                     }));
                   }}
                   className="font-mono"
-                  inputMode={field.type === "integer" ? "numeric" : undefined}
+                  inputMode={
+                    field.type === "integer"
+                      ? "numeric"
+                      : field.type === "float"
+                        ? "decimal"
+                        : undefined
+                  }
                   placeholder={field.placeholder}
                 />
               </FormField>
@@ -329,9 +342,10 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
           <FormField label="Download concurrency (optional)">
             <Input
               value={form.download_concurrency}
-              onChange={(event) =>
-                setForm((f) => ({ ...f, download_concurrency: event.target.value }))
-              }
+              onChange={(event) => {
+                setModalError(null);
+                setForm((f) => ({ ...f, download_concurrency: event.target.value }));
+              }}
               inputMode="numeric"
               placeholder="10"
             />
