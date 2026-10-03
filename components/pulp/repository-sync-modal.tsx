@@ -4,9 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
+import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
-import { type PulpPluginKind, type PulpSyncField } from "@/lib/pulp-plugins";
+import { Input } from "@/components/ui/input";
+import { type PulpPluginKind, type PulpSyncField, getBaseFieldHint } from "@/lib/pulp-plugins";
+import {
+  DOWNLOAD_CONCURRENCY_MINIMUM,
+  numericProblem,
+  parseIntegerInput,
+} from "@/lib/remote-form";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
 import { PulpRemote, PulpRepository } from "@/services/pulp/types";
@@ -30,6 +37,10 @@ function defaultSyncFieldValues(
     }
   }
   return values;
+}
+
+function numberText(value: number | null | undefined): string {
+  return typeof value === "number" ? String(value) : "";
 }
 
 export type RepositorySyncModalProps = {
@@ -56,7 +67,10 @@ export function RepositorySyncModal({
   const [syncFieldValues, setSyncFieldValues] = useState<
     Record<string, boolean | string | string[]>
   >(() => defaultSyncFieldValues(getPlugin(kind).syncFields));
+  const [downloadConcurrency, setDownloadConcurrency] = useState("");
+  const [rateLimit, setRateLimit] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const plugin = getPlugin(kind);
 
   useEffect(() => {
     let active = true;
@@ -107,15 +121,53 @@ export function RepositorySyncModal({
     onClose();
   }
 
+  function selectRemote(href: string) {
+    const remote = remotes.find((r) => r.pulp_href === href);
+    setSyncRemoteHref(href);
+    setDownloadConcurrency(numberText(remote?.download_concurrency));
+    setRateLimit(numberText(remote?.rate_limit));
+  }
+
   async function handleSync() {
-    if (!syncRemoteHref) {
+    const remote = remotes.find((r) => r.pulp_href === syncRemoteHref);
+    if (!remote) {
       setError("Select a remote to sync from.");
       return;
+    }
+    const rateLimitMinimum = getBaseFieldHint(plugin, "rate_limit").minimum;
+    const concurrency = parseIntegerInput(downloadConcurrency, DOWNLOAD_CONCURRENCY_MINIMUM);
+    if (!concurrency.ok) {
+      setError(numericProblem("Download concurrency", true, DOWNLOAD_CONCURRENCY_MINIMUM));
+      return;
+    }
+    const rate = parseIntegerInput(rateLimit, rateLimitMinimum);
+    if (!rate.ok) {
+      setError(numericProblem("Rate limit", true, rateLimitMinimum));
+      return;
+    }
+    // Only the fields that changed are sent, so the PATCH cannot touch secrets, headers or anything else.
+    const changes: { download_concurrency?: number | null; rate_limit?: number | null } = {};
+    if (concurrency.value !== remote.download_concurrency) {
+      changes.download_concurrency = concurrency.value;
+    }
+    if (rate.value !== (remote.rate_limit ?? null)) {
+      changes.rate_limit = rate.value;
     }
     onBusyChange(true);
     setIsSyncing(true);
     setError(null);
+    let remoteUpdated = false;
     try {
+      if (Object.keys(changes).length > 0) {
+        const updated = await pulpRemoteService.update(kind, remote.pulp_href, changes);
+        if (!updated.ok) {
+          throw new Error(`The remote was not updated and no sync was started: ${updated.detail}`);
+        }
+        remoteUpdated = true;
+        setRemotes((prev) =>
+          prev.map((r) => (r.pulp_href === remote.pulp_href ? { ...r, ...changes } : r))
+        );
+      }
       const result = await pulpRepositoryManagementService.sync(kind, {
         pulp_href: repo.pulp_href,
         remote: syncRemoteHref,
@@ -126,7 +178,12 @@ export function RepositorySyncModal({
       }
       onSynced({ repoName: repo.name, task: result.data.task });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start sync.");
+      const message = e instanceof Error ? e.message : "Failed to start sync.";
+      setError(
+        remoteUpdated
+          ? `The remote "${remote.name}" was updated, but the sync did not start: ${message}`
+          : message
+      );
     } finally {
       onBusyChange(false);
       setIsSyncing(false);
@@ -165,7 +222,7 @@ export function RepositorySyncModal({
           <FormField label="Remote">
             <select
               value={syncRemoteHref}
-              onChange={(e) => setSyncRemoteHref(e.target.value)}
+              onChange={(e) => selectRemote(e.target.value)}
               disabled={isSyncing || isLoadingRemotes}
               className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
             >
@@ -260,6 +317,31 @@ export function RepositorySyncModal({
               </FormField>
             );
           })}
+          <AdvancedSection>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              These are settings of the remote, not of this sync. Changing either updates the
+              remote for every future sync that uses it. They do not control how many syncs run
+              at once.
+            </p>
+            <FormField label="Download concurrency (optional)">
+              <Input
+                value={downloadConcurrency}
+                onChange={(event) => setDownloadConcurrency(event.target.value)}
+                disabled={isSyncing || !syncRemoteHref}
+                inputMode="numeric"
+                placeholder={getBaseFieldHint(plugin, "download_concurrency").placeholder}
+              />
+            </FormField>
+            <FormField label="Rate limit (optional)">
+              <Input
+                value={rateLimit}
+                onChange={(event) => setRateLimit(event.target.value)}
+                disabled={isSyncing || !syncRemoteHref}
+                inputMode="numeric"
+                placeholder={getBaseFieldHint(plugin, "rate_limit").placeholder}
+              />
+            </FormField>
+          </AdvancedSection>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={isSyncing} onClick={close}>

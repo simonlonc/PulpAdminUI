@@ -193,7 +193,7 @@ export function parseNullableFloat(value: string, minimum?: number): number | nu
   return parsed.ok ? parsed.value : null;
 }
 
-function numericProblem(label: string, whole: boolean, minimum?: number): string {
+export function numericProblem(label: string, whole: boolean, minimum?: number): string {
   const kind = whole ? "a whole number" : "a number";
   return minimum === undefined
     ? `${label} must be ${kind}.`
