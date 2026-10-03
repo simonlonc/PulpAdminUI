@@ -8,6 +8,7 @@
  */
 
 import type {
+  PulpBaseFieldHint,
   PulpContentEndpoint,
   PulpContentField,
   PulpPluginDescriptor,
@@ -224,6 +225,28 @@ function buildExtraRemoteFields(
   return fields;
 }
 
+/** Matches only a clear statement: "the default value (3)" or "default is 3". Not "default is null". */
+const STATED_DEFAULT = /\bdefault value \((\d+(?:\.\d+)?)\)|\bdefault is (\d+(?:\.\d+)?)(?![\d.]*\w)/i;
+
+/**
+ * The hint for one base field from its spec property schema. `placeholder` carries a default
+ * number only when the description states one; `minimum` and `default` come from the schema's own
+ * keys. Never supplies a number the spec does not state.
+ */
+export function pulpDefaultHint(property: unknown): PulpBaseFieldHint {
+  const record = asRecord(property);
+  const description = typeof record?.description === "string" ? record.description : "";
+  const stated = STATED_DEFAULT.exec(description);
+  const number = stated?.[1] ?? stated?.[2];
+  const hint: PulpBaseFieldHint = { placeholder: number ? `Pulp default (${number})` : "Pulp default" };
+  const minimum = record?.minimum;
+  if (typeof minimum === "number" && Number.isFinite(minimum)) hint.minimum = minimum;
+  if (record && "default" in record && record.default !== null && record.default !== undefined) {
+    hint.default = record.default;
+  }
+  return hint;
+}
+
 /** Enum values of a string enum schema, resolving a `$ref` and a wrapping `allOf`. */
 function resolveStringEnum(schemas: SchemaRecord, prop: unknown): readonly string[] | undefined {
   const record = asRecord(prop);
@@ -438,6 +461,37 @@ export const KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
   "retain_checkpoints",
 ];
 
+/** The base fields no plugin form derives that Z4/Z5 render a hinted input for, by resource. */
+const BASE_HINT_FIELDS = {
+  remote: [
+    "download_concurrency",
+    "rate_limit",
+    "max_retries",
+    "connect_timeout",
+    "sock_connect_timeout",
+    "sock_read_timeout",
+    "total_timeout",
+  ],
+  repository: ["retain_checkpoints", "retain_repo_versions"],
+  distribution: ["hidden"],
+} as const;
+
+/** The hints for BASE_HINT_FIELDS read off one family's remote, repository and distribution POST schemas. */
+function buildBaseFieldHints(
+  paths: SchemaRecord,
+  schemas: SchemaRecord,
+  postPaths: { remote: string; repository: string; distribution: string }
+): Record<string, PulpBaseFieldHint> {
+  const hints: Record<string, PulpBaseFieldHint> = {};
+  for (const resource of ["remote", "repository", "distribution"] as const) {
+    const properties = schemaProperties(postRequestSchema(paths, schemas, postPaths[resource]));
+    for (const name of BASE_HINT_FIELDS[resource]) {
+      if (name in properties) hints[name] = pulpDefaultHint(properties[name]);
+    }
+  }
+  return hints;
+}
+
 /**
  * The property names the deriver leaves out of the extra remote and repository fields because
  * every schema of the resource has them: the hand-written forms are assumed to cover them, which
@@ -546,6 +600,11 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
       syncFields,
       extraRemoteFields: buildExtraRemoteFields(paths, schemas, remotePath, remoteExcluded),
       extraRepoFields: buildExtraRepoFields(paths, schemas, repo.path, repoExcluded),
+      baseFieldHints: buildBaseFieldHints(paths, schemas, {
+        remote: remotePath,
+        repository: repo.path,
+        distribution: distributionPath,
+      }),
     };
     families.push(descriptor);
   }

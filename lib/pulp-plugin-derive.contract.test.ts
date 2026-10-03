@@ -7,6 +7,7 @@ import {
   RENDERED_REPOSITORY_BASE_FIELDS,
   derivedExcludedBaseFields,
   derivePulpPlugins,
+  pulpDefaultHint,
 } from "@/lib/pulp-plugin-derive";
 
 /**
@@ -95,5 +96,35 @@ describeContract("derivePulpPlugins against a live /docs/api.json", () => {
         expect(stale, `${resource} listed fields the deriver no longer excludes`).toEqual([]);
       });
     }
+  });
+
+  describe("base field hints", () => {
+    function remoteProperty(name: string): unknown {
+      const root = spec as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+      return root.components.schemas["file.FileRemote"].properties[name];
+    }
+
+    it("derives 'Pulp default (3)' for max_retries and a bare hint for the others without a stated number", () => {
+      expect(pulpDefaultHint(remoteProperty("max_retries")).placeholder).toBe("Pulp default (3)");
+      expect(pulpDefaultHint(remoteProperty("download_concurrency"))).toEqual({
+        placeholder: "Pulp default",
+        minimum: 1,
+      });
+      expect(pulpDefaultHint(remoteProperty("total_timeout"))).toEqual({
+        placeholder: "Pulp default",
+        minimum: 0,
+      });
+    });
+
+    it("attaches hints for every base tuning field to every derived family", () => {
+      for (const plugin of derivePulpPlugins(spec)) {
+        const hints = plugin.baseFieldHints ?? {};
+        for (const name of ["download_concurrency", "max_retries", "retain_checkpoints", "hidden"]) {
+          expect(hints[name], `${plugin.kind} ${name}`).toBeDefined();
+        }
+        expect(hints.hidden.default).toBe(false);
+        expect(hints.max_retries.placeholder).toBe("Pulp default (3)");
+      }
+    });
   });
 });

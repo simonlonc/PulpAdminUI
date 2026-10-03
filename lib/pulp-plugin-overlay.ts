@@ -128,6 +128,21 @@ function remoteFieldProblem(value: unknown): string | null {
   return null;
 }
 
+function baseFieldHintsProblem(value: unknown): string | null {
+  const record = asRecord(value);
+  if (!record) return '"baseFieldHints" must be an object';
+  for (const [name, hint] of Object.entries(record)) {
+    const hintRecord = asRecord(hint);
+    if (!hintRecord || typeof hintRecord.placeholder !== "string") {
+      return `"baseFieldHints.${name}" needs a string "placeholder"`;
+    }
+    if (hintRecord.minimum !== undefined && !Number.isFinite(hintRecord.minimum)) {
+      return `"baseFieldHints.${name}.minimum" must be a number`;
+    }
+  }
+  return null;
+}
+
 function nonEmptyStringValidator(key: string): Validator {
   return (value) => (isNonEmptyString(value) ? null : `"${key}" must be a non-empty string`);
 }
@@ -160,11 +175,12 @@ const KEY_VALIDATORS: Record<keyof PulpPluginDescriptor, Validator> = {
   extraRemoteFields: (value) => arrayProblem("extraRemoteFields", value, remoteFieldProblem),
   extraRepoFields: (value) =>
     isStringArray(value) ? null : '"extraRepoFields" must be an array of strings',
+  baseFieldHints: baseFieldHintsProblem,
 };
 
 const DESCRIPTOR_KEYS = new Set(Object.keys(KEY_VALIDATORS));
 
-/** Every descriptor key but publicationDefaults, the type's only optional one. */
+/** Every descriptor key but publicationDefaults and baseFieldHints, the type's optional ones. */
 const REQUIRED_KEYS: readonly (keyof PulpPluginDescriptor)[] = [
   "kind",
   "label",

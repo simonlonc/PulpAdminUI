@@ -6,7 +6,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { usePulpPluginsContext } from "./plugins-context";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
-import { type PulpPluginKind } from "@/lib/pulp-plugins";
+import { getBaseFieldHint, type PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   emptyRemoteForm,
   formFromRemote,
@@ -347,7 +347,7 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
                 setForm((f) => ({ ...f, download_concurrency: event.target.value }));
               }}
               inputMode="numeric"
-              placeholder="10"
+              placeholder={getBaseFieldHint(plugin, "download_concurrency").placeholder}
             />
           </FormField>
           <FormField label="Proxy URL (optional)">
