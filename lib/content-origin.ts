@@ -7,6 +7,8 @@
  * this is a no-op pass-through.
  */
 
+import { logWarn } from "@/lib/log";
+
 let lastWarnedRawValue: string | null = null;
 
 export function getContentOriginOverride(): string | null {
@@ -23,7 +25,7 @@ export function getContentOriginOverride(): string | null {
     return parsed.origin;
   } catch {
     if (rawValue !== lastWarnedRawValue) {
-      console.warn(`Ignoring invalid PULP_CONTENT_ORIGIN value: ${rawValue}`);
+      logWarn("content_origin_invalid", { value: rawValue });
       lastWarnedRawValue = rawValue;
     }
     return null;

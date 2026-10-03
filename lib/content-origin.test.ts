@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyContentOrigin, getContentOriginOverride } from "@/lib/content-origin";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 
@@ -35,6 +36,23 @@ describe("getContentOriginOverride", () => {
   it("returns null for a non-http(s) scheme", () => {
     vi.stubEnv("PULP_CONTENT_ORIGIN", "ftp://host");
     expect(getContentOriginOverride()).toBeNull();
+  });
+
+  it("warns once per distinct invalid value", () => {
+    vi.stubEnv("LOG_LEVEL", "info");
+    const lines: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      lines.push(String(chunk));
+      return true;
+    });
+
+    vi.stubEnv("PULP_CONTENT_ORIGIN", "warn-once value");
+    getContentOriginOverride();
+    getContentOriginOverride();
+
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      { level: "warn", event: "content_origin_invalid", value: "warn-once value" },
+    ]);
   });
 });
 

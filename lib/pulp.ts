@@ -160,7 +160,7 @@ const SLOW_FETCH_MS = 5000;
 
 // Origin plus pathname: which host and port, and which endpoint, without the query string
 // (which can carry user search text) or any userinfo in PULP_BASE_URL.
-function loggableUrl(apiUrl: string): string {
+export function loggableUrl(apiUrl: string): string {
   try {
     const { origin, pathname } = new URL(apiUrl);
     return `${origin}${pathname}`;
