@@ -159,6 +159,7 @@ export const pulpDistributionService = {
       repository?: string | null;
       publication?: string | null;
       content_guard?: string | null;
+      hidden?: boolean;
     }
   ): Promise<ServiceDataResult<CreatedDistribution>> {
     const response = await fetch(DISTRIBUTIONS_PATH, {

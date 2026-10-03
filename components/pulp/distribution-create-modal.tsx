@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { usePulpPublicationOptions } from "./use-pulp-publication-options";
 import { usePulpPluginsContext } from "./plugins-context";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
-import { type PulpPluginKind } from "@/lib/pulp-plugins";
+import { getBaseFieldHint, type PulpPluginKind } from "@/lib/pulp-plugins";
 import { PulpContentGuard } from "@/services/pulp/types";
 
 const selectClassName =
@@ -38,6 +39,10 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
   const [repository, setRepository] = useState("");
   const [publication, setPublication] = useState("");
   const [contentGuard, setContentGuard] = useState("");
+  // null until the user touches the checkbox, so it follows the spec default of the chosen type.
+  const [hiddenChoice, setHiddenChoice] = useState<boolean | null>(null);
+  const hiddenDefault = getBaseFieldHint(getPlugin(kind), "hidden").default === true;
+  const hidden = hiddenChoice ?? hiddenDefault;
 
   useEffect(() => {
     let active = true;
@@ -117,6 +122,7 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
         content_guard: contentGuard || null,
+        hidden,
       });
       if (!result.ok) {
         throw new Error(result.detail);
@@ -245,6 +251,17 @@ export function DistributionCreateModal({ onClose, onCreated }: DistributionCrea
               ))}
             </select>
           </FormField>
+          <AdvancedSection setCount={hidden !== hiddenDefault ? 1 : 0}>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={hidden}
+                disabled={isSaving}
+                onChange={(event) => setHiddenChoice(event.target.checked)}
+              />
+              Hidden from the content app
+            </label>
+          </AdvancedSection>
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">

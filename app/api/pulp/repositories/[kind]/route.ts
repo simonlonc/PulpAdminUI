@@ -2,6 +2,7 @@ import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { retainCheckpointsProblem } from "@/lib/repository-edit-form";
 import { buildUpstreamListParams, normalizePulpHrefToApiPath, TaskRefResponse } from "../_server";
 
 type PulpRepositoryRow = {
@@ -25,6 +26,7 @@ type RepositoryPatchBody = {
   name?: string;
   description?: string | null;
   retain_repo_versions?: number | null;
+  retain_checkpoints?: number | null;
   remote?: string | null;
   autopublish?: boolean;
   metadata_signing_service?: string | null;
@@ -75,6 +77,7 @@ function buildPatchPayload(
         ? null
         : String(body.description),
     retain_repo_versions: toRetainRepoVersions(body.retain_repo_versions),
+    retain_checkpoints: body.retain_checkpoints ?? null,
     remote: nullIfBlank(body.remote ?? null),
   };
 
@@ -174,6 +177,11 @@ export const PATCH = withPulpAuth(async (request, auth, { params }: { params: Pr
   const apiPath = normalizePulpHrefToApiPath(pulpHref);
   if (!apiPath.includes(plugin.repositoryPath)) {
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
+  }
+
+  const checkpointsProblem = retainCheckpointsProblem(body.retain_checkpoints);
+  if (checkpointsProblem) {
+    return Response.json({ detail: checkpointsProblem }, { status: 400 });
   }
 
   const patchPayload = buildPatchPayload(plugin, body, name);

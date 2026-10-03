@@ -12,6 +12,7 @@ type PulpDistribution = {
   name: string;
   repository: string | null;
   publication?: string | null;
+  hidden?: boolean;
 };
 
 type UpdatePulpDistributionPayload = {
@@ -20,6 +21,7 @@ type UpdatePulpDistributionPayload = {
   repository?: string | null;
   publication?: string | null;
   content_guard?: string | null;
+  hidden?: boolean;
 };
 
 function resolveDistributionPath(encodedRef: string): string | null {
@@ -93,6 +95,13 @@ export const PATCH = withPulpAuth(
     }
     if ("content_guard" in (payload ?? {})) {
       updatePayload.content_guard = payload.content_guard ?? null;
+    }
+
+    if ("hidden" in (payload ?? {})) {
+      if (typeof payload.hidden !== "boolean") {
+        return Response.json({ detail: "hidden must be true or false." }, { status: 400 });
+      }
+      updatePayload.hidden = payload.hidden;
     }
 
     if (Object.keys(updatePayload).length === 0) {

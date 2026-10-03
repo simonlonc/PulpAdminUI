@@ -147,3 +147,57 @@ describe("POST /api/pulp/distributions null body (F-18)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/pulp/distributions hidden", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/docs/api.json")
+        ? new Response("", { status: 500 })
+        : new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function create(extra: Record<string, unknown>) {
+    return POST(
+      new Request("http://pulp.test/api/pulp/distributions", {
+        method: "POST",
+        body: JSON.stringify({ kind: "file", name: "d", base_path: "d", ...extra }),
+      })
+    );
+  }
+
+  function sentBody(): Record<string, unknown> {
+    const call = fetchMock.mock.calls.findLast(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    if (!call) throw new Error("no POST reached Pulp");
+    return JSON.parse(String((call[1] as RequestInit).body));
+  }
+
+  it("sends hidden when given, true or false", async () => {
+    await create({ hidden: true });
+    expect(sentBody().hidden).toBe(true);
+    await create({ hidden: false });
+    expect(sentBody().hidden).toBe(false);
+  });
+
+  it("leaves hidden out when absent, so Pulp applies its own default", async () => {
+    await create({});
+    expect("hidden" in sentBody()).toBe(false);
+  });
+
+  it("rejects a non-boolean hidden with a 400", async () => {
+    const response = await create({ hidden: "true" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "hidden must be true or false." });
+  });
+});

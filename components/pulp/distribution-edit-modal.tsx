@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { usePulpPublicationOptions } from "./use-pulp-publication-options";
 import { usePulpPluginsContext } from "./plugins-context";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
+import { getBaseFieldHint } from "@/lib/pulp-plugins";
 import { PulpContentGuard, PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
@@ -29,7 +31,7 @@ export function DistributionEditModal({
 }: DistributionEditModalProps) {
   const { repositoryOptions } = usePulpRepositoryOptions(true);
   const { publicationOptions } = usePulpPublicationOptions(true);
-  const { getPlugin } = usePulpPluginsContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const [contentGuards, setContentGuards] = useState<PulpContentGuard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -42,6 +44,10 @@ export function DistributionEditModal({
   const [repository, setRepository] = useState("");
   const [publication, setPublication] = useState("");
   const [contentGuard, setContentGuard] = useState("");
+  const distributionPlugin = plugins.find((p) => distribution.pulp_href.includes(p.distributionPath));
+  const hiddenDefault =
+    (distributionPlugin ? getBaseFieldHint(distributionPlugin, "hidden").default : undefined) === true;
+  const [hidden, setHidden] = useState(hiddenDefault);
 
   useEffect(() => {
     let active = true;
@@ -65,6 +71,7 @@ export function DistributionEditModal({
           setBinding("none");
         }
         setContentGuard(detail.content_guard ?? "");
+        setHidden(detail.hidden ?? hiddenDefault);
         setContentGuards(guards.results);
       } catch (error) {
         if (active) {
@@ -83,6 +90,7 @@ export function DistributionEditModal({
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distribution.pulp_href]);
 
   useEffect(() => {
@@ -137,6 +145,7 @@ export function DistributionEditModal({
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
         content_guard: contentGuard || null,
+        hidden,
       });
       if (!result.ok) {
         setModalError(result.detail);
@@ -256,6 +265,17 @@ export function DistributionEditModal({
                 ))}
               </select>
             </FormField>
+            <AdvancedSection setCount={hidden !== hiddenDefault ? 1 : 0}>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={hidden}
+                  disabled={isSaving}
+                  onChange={(event) => setHidden(event.target.checked)}
+                />
+                Hidden from the content app
+              </label>
+            </AdvancedSection>
           </div>
         )}
 

@@ -439,23 +439,21 @@ export const KNOWN_UNRENDERED_REMOTE_BASE_FIELDS: readonly string[] = ["pulp_lab
 /**
  * Properties of every repository POST schema that a repository form renders an input for. The
  * create modal sends retain_repo_versions as null, but all three edit forms render it.
+ * retain_checkpoints is in an Advanced section on the create modal and all three edit forms.
  */
 export const RENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
   "name",
   "description",
   "remote",
   "retain_repo_versions",
+  "retain_checkpoints",
 ];
 
 /**
- * Base repository fields the deriver excludes that no form renders. Z5 empties this by moving
- * retain_checkpoints into RENDERED_REPOSITORY_BASE_FIELDS. pulp_labels is sent as {} on create
- * and never edited.
+ * Base repository fields the deriver excludes that no form renders. pulp_labels is sent as {}
+ * on create and is managed by the separate labels UI, not the repository forms.
  */
-export const KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
-  "pulp_labels",
-  "retain_checkpoints",
-];
+export const KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = ["pulp_labels"];
 
 /** The base fields no plugin form derives that Z4/Z5 render a hinted input for, by resource. */
 const BASE_HINT_FIELDS = {

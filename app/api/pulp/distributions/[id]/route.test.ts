@@ -168,3 +168,46 @@ describe("PATCH /api/pulp/distributions/[id] null body (F-18)", () => {
     expect(await response.json()).toEqual({ detail: "Invalid request body." });
   });
 });
+
+describe("PATCH /api/pulp/distributions/[id] hidden", () => {
+  const distributionId = encodeURIComponent("/pulp/api/v3/distributions/rpm/rpm/abc/");
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function patch(body: Record<string, unknown>) {
+    return PATCH(
+      new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+      paramsFor(distributionId)
+    );
+  }
+
+  it("forwards hidden true and false, since false is a real change", async () => {
+    await patch({ hidden: true });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toEqual({ hidden: true });
+    await patch({ hidden: false });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual({ hidden: false });
+  });
+
+  it("rejects a non-boolean hidden with a 400 and never calls Pulp", async () => {
+    const response = await patch({ hidden: "yes" });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "hidden must be true or false." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

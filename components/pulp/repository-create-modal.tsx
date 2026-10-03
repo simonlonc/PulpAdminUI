@@ -4,11 +4,13 @@ import Link from "next/link";
 import { FormEvent, useEffect, useId, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
+import { RetainCheckpointsSection } from "./retain-checkpoints-section";
 import { Button } from "@/components/ui/button";
 import { CircleHelp } from "lucide-react";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
+import { retainCheckpointsProblem } from "@/lib/repository-edit-form";
 import { pulpRemoteService } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
@@ -45,6 +47,7 @@ export function RepositoryCreateModal({
   const [createRemote, setCreateRemote] = useState("");
   const [createAutopublish, setCreateAutopublish] = useState(false);
   const [createManifest, setCreateManifest] = useState("");
+  const [createRetainCheckpoints, setCreateRetainCheckpoints] = useState<number | null>(null);
   const [createNamingHintOpen, setCreateNamingHintOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createResult, setCreateResult] = useState<RepositoryCreateResult | null>(null);
@@ -57,6 +60,7 @@ export function RepositoryCreateModal({
     setCreateRemote("");
     setCreateAutopublish(false);
     setCreateManifest("");
+    setCreateRetainCheckpoints(null);
   }
 
   useEffect(() => {
@@ -110,6 +114,11 @@ export function RepositoryCreateModal({
       setError("Repository name is required.");
       return;
     }
+    const checkpointsProblem = retainCheckpointsProblem(createRetainCheckpoints);
+    if (checkpointsProblem) {
+      setError(checkpointsProblem);
+      return;
+    }
     onBusyChange(true);
     setError(null);
     setIsCreating(true);
@@ -121,6 +130,7 @@ export function RepositoryCreateModal({
         name: trimmed,
         description: createDescription,
         retain_repo_versions: null,
+        retain_checkpoints: createRetainCheckpoints,
         remote: createRemote.trim() === "" ? null : createRemote.trim(),
       };
       if (extraRepoFields.includes("autopublish")) {
@@ -278,6 +288,11 @@ export function RepositoryCreateModal({
               </FormField>
             ) : null}
           </div>
+          <RetainCheckpointsSection
+            value={createRetainCheckpoints}
+            onChange={setCreateRetainCheckpoints}
+            disabled={isCreating}
+          />
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={isCreating}>
               {isCreating ? "Creating…" : "Create"}

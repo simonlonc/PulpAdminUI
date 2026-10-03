@@ -53,6 +53,7 @@ type CreateBody = {
   repository?: string | null;
   publication?: string | null;
   content_guard?: string | null;
+  hidden?: boolean;
 };
 
 /**
@@ -79,7 +80,14 @@ export const POST = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "base_path is required." }, { status: 400 });
   }
 
+  if (body.hidden !== undefined && typeof body.hidden !== "boolean") {
+    return Response.json({ detail: "hidden must be true or false." }, { status: 400 });
+  }
+
   const createPayload: Record<string, unknown> = { name, base_path: basePath };
+  if (body.hidden !== undefined) {
+    createPayload.hidden = body.hidden;
+  }
   if (body.repository) {
     createPayload.repository = toPulpHrefPath(body.repository);
   }

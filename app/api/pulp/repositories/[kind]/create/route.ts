@@ -2,6 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { retainCheckpointsProblem } from "@/lib/repository-edit-form";
 import { TaskRefResponse } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
@@ -50,6 +51,7 @@ function buildCreateBody(
     name,
     description,
     retain_repo_versions: parseNullableInt(raw.retain_repo_versions),
+    retain_checkpoints: raw.retain_checkpoints ?? null,
     remote: trimOrNull(raw.remote),
   };
 
@@ -92,6 +94,11 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
   const labels = parseLabels(raw.pulp_labels);
   if (labels === null) {
     return Response.json({ detail: "pulp_labels must be a JSON object with string values." }, { status: 400 });
+  }
+
+  const checkpointsProblem = retainCheckpointsProblem(raw.retain_checkpoints);
+  if (checkpointsProblem) {
+    return Response.json({ detail: checkpointsProblem }, { status: 400 });
   }
 
   const description = typeof raw.description === "string" ? raw.description : "";

@@ -233,6 +233,7 @@ export type PulpDistribution = {
 /** Detail row from GET {distribution_href}. The generic list serializer omits `publication`. */
 export type PulpDistributionDetail = PulpDistribution & {
   publication: string | null;
+  hidden?: boolean;
 };
 
 /**
@@ -525,6 +526,7 @@ export type PulpRpmRepositoryDetail = {
   latest_version_href: string | null;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   metadata_signing_service: string | null;
@@ -542,6 +544,7 @@ export type PulpDebRepositoryDetail = {
   name: string;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   structured_repo: boolean;
@@ -556,6 +559,7 @@ export type PulpFileRepositoryDetail = {
   latest_version_href: string | null;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   manifest: string | null;
@@ -571,6 +575,7 @@ export type RepositoryUpdatePayload = {
   name: string;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   /** rpm, file */
   autopublish?: boolean;
@@ -594,6 +599,7 @@ export type RepositoryCreatePayload = {
   name: string;
   description: string;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   /** rpm, file */
   autopublish?: boolean;
@@ -726,6 +732,7 @@ export type UpdatePulpDistributionPayload = {
   repository?: string | null;
   publication?: string | null;
   content_guard?: string | null;
+  hidden?: boolean;
 };
 
 /**

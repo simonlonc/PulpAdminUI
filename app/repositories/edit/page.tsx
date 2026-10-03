@@ -17,6 +17,7 @@ import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import {
   debDetailToForm,
   fileDetailToForm,
+  retainCheckpointsProblem,
   rpmDetailToForm,
   type RpmReadOnlyMeta,
 } from "@/lib/repository-edit-form";
@@ -191,6 +192,14 @@ function RepositoriesEditInner() {
       return;
     } else if (loadedKind === "file" && !fileRepo?.name.trim()) {
       setError("Repository name is required.");
+      return;
+    }
+
+    const checkpointsProblem = retainCheckpointsProblem(
+      (loadedKind === "rpm" ? rpm : loadedKind === "deb" ? deb : fileRepo)?.retain_checkpoints
+    );
+    if (checkpointsProblem) {
+      setError(checkpointsProblem);
       return;
     }
 
