@@ -150,7 +150,7 @@ export const pulpDistributionService = {
   },
 
   /** Plain create for the distributions page's "New distribution" modal: always creates a
-   * distribution for `kind`, bound to a repository, a publication, or neither. */
+   * distribution for `kind`, bound to a repository, a publication, a repository version, or neither. */
   async createDistribution(
     kind: PulpPluginKind,
     payload: {
@@ -158,7 +158,9 @@ export const pulpDistributionService = {
       base_path: string;
       repository?: string | null;
       publication?: string | null;
+      repository_version?: string | null;
       content_guard?: string | null;
+      hidden?: boolean;
     }
   ): Promise<ServiceDataResult<CreatedDistribution>> {
     const response = await fetch(DISTRIBUTIONS_PATH, {

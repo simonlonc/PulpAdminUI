@@ -168,3 +168,108 @@ describe("PATCH /api/pulp/distributions/[id] null body (F-18)", () => {
     expect(await response.json()).toEqual({ detail: "Invalid request body." });
   });
 });
+
+describe("PATCH /api/pulp/distributions/[id] hidden", () => {
+  const distributionId = encodeURIComponent("/pulp/api/v3/distributions/rpm/rpm/abc/");
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function patch(body: Record<string, unknown>) {
+    return PATCH(
+      new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+      paramsFor(distributionId)
+    );
+  }
+
+  it("forwards hidden true and false, since false is a real change", async () => {
+    await patch({ hidden: true });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toEqual({ hidden: true });
+    await patch({ hidden: false });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body))).toEqual({ hidden: false });
+  });
+
+  it("rejects a non-boolean hidden with a 400 and never calls Pulp", async () => {
+    const response = await patch({ hidden: "yes" });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "hidden must be true or false." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/pulp/distributions/[id] repository_version", () => {
+  const distributionId = encodeURIComponent("/pulp/api/v3/distributions/file/file/abc/");
+  const VERSION = "/pulp/api/v3/repositories/file/file/r1/versions/1/";
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function patch(body: Record<string, unknown>) {
+    return PATCH(
+      new Request(`http://pulp.test/api/pulp/distributions/${distributionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+      paramsFor(distributionId)
+    );
+  }
+
+  const sent = () => JSON.parse(String(fetchMock.mock.calls[0][1].body));
+
+  it("pins a version and clears the repository and publication in the same PATCH", async () => {
+    await patch({ repository: null, publication: null, repository_version: VERSION });
+    expect(sent()).toEqual({ repository: null, publication: null, repository_version: VERSION });
+  });
+
+  it("switching back to a repository clears the version", async () => {
+    const repository = "/pulp/api/v3/repositories/file/file/r1/";
+    await patch({ repository, publication: null, repository_version: null });
+    expect(sent()).toEqual({ repository, publication: null, repository_version: null });
+  });
+
+  it("rejects a version set together with a repository or a publication, never calling Pulp", async () => {
+    for (const other of [{ repository: "/pulp/api/v3/repositories/file/file/r1/" }, { publication: "/p/" }]) {
+      const response = await patch({ repository_version: VERSION, ...other });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        detail: "Only one of repository, publication and repository_version may be set.",
+      });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an href that is not a repository version", async () => {
+    for (const bad of ["/pulp/api/v3/repositories/file/file/r1/", "/pulp/api/v3/repositories/file/file/r1/versions/", 7]) {
+      const response = await patch({ repository_version: bad });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ detail: "repository_version must be a repository version href." });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

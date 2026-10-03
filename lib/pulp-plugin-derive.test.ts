@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { derivePulpPlugins } from "@/lib/pulp-plugin-derive";
+import {
+  KNOWN_UNRENDERED_REMOTE_BASE_FIELDS,
+  KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS,
+  RENDERED_REMOTE_BASE_FIELDS,
+  RENDERED_REPOSITORY_BASE_FIELDS,
+  derivedExcludedBaseFields,
+  derivePulpPlugins,
+} from "@/lib/pulp-plugin-derive";
 
 /**
  * A small hand-built OpenAPI-shaped fixture covering:
@@ -144,6 +151,9 @@ const spec = {
           url: { type: "string" },
           policy: { type: "string" },
           alpha_remote_field: { type: "boolean" },
+          alpha_timeout: { type: "number", minimum: 0.0 },
+          alpha_count: { type: "integer", minimum: 1 },
+          alpha_free: { type: "integer" },
         },
         required: ["url", "alpha_remote_field"],
       },
@@ -234,7 +244,10 @@ describe("derivePulpPlugins", () => {
     ]);
     expect(alpha?.extraRepoFields).toEqual(["alpha_only_field"]);
     expect(alpha?.extraRemoteFields).toEqual([
+      { name: "alpha_count", type: "integer", label: "Alpha Count", minimum: 1 },
+      { name: "alpha_free", type: "integer", label: "Alpha Free" },
       { name: "alpha_remote_field", type: "boolean", label: "Alpha Remote Field", required: true },
+      { name: "alpha_timeout", type: "float", label: "Alpha Timeout", minimum: 0 },
     ]);
   });
 
@@ -281,5 +294,68 @@ describe("derivePulpPlugins", () => {
         fields: [{ name: "name", label: "Name" }],
       },
     ]);
+  });
+
+  describe("base field coverage", () => {
+    // The committed openapi/pulp.json is domain-prefixed, which the deriver does not match, so
+    // the real spec is checked in the contract tier; here a fixture whose base fields are
+    // exactly the declared lists proves the check passes and names a newly added field.
+    function specWithBase(resource: "remotes" | "repositories", base: string[]) {
+      const properties = (names: string[]) => Object.fromEntries(names.map((n) => [n, { type: "string" }]));
+      const paths: Record<string, unknown> = {};
+      const schemas: Record<string, unknown> = {};
+      for (const type of ["one", "two"]) {
+        const name = `${type}${resource}`;
+        paths[`/pulp/api/v3/${resource}/${type}/${type}/`] = {
+          post: {
+            requestBody: {
+              content: { "application/json": { schema: { $ref: `#/components/schemas/${name}` } } },
+            },
+          },
+        };
+        schemas[name] = { properties: properties([...base, `${type}_only`]) };
+      }
+      return { paths, components: { schemas } };
+    }
+
+    const cases = [
+      {
+        resource: "remote",
+        specResource: "remotes",
+        rendered: RENDERED_REMOTE_BASE_FIELDS,
+        gaps: KNOWN_UNRENDERED_REMOTE_BASE_FIELDS,
+        // policy is excluded by hand, not computed, so it is not part of the fixture's base
+        base: (list: readonly string[]) => list.filter((n) => n !== "policy"),
+      },
+      {
+        resource: "repository",
+        specResource: "repositories",
+        rendered: RENDERED_REPOSITORY_BASE_FIELDS,
+        gaps: KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS,
+        base: (list: readonly string[]) => [...list],
+      },
+    ] as const;
+
+    for (const { resource, specResource, rendered, gaps, base } of cases) {
+      const unaccounted = (spec: unknown) =>
+        [...derivedExcludedBaseFields(spec)[resource]].filter(
+          (n) => !rendered.includes(n) && !gaps.includes(n)
+        );
+
+      it(`accepts ${resource} base fields that are all rendered or known gaps`, () => {
+        const spec = specWithBase(specResource, base([...rendered, ...gaps]));
+        expect(unaccounted(spec), `${resource} base fields dropped by the deriver and not rendered`).toEqual([]);
+      });
+
+      it(`names a ${resource} base field that is neither rendered nor a known gap`, () => {
+        const spec = specWithBase(specResource, base([...rendered, ...gaps, "brand_new_field"]));
+        expect(unaccounted(spec)).toEqual(["brand_new_field"]);
+      });
+
+      it(`lists no ${resource} known gap that is also rendered`, () => {
+        const both = gaps.filter((n) => rendered.includes(n));
+        expect(both, `${resource} fields in both the rendered and known-gap lists`).toEqual([]);
+      });
+    }
   });
 });

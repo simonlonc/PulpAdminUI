@@ -141,6 +141,23 @@ describe("loadPulpPluginOverlay", () => {
       ]);
     });
 
+    it("accepts baseFieldHints and rejects a hint without a string placeholder", async () => {
+      await writeFile(
+        join(directory, "a.json"),
+        JSON.stringify({ kind: "a", baseFieldHints: { max_retries: { placeholder: "Pulp default (3)", minimum: 0 } } })
+      );
+      await writeFile(join(directory, "b.json"), JSON.stringify({ kind: "b", baseFieldHints: { max_retries: {} } }));
+      vi.stubEnv("PULP_PLUGIN_DIR", directory);
+
+      const entries = await loadPulpPluginOverlay();
+      expect(entries).toEqual([
+        { kind: "a", baseFieldHints: { max_retries: { placeholder: "Pulp default (3)", minimum: 0 } } },
+      ]);
+      expect(logged()).toEqual([
+        expect.objectContaining({ event: "plugin_overlay_entry_invalid", file: join(directory, "b.json") }),
+      ]);
+    });
+
     it("warns when a later file replaces an earlier entry for the same kind", async () => {
       await writeFile(join(directory, "a.json"), JSON.stringify({ kind: "widget" }));
       await writeFile(join(directory, "b.json"), JSON.stringify({ kind: "widget" }));

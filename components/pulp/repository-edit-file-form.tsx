@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { RemoteSelect } from "./remote-select";
+import { RetainCheckpointsSection } from "./retain-checkpoints-section";
 import type { PulpRemote, RepositoryUpdatePayload } from "@/services/pulp/types";
 
 const textareaClass =
@@ -103,6 +104,10 @@ export function RepositoryEditFileForm({
           placeholder="empty = plugin default (PULP_MANIFEST)"
         />
       </FormField>
+      <RetainCheckpointsSection
+        value={fileRepo.retain_checkpoints}
+        onChange={(v) => setFileRepo({ ...fileRepo, retain_checkpoints: v })}
+      />
       <div className="space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           After save

@@ -25,7 +25,26 @@ type RemoteBody = {
   client_cert?: string | null;
   client_key?: string | null;
   download_concurrency?: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  proxy_username?: string | null;
+  proxy_password?: string | null;
+  headers?: unknown;
 };
+
+/** The base remote tuning numbers: integers (`whole`) and floats, all nullable in Pulp. */
+const TUNING_NUMBER_FIELDS = [
+  { name: "rate_limit", whole: true },
+  { name: "max_retries", whole: true },
+  { name: "connect_timeout", whole: false },
+  { name: "sock_connect_timeout", whole: false },
+  { name: "sock_read_timeout", whole: false },
+  { name: "total_timeout", whole: false },
+] as const;
 
 function trimOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -46,6 +65,29 @@ function parseNullableConcurrency(value: unknown): number | null {
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : null;
 }
 
+/** Copies the tuning numbers the body supplies (all of them when not `onlySupplied`); blank is null. */
+function assignTuningNumbers(
+  target: Record<string, unknown>,
+  body: RemoteBody,
+  onlySupplied: boolean
+): void {
+  const source = body as Record<string, unknown>;
+  for (const field of TUNING_NUMBER_FIELDS) {
+    if (onlySupplied && source[field.name] === undefined) continue;
+    target[field.name] = field.whole
+      ? parseNullableInteger(source[field.name])
+      : parseNullableFloat(source[field.name]);
+  }
+}
+
+/** Parses `headers`: an array of objects, blank/absent is []. Returns null when it is any other shape. */
+function parseHeaders(value: unknown): Record<string, unknown>[] | null {
+  if (value === null || value === undefined || value === "") return [];
+  if (!Array.isArray(value)) return null;
+  const objects = value.every((h) => typeof h === "object" && h !== null && !Array.isArray(h));
+  return objects ? (value as Record<string, unknown>[]) : null;
+}
+
 function isRemoteApiPath(plugin: PulpPluginDescriptor, path: string): boolean {
   return path.includes(plugin.remotePath);
 }
@@ -61,6 +103,13 @@ function parseNullableInteger(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+/** Parses a "float" field, or null when blank/absent. */
+function parseNullableFloat(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Parses a "json" field: a JSON object, or null when blank/absent. Throws on invalid JSON. */
@@ -102,6 +151,14 @@ function assignExtraRemoteFields(
     if (field.type === "integer") {
       // Pulp rejects null here, so a blank value leaves the field out and its default stands.
       const parsed = parseNullableInteger(source[field.name]);
+      if (parsed !== null) {
+        target[field.name] = parsed;
+      }
+      continue;
+    }
+    if (field.type === "float") {
+      // Same as "integer": null is rejected, so a blank value leaves the field out.
+      const parsed = parseNullableFloat(source[field.name]);
       if (parsed !== null) {
         target[field.name] = parsed;
       }
@@ -207,6 +264,12 @@ export const POST = withPulpAuth(
       client_cert: trimOrNull(body.client_cert),
       download_concurrency: parseNullableConcurrency(body.download_concurrency),
     };
+    assignTuningNumbers(payload, body, false);
+    const headers = parseHeaders(body.headers);
+    if (headers === null) {
+      return Response.json({ detail: "Headers must be a JSON array of objects." }, { status: 400 });
+    }
+    payload.headers = headers;
     const extraError = assignExtraRemoteFields(payload, plugin, body, false);
     if (extraError) {
       return extraError;
@@ -214,6 +277,8 @@ export const POST = withPulpAuth(
     assignSecretIfPresent(payload, "username", body.username);
     assignSecretIfPresent(payload, "password", body.password);
     assignSecretIfPresent(payload, "client_key", body.client_key);
+    assignSecretIfPresent(payload, "proxy_username", body.proxy_username);
+    assignSecretIfPresent(payload, "proxy_password", body.proxy_password);
 
     const result = await pulpFetch<PulpRemote>(plugin.remotePath, auth, {
       method: "POST",
@@ -280,6 +345,14 @@ export const PATCH = withPulpAuth(
     if (body.download_concurrency !== undefined) {
       patchPayload.download_concurrency = parseNullableConcurrency(body.download_concurrency);
     }
+    assignTuningNumbers(patchPayload, body, true);
+    if (body.headers !== undefined) {
+      const headers = parseHeaders(body.headers);
+      if (headers === null) {
+        return Response.json({ detail: "Headers must be a JSON array of objects." }, { status: 400 });
+      }
+      patchPayload.headers = headers;
+    }
     const extraError = assignExtraRemoteFields(patchPayload, plugin, body, true);
     if (extraError) {
       return extraError;
@@ -288,6 +361,8 @@ export const PATCH = withPulpAuth(
     assignSecretIfPresent(patchPayload, "username", body.username);
     assignSecretIfPresent(patchPayload, "password", body.password);
     assignSecretIfPresent(patchPayload, "client_key", body.client_key);
+    assignSecretIfPresent(patchPayload, "proxy_username", body.proxy_username);
+    assignSecretIfPresent(patchPayload, "proxy_password", body.proxy_password);
 
     if (Object.keys(patchPayload).length === 0) {
       return Response.json({ detail: "At least one field must be provided." }, { status: 400 });

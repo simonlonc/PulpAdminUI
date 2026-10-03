@@ -1,6 +1,7 @@
 import { applyContentOrigin } from "@/lib/content-origin";
 import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn } from "@/lib/pulp-plugins";
+import { isRepositoryVersionHref } from "@/lib/pulp-resource-ref";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { expectPulpListBody, PulpApiError, readJsonBody, withPulpAuth } from "../_helpers";
 import {
@@ -52,12 +53,14 @@ type CreateBody = {
   base_path?: string;
   repository?: string | null;
   publication?: string | null;
+  repository_version?: string | null;
   content_guard?: string | null;
+  hidden?: boolean;
 };
 
 /**
  * Plain distribution create: always POSTs a new distribution for the given plugin kind,
- * bound to a repository, a publication, or neither, with an optional content guard.
+ * bound to a repository, a publication, a repository version, or neither, with an optional content guard.
  * Unlike [kind]/create/route.ts — the repositories page's "distribute this repository"
  * convenience flow, which finds a distribution already linked to the repository and
  * patches it instead of creating a duplicate — this route always creates.
@@ -79,12 +82,37 @@ export const POST = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "base_path is required." }, { status: 400 });
   }
 
+  if (body.hidden !== undefined && typeof body.hidden !== "boolean") {
+    return Response.json({ detail: "hidden must be true or false." }, { status: 400 });
+  }
+
+  if (body.repository_version) {
+    if (typeof body.repository_version !== "string" || !isRepositoryVersionHref(body.repository_version)) {
+      return Response.json(
+        { detail: "repository_version must be a repository version href." },
+        { status: 400 }
+      );
+    }
+    if (body.repository || body.publication) {
+      return Response.json(
+        { detail: "Only one of repository, publication and repository_version may be set." },
+        { status: 400 }
+      );
+    }
+  }
+
   const createPayload: Record<string, unknown> = { name, base_path: basePath };
+  if (body.hidden !== undefined) {
+    createPayload.hidden = body.hidden;
+  }
   if (body.repository) {
     createPayload.repository = toPulpHrefPath(body.repository);
   }
   if (body.publication) {
     createPayload.publication = toPulpHrefPath(body.publication);
+  }
+  if (body.repository_version) {
+    createPayload.repository_version = toPulpHrefPath(body.repository_version);
   }
   if (body.content_guard) {
     createPayload.content_guard = toPulpHrefPath(body.content_guard);

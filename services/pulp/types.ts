@@ -233,6 +233,8 @@ export type PulpDistribution = {
 /** Detail row from GET {distribution_href}. The generic list serializer omits `publication`. */
 export type PulpDistributionDetail = PulpDistribution & {
   publication: string | null;
+  repository_version?: string | null;
+  hidden?: boolean;
 };
 
 /**
@@ -309,6 +311,16 @@ export type PulpRemote = {
   client_cert: string | null;
   proxy_url: string | null;
   download_concurrency: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  /** Which write-only fields (secrets, proxy credentials) are set; their values are never returned. */
+  hidden_fields?: { name: string; is_set: boolean }[];
   /** Debian APT only: whitespace-separated list of distributions to sync. */
   distributions?: string | null;
   /** Debian APT only: whitespace-separated list of components; null syncs all available. */
@@ -354,6 +366,16 @@ export type RemoteCreatePayload = {
   client_cert: string | null;
   client_key: string | null;
   download_concurrency: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  proxy_username?: string | null;
+  proxy_password?: string | null;
   /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
   /** Debian APT only. */
@@ -399,6 +421,16 @@ export type RemoteUpdatePayload = {
   client_cert?: string | null;
   client_key?: string | null;
   download_concurrency?: number | null;
+  rate_limit?: number | null;
+  max_retries?: number | null;
+  connect_timeout?: number | null;
+  sock_connect_timeout?: number | null;
+  sock_read_timeout?: number | null;
+  total_timeout?: number | null;
+  /** Aiohttp session headers: an array of objects. Pulp rejects null. */
+  headers?: Record<string, unknown>[];
+  proxy_username?: string | null;
+  proxy_password?: string | null;
   /** Debian APT only; required by Pulp on create. */
   distributions?: string | null;
   /** Debian APT only. */
@@ -495,6 +527,7 @@ export type PulpRpmRepositoryDetail = {
   latest_version_href: string | null;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   metadata_signing_service: string | null;
@@ -512,6 +545,7 @@ export type PulpDebRepositoryDetail = {
   name: string;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   structured_repo: boolean;
@@ -526,6 +560,7 @@ export type PulpFileRepositoryDetail = {
   latest_version_href: string | null;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   autopublish: boolean;
   manifest: string | null;
@@ -541,6 +576,7 @@ export type RepositoryUpdatePayload = {
   name: string;
   description: string | null;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   /** rpm, file */
   autopublish?: boolean;
@@ -564,6 +600,7 @@ export type RepositoryCreatePayload = {
   name: string;
   description: string;
   retain_repo_versions: number | null;
+  retain_checkpoints: number | null;
   remote: string | null;
   /** rpm, file */
   autopublish?: boolean;
@@ -695,7 +732,9 @@ export type UpdatePulpDistributionPayload = {
   base_path?: string;
   repository?: string | null;
   publication?: string | null;
+  repository_version?: string | null;
   content_guard?: string | null;
+  hidden?: boolean;
 };
 
 /**

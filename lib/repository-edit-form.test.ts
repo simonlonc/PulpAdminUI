@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { debDetailToForm, fileDetailToForm, rpmDetailToForm } from "@/lib/repository-edit-form";
+import {
+  debDetailToForm,
+  fileDetailToForm,
+  retainCheckpointsProblem,
+  rpmDetailToForm,
+} from "@/lib/repository-edit-form";
 import type {
   PulpDebRepositoryDetail,
   PulpFileRepositoryDetail,
@@ -17,6 +22,7 @@ const fullRpmDetail: PulpRpmRepositoryDetail = {
     "/pulp/api/v3/repositories/rpm/rpm/11111111-1111-1111-1111-111111111111/versions/3/",
   description: "A full rpm repository",
   retain_repo_versions: 5,
+  retain_checkpoints: 2,
   remote: "/pulp/api/v3/remotes/rpm/rpm/22222222-2222-2222-2222-222222222222/",
   autopublish: true,
   metadata_signing_service: "/pulp/api/v3/signing-services/33333333-3333-3333-3333-333333333333/",
@@ -37,6 +43,7 @@ const minimalRpmDetail: PulpRpmRepositoryDetail = {
   latest_version_href: null,
   description: null,
   retain_repo_versions: null,
+  retain_checkpoints: null,
   remote: null,
   autopublish: false,
   metadata_signing_service: null,
@@ -54,6 +61,7 @@ const fullDebDetail: PulpDebRepositoryDetail = {
   name: "full-deb",
   description: "A full deb repository",
   retain_repo_versions: 3,
+  retain_checkpoints: 2,
   remote: "/pulp/api/v3/remotes/deb/apt/66666666-6666-6666-6666-666666666666/",
   autopublish: true,
   structured_repo: true,
@@ -65,6 +73,7 @@ const minimalDebDetail: PulpDebRepositoryDetail = {
   name: "minimal-deb",
   description: null,
   retain_repo_versions: null,
+  retain_checkpoints: null,
   remote: null,
   autopublish: false,
   structured_repo: false,
@@ -80,6 +89,7 @@ const fullFileDetail: PulpFileRepositoryDetail = {
     "/pulp/api/v3/repositories/file/file/88888888-8888-8888-8888-888888888888/versions/1/",
   description: "A full file repository",
   retain_repo_versions: 10,
+  retain_checkpoints: 2,
   remote: "/pulp/api/v3/remotes/file/file/99999999-9999-9999-9999-999999999999/",
   autopublish: true,
   manifest: "PULP_MANIFEST",
@@ -94,6 +104,7 @@ const minimalFileDetail: PulpFileRepositoryDetail = {
   latest_version_href: null,
   description: null,
   retain_repo_versions: null,
+  retain_checkpoints: null,
   remote: null,
   autopublish: false,
   manifest: null,
@@ -105,6 +116,7 @@ describe("rpmDetailToForm", () => {
       name: "full-rpm",
       description: "A full rpm repository",
       retain_repo_versions: 5,
+      retain_checkpoints: 2,
       remote: "/pulp/api/v3/remotes/rpm/rpm/22222222-2222-2222-2222-222222222222/",
       autopublish: true,
       metadata_signing_service: "/pulp/api/v3/signing-services/33333333-3333-3333-3333-333333333333/",
@@ -122,6 +134,7 @@ describe("rpmDetailToForm", () => {
       name: "minimal-rpm",
       description: null,
       retain_repo_versions: null,
+      retain_checkpoints: null,
       remote: null,
       autopublish: false,
       metadata_signing_service: null,
@@ -154,6 +167,7 @@ describe("debDetailToForm", () => {
       name: "full-deb",
       description: "A full deb repository",
       retain_repo_versions: 3,
+      retain_checkpoints: 2,
       remote: "/pulp/api/v3/remotes/deb/apt/66666666-6666-6666-6666-666666666666/",
       autopublish: true,
       structured_repo: true,
@@ -165,6 +179,7 @@ describe("debDetailToForm", () => {
       name: "minimal-deb",
       description: null,
       retain_repo_versions: null,
+      retain_checkpoints: null,
       remote: null,
       autopublish: false,
       structured_repo: false,
@@ -191,6 +206,7 @@ describe("fileDetailToForm", () => {
       name: "full-file",
       description: "A full file repository",
       retain_repo_versions: 10,
+      retain_checkpoints: 2,
       remote: "/pulp/api/v3/remotes/file/file/99999999-9999-9999-9999-999999999999/",
       autopublish: true,
       manifest: "PULP_MANIFEST",
@@ -202,6 +218,7 @@ describe("fileDetailToForm", () => {
       name: "minimal-file",
       description: null,
       retain_repo_versions: null,
+      retain_checkpoints: null,
       remote: null,
       autopublish: false,
       manifest: null,
@@ -219,5 +236,26 @@ describe("fileDetailToForm", () => {
     const form = fileDetailToForm(detail);
     expect(form.remote).toBeNull();
     expect(form.description).toBe("");
+  });
+});
+
+describe("retain_checkpoints", () => {
+  it("carries a stored value and null through every detail-to-form mapper", () => {
+    expect(rpmDetailToForm(fullRpmDetail).retain_checkpoints).toBe(2);
+    expect(debDetailToForm(fullDebDetail).retain_checkpoints).toBe(2);
+    expect(fileDetailToForm(fullFileDetail).retain_checkpoints).toBe(2);
+    expect(rpmDetailToForm(minimalRpmDetail).retain_checkpoints).toBeNull();
+    expect(debDetailToForm(minimalDebDetail).retain_checkpoints).toBeNull();
+    expect(fileDetailToForm(minimalFileDetail).retain_checkpoints).toBeNull();
+  });
+
+  it("accepts blank and whole numbers of at least 1", () => {
+    for (const ok of [null, undefined, 1, 2, 1000]) expect(retainCheckpointsProblem(ok)).toBeNull();
+  });
+
+  it("rejects 0, negatives, fractions, NaN and non-numbers with a message", () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "2", true, {}]) {
+      expect(retainCheckpointsProblem(bad)).toBe("Retain checkpoints must be a whole number of at least 1.");
+    }
   });
 });

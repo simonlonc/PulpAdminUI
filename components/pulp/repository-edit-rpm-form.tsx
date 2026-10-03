@@ -8,6 +8,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { ChecksumSelect } from "./checksum-select";
 import { RemoteSelect } from "./remote-select";
+import { RetainCheckpointsSection } from "./retain-checkpoints-section";
 import type { PulpRemote, RepositoryUpdatePayload } from "@/services/pulp/types";
 
 const textareaClass =
@@ -184,6 +185,10 @@ export function RepositoryEditRpmForm({
         />
         SQLite metadata
       </label>
+      <RetainCheckpointsSection
+        value={rpm.retain_checkpoints}
+        onChange={(v) => setRpm({ ...rpm, retain_checkpoints: v })}
+      />
       <div className="space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           After save

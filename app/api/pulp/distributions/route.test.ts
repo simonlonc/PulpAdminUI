@@ -147,3 +147,127 @@ describe("POST /api/pulp/distributions null body (F-18)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/pulp/distributions hidden", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/docs/api.json")
+        ? new Response("", { status: 500 })
+        : new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function create(extra: Record<string, unknown>) {
+    return POST(
+      new Request("http://pulp.test/api/pulp/distributions", {
+        method: "POST",
+        body: JSON.stringify({ kind: "file", name: "d", base_path: "d", ...extra }),
+      })
+    );
+  }
+
+  function sentBody(): Record<string, unknown> {
+    const call = fetchMock.mock.calls.findLast(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    if (!call) throw new Error("no POST reached Pulp");
+    return JSON.parse(String((call[1] as RequestInit).body));
+  }
+
+  it("sends hidden when given, true or false", async () => {
+    await create({ hidden: true });
+    expect(sentBody().hidden).toBe(true);
+    await create({ hidden: false });
+    expect(sentBody().hidden).toBe(false);
+  });
+
+  it("leaves hidden out when absent, so Pulp applies its own default", async () => {
+    await create({});
+    expect("hidden" in sentBody()).toBe(false);
+  });
+
+  it("rejects a non-boolean hidden with a 400", async () => {
+    const response = await create({ hidden: "true" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ detail: "hidden must be true or false." });
+  });
+});
+
+describe("POST /api/pulp/distributions repository_version", () => {
+  const VERSION = "/pulp/api/v3/repositories/file/file/r1/versions/1/";
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/docs/api.json")
+        ? new Response("", { status: 500 })
+        : new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function create(extra: Record<string, unknown>) {
+    return POST(
+      new Request("http://pulp.test/api/pulp/distributions", {
+        method: "POST",
+        body: JSON.stringify({ kind: "file", name: "d", base_path: "d", ...extra }),
+      })
+    );
+  }
+
+  function postCalls() {
+    return fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+  }
+
+  it("sends a repository version href alone", async () => {
+    const response = await create({ repository_version: VERSION, repository: null, publication: null });
+    expect(response.status).toBe(200);
+    const body = JSON.parse(String((postCalls()[0][1] as RequestInit).body));
+    expect(body.repository_version).toBe(VERSION);
+    expect("repository" in body).toBe(false);
+    expect("publication" in body).toBe(false);
+  });
+
+  it("rejects a repository version combined with a repository or a publication", async () => {
+    for (const other of [{ repository: "/pulp/api/v3/repositories/file/file/r1/" }, { publication: "/p/" }]) {
+      const response = await create({ repository_version: VERSION, ...other });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        detail: "Only one of repository, publication and repository_version may be set.",
+      });
+    }
+    expect(postCalls()).toHaveLength(0);
+  });
+
+  it("rejects an href that is not a repository version", async () => {
+    for (const bad of [
+      "/pulp/api/v3/repositories/file/file/r1/",
+      "/pulp/api/v3/publications/file/file/p1/",
+      "/pulp/api/v3/repositories/file/file/r1/versions/",
+      "not-an-href",
+      5,
+    ]) {
+      const response = await create({ repository_version: bad });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ detail: "repository_version must be a repository version href." });
+    }
+    expect(postCalls()).toHaveLength(0);
+  });
+});

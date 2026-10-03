@@ -5,6 +5,19 @@ import type {
   RepositoryUpdatePayload,
 } from "@/services/pulp/types";
 
+/** retain_checkpoints is a whole number of at least 1 (the spec's `minimum`), or null to keep every checkpoint. */
+export const RETAIN_CHECKPOINTS_MINIMUM = 1;
+
+export const RETAIN_CHECKPOINTS_PROBLEM = `Retain checkpoints must be a whole number of at least ${RETAIN_CHECKPOINTS_MINIMUM}.`;
+
+/** A message when `value` is neither blank (null/undefined) nor a whole number at or above the minimum, or null. */
+export function retainCheckpointsProblem(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= RETAIN_CHECKPOINTS_MINIMUM
+    ? null
+    : RETAIN_CHECKPOINTS_PROBLEM;
+}
+
 export const checksumAlgorithms = ["sha256", "sha1", "md5", "sha224", "sha384", "sha512"] as const;
 
 export function rpmDetailToForm(d: PulpRpmRepositoryDetail): RepositoryUpdatePayload {
@@ -12,6 +25,7 @@ export function rpmDetailToForm(d: PulpRpmRepositoryDetail): RepositoryUpdatePay
     name: d.name,
     description: d.description,
     retain_repo_versions: d.retain_repo_versions,
+    retain_checkpoints: d.retain_checkpoints,
     remote: d.remote,
     autopublish: d.autopublish,
     metadata_signing_service: d.metadata_signing_service,
@@ -29,6 +43,7 @@ export function debDetailToForm(d: PulpDebRepositoryDetail): RepositoryUpdatePay
     name: d.name,
     description: d.description,
     retain_repo_versions: d.retain_repo_versions,
+    retain_checkpoints: d.retain_checkpoints,
     remote: d.remote,
     autopublish: d.autopublish,
     structured_repo: d.structured_repo,
@@ -40,6 +55,7 @@ export function fileDetailToForm(d: PulpFileRepositoryDetail): RepositoryUpdateP
     name: d.name,
     description: d.description,
     retain_repo_versions: d.retain_repo_versions,
+    retain_checkpoints: d.retain_checkpoints,
     remote: d.remote,
     autopublish: d.autopublish,
     manifest: d.manifest,

@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { usePulpRepositoryOptions } from "./use-pulp-repository-options";
 import { usePulpPublicationOptions } from "./use-pulp-publication-options";
 import { usePulpPluginsContext } from "./plugins-context";
+import { DistributionVersionFields, repositoryHrefOfVersion } from "./distribution-version-fields";
 import { pulpContentGuardService } from "@/services/pulp/content-guard-service";
 import { pulpDistributionService } from "@/services/pulp/distribution-service";
+import { getBaseFieldHint, supportsRepositoryVersionBinding } from "@/lib/pulp-plugins";
 import { PulpContentGuard, PulpDistribution } from "@/services/pulp/types";
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
-type Binding = "none" | "repository" | "publication";
+type Binding = "none" | "repository" | "publication" | "repository_version";
 
 export type DistributionEditModalProps = {
   distribution: PulpDistribution;
@@ -29,7 +32,7 @@ export function DistributionEditModal({
 }: DistributionEditModalProps) {
   const { repositoryOptions } = usePulpRepositoryOptions(true);
   const { publicationOptions } = usePulpPublicationOptions(true);
-  const { getPlugin } = usePulpPluginsContext();
+  const { plugins, getPlugin } = usePulpPluginsContext();
   const [contentGuards, setContentGuards] = useState<PulpContentGuard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -41,7 +44,13 @@ export function DistributionEditModal({
   const [binding, setBinding] = useState<Binding>("none");
   const [repository, setRepository] = useState("");
   const [publication, setPublication] = useState("");
+  const [versionRepository, setVersionRepository] = useState("");
+  const [repositoryVersion, setRepositoryVersion] = useState("");
   const [contentGuard, setContentGuard] = useState("");
+  const distributionPlugin = plugins.find((p) => distribution.pulp_href.includes(p.distributionPath));
+  const hiddenDefault =
+    (distributionPlugin ? getBaseFieldHint(distributionPlugin, "hidden").default : undefined) === true;
+  const [hidden, setHidden] = useState(hiddenDefault);
 
   useEffect(() => {
     let active = true;
@@ -55,7 +64,11 @@ export function DistributionEditModal({
         ]);
         if (!active) return;
 
-        if (detail.repository) {
+        if (detail.repository_version) {
+          setBinding("repository_version");
+          setVersionRepository(repositoryHrefOfVersion(detail.repository_version));
+          setRepositoryVersion(detail.repository_version);
+        } else if (detail.repository) {
           setBinding("repository");
           setRepository(detail.repository);
         } else if (detail.publication) {
@@ -65,6 +78,7 @@ export function DistributionEditModal({
           setBinding("none");
         }
         setContentGuard(detail.content_guard ?? "");
+        setHidden(detail.hidden ?? hiddenDefault);
         setContentGuards(guards.results);
       } catch (error) {
         if (active) {
@@ -83,6 +97,7 @@ export function DistributionEditModal({
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distribution.pulp_href]);
 
   useEffect(() => {
@@ -128,6 +143,10 @@ export function DistributionEditModal({
       setModalError("Select a publication.");
       return;
     }
+    if (binding === "repository_version" && !repositoryVersion) {
+      setModalError("Select a repository version.");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -136,7 +155,9 @@ export function DistributionEditModal({
         base_path: trimmedBasePath,
         repository: binding === "repository" ? repository : null,
         publication: binding === "publication" ? publication : null,
+        repository_version: binding === "repository_version" ? repositoryVersion : null,
         content_guard: contentGuard || null,
+        hidden,
       });
       if (!result.ok) {
         setModalError(result.detail);
@@ -205,6 +226,9 @@ export function DistributionEditModal({
                 <option value="none">None</option>
                 <option value="repository">Repository</option>
                 <option value="publication">Publication</option>
+              {binding === "repository_version" || supportsRepositoryVersionBinding(distributionPlugin) ? (
+                <option value="repository_version">Repository version</option>
+              ) : null}
               </select>
             </FormField>
             {binding === "repository" ? (
@@ -241,6 +265,19 @@ export function DistributionEditModal({
                 </select>
               </FormField>
             ) : null}
+            {binding === "repository_version" ? (
+              <DistributionVersionFields
+                repositoryOptions={repositoryOptions}
+                repository={versionRepository}
+                version={repositoryVersion}
+                disabled={isSaving}
+                onRepositoryChange={(href) => {
+                  setVersionRepository(href);
+                  setRepositoryVersion("");
+                }}
+                onVersionChange={setRepositoryVersion}
+              />
+            ) : null}
             <FormField label="Content guard">
               <select
                 value={contentGuard}
@@ -256,6 +293,17 @@ export function DistributionEditModal({
                 ))}
               </select>
             </FormField>
+            <AdvancedSection setCount={hidden !== hiddenDefault ? 1 : 0}>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={hidden}
+                  disabled={isSaving}
+                  onChange={(event) => setHidden(event.target.checked)}
+                />
+                Hidden from the content app
+              </label>
+            </AdvancedSection>
           </div>
         )}
 

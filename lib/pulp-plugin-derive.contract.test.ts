@@ -1,6 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { derivePulpPlugins } from "@/lib/pulp-plugin-derive";
+import {
+  KNOWN_UNRENDERED_REMOTE_BASE_FIELDS,
+  KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS,
+  RENDERED_REMOTE_BASE_FIELDS,
+  RENDERED_REPOSITORY_BASE_FIELDS,
+  derivedExcludedBaseFields,
+  derivePulpPlugins,
+  pulpDefaultHint,
+} from "@/lib/pulp-plugin-derive";
 
 /**
  * Contract test: pins the assumption the whole derived-registry feature depends on -- that a
@@ -55,4 +63,68 @@ describeContract("derivePulpPlugins against a live /docs/api.json", () => {
     expect(Array.isArray(rpm?.contentEndpoints)).toBe(true);
     expect(rpm?.contentEndpoints.length).toBeGreaterThan(0);
   }, 15000);
+
+  describe("base field coverage", () => {
+    const cases = [
+      {
+        resource: "remote",
+        rendered: RENDERED_REMOTE_BASE_FIELDS,
+        gaps: KNOWN_UNRENDERED_REMOTE_BASE_FIELDS,
+      },
+      {
+        resource: "repository",
+        rendered: RENDERED_REPOSITORY_BASE_FIELDS,
+        gaps: KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS,
+      },
+    ] as const;
+
+    for (const { resource, rendered, gaps } of cases) {
+      it(`excludes no ${resource} field that is neither rendered nor a known gap`, () => {
+        const excluded = derivedExcludedBaseFields(spec)[resource];
+        const unaccounted = [...excluded].filter((n) => !rendered.includes(n) && !gaps.includes(n));
+        expect(unaccounted, `${resource} base fields dropped by the deriver and not rendered`).toEqual([]);
+      });
+
+      it(`lists no ${resource} known gap that is also rendered`, () => {
+        const both = gaps.filter((n) => rendered.includes(n));
+        expect(both, `${resource} fields in both the rendered and known-gap lists`).toEqual([]);
+      });
+
+      it(`lists only ${resource} fields that are really excluded`, () => {
+        const excluded = derivedExcludedBaseFields(spec)[resource];
+        const stale = [...rendered, ...gaps].filter((n) => !excluded.has(n));
+        expect(stale, `${resource} listed fields the deriver no longer excludes`).toEqual([]);
+      });
+    }
+  });
+
+  describe("base field hints", () => {
+    function remoteProperty(name: string): unknown {
+      const root = spec as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+      return root.components.schemas["file.FileRemote"].properties[name];
+    }
+
+    it("derives 'Pulp default (3)' for max_retries and a bare hint for the others without a stated number", () => {
+      expect(pulpDefaultHint(remoteProperty("max_retries")).placeholder).toBe("Pulp default (3)");
+      expect(pulpDefaultHint(remoteProperty("download_concurrency"))).toEqual({
+        placeholder: "Pulp default",
+        minimum: 1,
+      });
+      expect(pulpDefaultHint(remoteProperty("total_timeout"))).toEqual({
+        placeholder: "Pulp default",
+        minimum: 0,
+      });
+    });
+
+    it("attaches hints for every base tuning field to every derived family", () => {
+      for (const plugin of derivePulpPlugins(spec)) {
+        const hints = plugin.baseFieldHints ?? {};
+        for (const name of ["download_concurrency", "max_retries", "retain_checkpoints", "hidden"]) {
+          expect(hints[name], `${plugin.kind} ${name}`).toBeDefined();
+        }
+        expect(hints.hidden.default).toBe(false);
+        expect(hints.max_retries.placeholder).toBe("Pulp default (3)");
+      }
+    });
+  });
 });

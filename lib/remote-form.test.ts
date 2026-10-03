@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  advancedInputProblem,
+  advancedSetCount,
+  headersProblem,
   emptyExtraFields,
   emptyRemoteForm,
   extraFieldsFromRemote,
@@ -9,7 +12,12 @@ import {
   formToUpdatePayload,
   invalidJsonExtraField,
   missingRequiredExtraField,
+  extraFieldsPayload,
+  numericInputProblem,
   parseConcurrency,
+  parseFloatInput,
+  parseIntegerInput,
+  parseNullableFloat,
   parseNullableInteger,
   trimOrNull,
   type RemoteFormState,
@@ -151,6 +159,15 @@ describe("emptyRemoteForm", () => {
       client_cert: "",
       client_key: "",
       download_concurrency: "",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {},
     });
   });
@@ -205,6 +222,15 @@ describe("formFromRemote", () => {
       client_cert: "CLIENT-CERT-TEXT",
       client_key: "",
       download_concurrency: "5",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {
         sync_sources: true,
         package_types: ["sdist", "bdist_wheel"],
@@ -229,6 +255,15 @@ describe("formFromRemote", () => {
       client_cert: "",
       client_key: "",
       download_concurrency: "",
+      rate_limit: "",
+      max_retries: "",
+      connect_timeout: "",
+      sock_connect_timeout: "",
+      sock_read_timeout: "",
+      total_timeout: "",
+      proxy_username: "",
+      proxy_password: "",
+      headers: "",
       extra: {
         sync_sources: false,
         package_types: [],
@@ -280,8 +315,8 @@ describe("parseConcurrency", () => {
     expect(parseConcurrency("-5")).toBeNull();
   });
 
-  it("truncates a valid fractional value", () => {
-    expect(parseConcurrency("10.7")).toBe(10);
+  it("rejects a fractional value rather than truncating it", () => {
+    expect(parseConcurrency("10.7")).toBeNull();
   });
 
   it("parses a valid integer", () => {
@@ -315,13 +350,155 @@ describe("parseNullableInteger", () => {
     expect(parseNullableInteger("-3")).toBe(-3);
   });
 
-  it("truncates a valid fractional value", () => {
-    expect(parseNullableInteger("7.9")).toBe(7);
+  it("rejects a fractional value rather than truncating it", () => {
+    expect(parseNullableInteger("7.9")).toBeNull();
+  });
+
+  it("enforces a minimum when given", () => {
+    expect(parseNullableInteger("-3", -3)).toBe(-3);
+    expect(parseNullableInteger("-4", -3)).toBeNull();
   });
 
   it("returns null for a huge digit string instead of overflowing to a non-safe-integer (F-9)", () => {
     // Repro: "9".repeat(56) previously produced 1e+56 via Number.trunc, silently overflowing.
     expect(parseNullableInteger("9".repeat(56))).toBeNull();
+  });
+});
+
+describe("parseIntegerInput", () => {
+  it("treats blank as ok with no value, never zero", () => {
+    expect(parseIntegerInput("")).toEqual({ ok: true, value: null });
+    expect(parseIntegerInput("  ")).toEqual({ ok: true, value: null });
+  });
+
+  it("accepts a safe integer and the safe-integer boundary", () => {
+    expect(parseIntegerInput("42")).toEqual({ ok: true, value: 42 });
+    expect(parseIntegerInput(String(Number.MAX_SAFE_INTEGER))).toEqual({
+      ok: true,
+      value: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it("rejects one past the safe-integer boundary, 1e+56, exponent and hex forms", () => {
+    expect(parseIntegerInput("9007199254740992")).toEqual({ ok: false });
+    expect(parseIntegerInput("9".repeat(56))).toEqual({ ok: false });
+    expect(parseIntegerInput("1e+56")).toEqual({ ok: false });
+    expect(parseIntegerInput("0x10")).toEqual({ ok: false });
+    expect(parseIntegerInput("Infinity")).toEqual({ ok: false });
+  });
+
+  it("rejects 1.5 and non-numeric text", () => {
+    expect(parseIntegerInput("1.5")).toEqual({ ok: false });
+    expect(parseIntegerInput("abc")).toEqual({ ok: false });
+  });
+
+  it("enforces the minimum: 1 rejects 0, 0 accepts 0 and rejects -1", () => {
+    expect(parseIntegerInput("0", 1)).toEqual({ ok: false });
+    expect(parseIntegerInput("1", 1)).toEqual({ ok: true, value: 1 });
+    expect(parseIntegerInput("0", 0)).toEqual({ ok: true, value: 0 });
+    expect(parseIntegerInput("-1", 0)).toEqual({ ok: false });
+  });
+});
+
+describe("parseFloatInput", () => {
+  it("treats blank as ok with no value, never zero", () => {
+    expect(parseFloatInput("")).toEqual({ ok: true, value: null });
+  });
+
+  it("accepts 1.5 without truncating, and forms like .5, 2. and 1e3", () => {
+    expect(parseFloatInput("1.5")).toEqual({ ok: true, value: 1.5 });
+    expect(parseFloatInput(".5")).toEqual({ ok: true, value: 0.5 });
+    expect(parseFloatInput("2.")).toEqual({ ok: true, value: 2 });
+    expect(parseFloatInput("1e3")).toEqual({ ok: true, value: 1000 });
+  });
+
+  it("rejects non-finite results and non-numeric text", () => {
+    expect(parseFloatInput("1e999")).toEqual({ ok: false });
+    expect(parseFloatInput("Infinity")).toEqual({ ok: false });
+    expect(parseFloatInput("NaN")).toEqual({ ok: false });
+    expect(parseFloatInput("1.5s")).toEqual({ ok: false });
+    expect(parseFloatInput("0x10")).toEqual({ ok: false });
+  });
+
+  it("enforces a minimum of 0: accepts 0 and 0.5, rejects a negative", () => {
+    expect(parseFloatInput("0", 0)).toEqual({ ok: true, value: 0 });
+    expect(parseFloatInput("0.5", 0)).toEqual({ ok: true, value: 0.5 });
+    expect(parseFloatInput("-0.5", 0)).toEqual({ ok: false });
+  });
+
+  it("accepts a negative when there is no minimum", () => {
+    expect(parseFloatInput("-2.5")).toEqual({ ok: true, value: -2.5 });
+  });
+});
+
+describe("parseNullableFloat", () => {
+  it("returns the number, or null for blank or invalid", () => {
+    expect(parseNullableFloat("1.5")).toBe(1.5);
+    expect(parseNullableFloat("")).toBeNull();
+    expect(parseNullableFloat("abc")).toBeNull();
+    expect(parseNullableFloat("-1", 0)).toBeNull();
+  });
+});
+
+describe("numericInputProblem", () => {
+  const numericPlugin: PulpPluginDescriptor = {
+    ...baseDescriptor,
+    extraRemoteFields: [
+      { name: "total_timeout", type: "float", label: "Total Timeout", minimum: 0 },
+      { name: "max_retries", type: "integer", label: "Max Retries" },
+    ],
+  };
+  const numericForm = (over: Partial<RemoteFormState> = {}, extra = {}): RemoteFormState => ({
+    ...baseForm(numericPlugin),
+    ...over,
+    extra: { total_timeout: "", max_retries: "", ...extra },
+  });
+
+  it("is null when everything is blank or valid", () => {
+    expect(numericInputProblem(numericForm(), numericPlugin)).toBeNull();
+    expect(
+      numericInputProblem(
+        numericForm({ download_concurrency: "4" }, { total_timeout: "0.5", max_retries: "0" }),
+        numericPlugin
+      )
+    ).toBeNull();
+  });
+
+  it("names a bad download concurrency instead of dropping it", () => {
+    expect(numericInputProblem(numericForm({ download_concurrency: "abc" }), numericPlugin)).toBe(
+      "Download concurrency must be a whole number of at least 1."
+    );
+    expect(numericInputProblem(numericForm({ download_concurrency: "0" }), numericPlugin)).toMatch(
+      /at least 1/
+    );
+    expect(
+      numericInputProblem(numericForm({ download_concurrency: "9".repeat(56) }), numericPlugin)
+    ).toMatch(/Download concurrency/);
+  });
+
+  it("names a bad extra field with its minimum", () => {
+    expect(numericInputProblem(numericForm({}, { total_timeout: "-1" }), numericPlugin)).toBe(
+      "Total Timeout must be a number of at least 0."
+    );
+    expect(numericInputProblem(numericForm({}, { max_retries: "1.5" }), numericPlugin)).toBe(
+      "Max Retries must be a whole number."
+    );
+  });
+});
+
+describe("extraFieldsPayload float and minimum", () => {
+  const floatPlugin: PulpPluginDescriptor = {
+    ...baseDescriptor,
+    extraRemoteFields: [{ name: "total_timeout", type: "float", label: "Total", minimum: 0 }],
+  };
+
+  it("sends a float untruncated, and omits a blank one", () => {
+    const form = (text: string): RemoteFormState => ({
+      ...baseForm(floatPlugin),
+      extra: { total_timeout: text },
+    });
+    expect(extraFieldsPayload(form("1.5"), floatPlugin)).toEqual({ total_timeout: 1.5 });
+    expect(extraFieldsPayload(form(""), floatPlugin)).toEqual({});
   });
 });
 
@@ -479,5 +656,149 @@ describe("formToUpdatePayload", () => {
 
     const payload = formToUpdatePayload(form, booleanFieldPlugin);
     expect(payload.sync_sources).toBe(true);
+  });
+});
+
+describe("remote tuning fields", () => {
+  const hinted: PulpPluginDescriptor = {
+    ...noExtraFieldsPlugin,
+    baseFieldHints: {
+      connect_timeout: { placeholder: "Pulp default", minimum: 0 },
+      total_timeout: { placeholder: "Pulp default", minimum: 0 },
+    },
+  };
+  const filled = (over: Partial<RemoteFormState> = {}): RemoteFormState => ({
+    ...baseForm(hinted),
+    name: "r",
+    url: "https://example.com/",
+    ...over,
+  });
+
+  it("create: blank tuning fields are null, headers an empty array", () => {
+    const payload = formToCreatePayload(filled(), hinted);
+    expect(payload).toMatchObject({
+      rate_limit: null,
+      max_retries: null,
+      connect_timeout: null,
+      sock_connect_timeout: null,
+      sock_read_timeout: null,
+      total_timeout: null,
+      proxy_username: null,
+      proxy_password: null,
+      headers: [],
+    });
+  });
+
+  it("create: sends integers as integers, floats as floats, secrets and headers as typed", () => {
+    const payload = formToCreatePayload(
+      filled({
+        rate_limit: "7",
+        max_retries: "0",
+        connect_timeout: "1.5",
+        sock_connect_timeout: "0",
+        sock_read_timeout: "2.25",
+        total_timeout: "30",
+        proxy_username: " pu ",
+        proxy_password: "pp",
+        headers: '[{"X-A": "b"}]',
+      }),
+      hinted
+    );
+    expect(payload).toMatchObject({
+      rate_limit: 7,
+      max_retries: 0,
+      connect_timeout: 1.5,
+      sock_connect_timeout: 0,
+      sock_read_timeout: 2.25,
+      total_timeout: 30,
+      proxy_username: "pu",
+      proxy_password: "pp",
+      headers: [{ "X-A": "b" }],
+    });
+  });
+
+  it("edit: blank numbers clear (null) and blank headers clear ([]), blank secrets are omitted", () => {
+    const payload = formToUpdatePayload(filled(), hinted);
+    expect(payload.rate_limit).toBeNull();
+    expect(payload.total_timeout).toBeNull();
+    expect(payload.headers).toEqual([]);
+    expect("proxy_username" in payload).toBe(false);
+    expect("proxy_password" in payload).toBe(false);
+    expect("client_key" in payload).toBe(false);
+  });
+
+  it("edit: proxy secrets and the key are sent only when typed", () => {
+    const payload = formToUpdatePayload(
+      filled({ proxy_username: "pu", proxy_password: "  ", client_key: "K" }),
+      hinted
+    );
+    expect(payload.proxy_username).toBe("pu");
+    expect("proxy_password" in payload).toBe(false);
+    expect(payload.client_key).toBe("K");
+  });
+
+  it("edit: a blank ca_cert or client_cert is sent as null, which clears the stored one", () => {
+    const payload = formToUpdatePayload(filled({ ca_cert: "", client_cert: "C" }), hinted);
+    expect(payload.ca_cert).toBeNull();
+    expect(payload.client_cert).toBe("C");
+  });
+
+  it("formFromRemote reads the stored numbers and headers, never the proxy secrets", () => {
+    const form = formFromRemote(
+      {
+        ...minimalRemote,
+        rate_limit: 5,
+        max_retries: 0,
+        total_timeout: 1.5,
+        headers: [{ "X-A": "b" }],
+      },
+      hinted
+    );
+    expect(form.rate_limit).toBe("5");
+    expect(form.max_retries).toBe("0");
+    expect(form.total_timeout).toBe("1.5");
+    expect(form.connect_timeout).toBe("");
+    expect(JSON.parse(form.headers)).toEqual([{ "X-A": "b" }]);
+    expect(form.proxy_username).toBe("");
+    expect(form.proxy_password).toBe("");
+  });
+
+  it("names a bad tuning number with the spec minimum from the hint", () => {
+    expect(numericInputProblem(filled({ connect_timeout: "-1" }), hinted)).toBe(
+      "Connect timeout must be a number of at least 0."
+    );
+    expect(numericInputProblem(filled({ rate_limit: "1.5" }), hinted)).toBe(
+      "Rate limit must be a whole number."
+    );
+    expect(numericInputProblem(filled({ max_retries: "abc" }), hinted)).toBe(
+      "Max retries must be a whole number."
+    );
+    expect(numericInputProblem(filled({ total_timeout: "0.5", max_retries: "0" }), hinted)).toBeNull();
+  });
+
+  it("headers must be an array of objects", () => {
+    expect(headersProblem(filled())).toBeNull();
+    expect(headersProblem(filled({ headers: '[{"a": "b"}]' }))).toBeNull();
+    for (const bad of ["{not json", '{"a": "b"}', "[1]", "[[]]", "[null]"]) {
+      expect(headersProblem(filled({ headers: bad }))).toBe(
+        "Headers must be a JSON array of objects."
+      );
+    }
+    expect(advancedInputProblem(filled({ headers: "x" }), hinted)).toMatch(/Headers/);
+    expect(advancedInputProblem(filled({ rate_limit: "x" }), hinted)).toMatch(/Rate limit/);
+    expect(advancedInputProblem(filled(), hinted)).toBeNull();
+  });
+
+  it("counts filled fields and stored secrets for the section summary", () => {
+    expect(advancedSetCount(filled(), null)).toBe(0);
+    expect(advancedSetCount(filled({ rate_limit: "5", headers: "[]", client_key: "K" }), null)).toBe(3);
+    const remote: PulpRemote = {
+      ...minimalRemote,
+      hidden_fields: [
+        { name: "proxy_username", is_set: true },
+        { name: "proxy_password", is_set: false },
+      ],
+    };
+    expect(advancedSetCount(formFromRemote(remote, hinted), remote)).toBe(1);
   });
 });

@@ -22,16 +22,18 @@ export type PulpRemoteField = {
   name: string;
   /**
    * "string_list": string[], entered one value per line (or a multi-select when `options`
-   * is set). "integer": number | null. "json": a JSON object typed as text, used only by
+   * is set). "integer": a safe integer | null. "float": a finite number | null. "json": a JSON object typed as text, used only by
    * gem's `includes`/`excludes`.
    */
-  type: "string" | "boolean" | "string_list" | "integer" | "json";
+  type: "string" | "boolean" | "string_list" | "integer" | "float" | "json";
   /** Rejected before the request when blank. Pulp requires it on create. */
   required?: boolean;
   label: string;
   placeholder?: string;
   /** "string_list" only: render a multi-select of these values instead of a textarea. */
   options?: readonly string[];
+  /** "integer" and "float" only: the spec's `minimum`; a smaller value is rejected before the request. */
+  minimum?: number;
 };
 
 /**
@@ -83,6 +85,42 @@ export type PulpContentEndpoint = {
   fieldsQueryUnsupported?: true;
 };
 
+/**
+ * What the spec says about a base field no plugin form derives (see BASE_HINT_FIELDS in
+ * lib/pulp-plugin-derive.ts): the placeholder for its blank input, its `minimum`, and its `default`
+ * when the schema has one. A schema with no `default` never gets one here: Pulp states those in
+ * English inside `description`, and only the number a description states can reach `placeholder`.
+ */
+export type PulpBaseFieldHint = {
+  /** "Pulp default (3)" when the description states the number, otherwise "Pulp default". */
+  placeholder: string;
+  minimum?: number;
+  /** The spec's own `default`, the real initial state of the control. Absent when the schema has none. */
+  default?: unknown;
+};
+
+/** What a form shows for a base field when the spec supplied no hint: no number, no minimum. */
+export const FALLBACK_BASE_FIELD_HINT: PulpBaseFieldHint = { placeholder: "Pulp default" };
+
+/**
+ * The hint for a base field of a plugin's remote, repository or distribution form, by Pulp field
+ * name (download_concurrency, max_retries, retain_checkpoints, hidden, ...). Falls back to
+ * FALLBACK_BASE_FIELD_HINT for a descriptor with no derived hints (the static PULP_PLUGINS seed,
+ * or a spec that lacks the field).
+ */
+export function getBaseFieldHint(plugin: PulpPluginDescriptor, field: string): PulpBaseFieldHint {
+  return plugin.baseFieldHints?.[field] ?? FALLBACK_BASE_FIELD_HINT;
+}
+
+/**
+ * Whether the plugin's distribution can be pinned to a repository version. A descriptor with
+ * derived hints answers from its distribution POST schema; the static seed has none, so it is
+ * assumed to (every distribution schema in the spec declares repository_version).
+ */
+export function supportsRepositoryVersionBinding(plugin: PulpPluginDescriptor | undefined): boolean {
+  return !plugin?.baseFieldHints || "repository_version" in plugin.baseFieldHints;
+}
+
 export type PulpPluginDescriptor = {
   kind: PulpPluginKind;
   /** Display name used in page headings, tabs and messages. */
@@ -115,6 +153,12 @@ export type PulpPluginDescriptor = {
   extraRemoteFields: readonly PulpRemoteField[];
   /** Writable repository fields beyond the common set, in Pulp field-name form. */
   extraRepoFields: readonly string[];
+  /**
+   * Hints for the base fields every form of a resource shares and the deriver therefore leaves
+   * out of the extra fields, keyed by field name. Derived from the spec; absent on the static seed.
+   * Read through getBaseFieldHint.
+   */
+  baseFieldHints?: Readonly<Record<string, PulpBaseFieldHint>>;
 };
 
 export const PULP_PLUGINS: readonly PulpPluginDescriptor[] = [

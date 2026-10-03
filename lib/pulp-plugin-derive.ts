@@ -8,6 +8,7 @@
  */
 
 import type {
+  PulpBaseFieldHint,
   PulpContentEndpoint,
   PulpContentField,
   PulpPluginDescriptor,
@@ -80,6 +81,13 @@ function listResourcePaths(paths: SchemaRecord, resource: string): PathEntry[] {
     }
   }
   return entries;
+}
+
+function isDerivableRepository(paths: SchemaRecord, entry: PathEntry): boolean {
+  return (
+    entry.app !== "core" && // core is the server itself, not a content family
+    hasPostOperation(paths, entry.path) // e.g. container/container-push: created by `podman push`, not this UI
+  );
 }
 
 function groupByApp(entries: PathEntry[]): Map<string, { type: string; path: string }[]> {
@@ -177,8 +185,9 @@ function mapRemoteFieldType(type: string | null): PulpRemoteField["type"] {
     case "boolean":
       return "boolean";
     case "integer":
-    case "number":
       return "integer";
+    case "number":
+      return "float";
     case "array":
       return "string_list";
     case "object":
@@ -206,10 +215,36 @@ function buildExtraRemoteFields(
       const options = propItemsEnum(prop);
       if (options) field.options = options;
     }
+    if (type === "integer" || type === "float") {
+      const minimum = asRecord(prop)?.minimum;
+      if (typeof minimum === "number" && Number.isFinite(minimum)) field.minimum = minimum;
+    }
     fields.push(field);
   }
   fields.sort((a, b) => a.name.localeCompare(b.name));
   return fields;
+}
+
+/** Matches only a clear statement: "the default value (3)" or "default is 3". Not "default is null". */
+const STATED_DEFAULT = /\bdefault value \((\d+(?:\.\d+)?)\)|\bdefault is (\d+(?:\.\d+)?)(?![\d.]*\w)/i;
+
+/**
+ * The hint for one base field from its spec property schema. `placeholder` carries a default
+ * number only when the description states one; `minimum` and `default` come from the schema's own
+ * keys. Never supplies a number the spec does not state.
+ */
+export function pulpDefaultHint(property: unknown): PulpBaseFieldHint {
+  const record = asRecord(property);
+  const description = typeof record?.description === "string" ? record.description : "";
+  const stated = STATED_DEFAULT.exec(description);
+  const number = stated?.[1] ?? stated?.[2];
+  const hint: PulpBaseFieldHint = { placeholder: number ? `Pulp default (${number})` : "Pulp default" };
+  const minimum = record?.minimum;
+  if (typeof minimum === "number" && Number.isFinite(minimum)) hint.minimum = minimum;
+  if (record && "default" in record && record.default !== null && record.default !== undefined) {
+    hint.default = record.default;
+  }
+  return hint;
 }
 
 /** Enum values of a string enum schema, resolving a `$ref` and a wrapping `allOf`. */
@@ -371,6 +406,117 @@ function stripPrefix(path: string): string {
   return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
 }
 
+/** Properties of every remote POST schema that the remote modal actually renders an input for. */
+export const RENDERED_REMOTE_BASE_FIELDS: readonly string[] = [
+  "name",
+  "url",
+  "policy",
+  "tls_validation",
+  "download_concurrency",
+  "proxy_url",
+  "username",
+  "password",
+  "rate_limit",
+  "max_retries",
+  "connect_timeout",
+  "sock_connect_timeout",
+  "sock_read_timeout",
+  "total_timeout",
+  "proxy_username",
+  "proxy_password",
+  "headers",
+  "ca_cert",
+  "client_cert",
+  "client_key",
+];
+
+/**
+ * Base remote fields the deriver excludes that no form renders. pulp_labels is sent as {} on
+ * create and is managed by the separate labels UI, not the remote form.
+ */
+export const KNOWN_UNRENDERED_REMOTE_BASE_FIELDS: readonly string[] = ["pulp_labels"];
+
+/**
+ * Properties of every repository POST schema that a repository form renders an input for. The
+ * create modal sends retain_repo_versions as null, but all three edit forms render it.
+ * retain_checkpoints is in an Advanced section on the create modal and all three edit forms.
+ */
+export const RENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = [
+  "name",
+  "description",
+  "remote",
+  "retain_repo_versions",
+  "retain_checkpoints",
+];
+
+/**
+ * Base repository fields the deriver excludes that no form renders. pulp_labels is sent as {}
+ * on create and is managed by the separate labels UI, not the repository forms.
+ */
+export const KNOWN_UNRENDERED_REPOSITORY_BASE_FIELDS: readonly string[] = ["pulp_labels"];
+
+/** The base fields no plugin form derives that Z4/Z5 render a hinted input for, by resource. */
+const BASE_HINT_FIELDS = {
+  remote: [
+    "download_concurrency",
+    "rate_limit",
+    "max_retries",
+    "connect_timeout",
+    "sock_connect_timeout",
+    "sock_read_timeout",
+    "total_timeout",
+  ],
+  repository: ["retain_checkpoints", "retain_repo_versions"],
+  distribution: ["hidden", "repository_version"],
+} as const;
+
+/** The hints for BASE_HINT_FIELDS read off one family's remote, repository and distribution POST schemas. */
+function buildBaseFieldHints(
+  paths: SchemaRecord,
+  schemas: SchemaRecord,
+  postPaths: { remote: string; repository: string; distribution: string }
+): Record<string, PulpBaseFieldHint> {
+  const hints: Record<string, PulpBaseFieldHint> = {};
+  for (const resource of ["remote", "repository", "distribution"] as const) {
+    const properties = schemaProperties(postRequestSchema(paths, schemas, postPaths[resource]));
+    for (const name of BASE_HINT_FIELDS[resource]) {
+      if (name in properties) hints[name] = pulpDefaultHint(properties[name]);
+    }
+  }
+  return hints;
+}
+
+/**
+ * The property names the deriver leaves out of the extra remote and repository fields because
+ * every schema of the resource has them: the hand-written forms are assumed to cover them, which
+ * the constants above check.
+ */
+function excludedBaseFieldsOf(
+  paths: SchemaRecord,
+  schemas: SchemaRecord
+): { remote: Set<string>; repository: Set<string> } {
+  const postSchemas = (resource: string, filter: (entry: PathEntry) => boolean) =>
+    listResourcePaths(paths, resource)
+      .filter(filter)
+      .map((entry) => postRequestSchema(paths, schemas, entry.path))
+      .filter((s): s is SchemaRecord => s !== null);
+
+  // Excluded on top of the computed base: policy is a download-policy enum almost every remote
+  // declares, but PulpRemoteField has no control for a string enum, so deriving it would render
+  // a free-text box that lets a user post an invalid value. Deliberate exclusion, to revisit.
+  const remote = new Set([...commonPropertyNames(postSchemas("remotes", () => true)), "policy"]);
+  const repository = commonPropertyNames(postSchemas("repositories", (entry) => isDerivableRepository(paths, entry)));
+  return { remote, repository };
+}
+
+/** `excludedBaseFieldsOf` for a whole OpenAPI document; empty sets when it has no usable shape. */
+export function derivedExcludedBaseFields(spec: unknown): { remote: Set<string>; repository: Set<string> } {
+  const root = asRecord(spec);
+  const paths = asRecord(root?.paths);
+  if (!paths) return { remote: new Set(), repository: new Set() };
+  return excludedBaseFieldsOf(paths, asRecord(asRecord(root?.components)?.schemas) ?? {});
+}
+
 /**
  * Turns a Pulp OpenAPI document into PulpPluginDescriptor values. Never throws: an unexpected
  * shape at any step just drops that field, that family, or the whole result.
@@ -387,10 +533,8 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
   if (!paths) return [];
   const schemas = asRecord(asRecord(root?.components)?.schemas) ?? {};
 
-  const repositories = listResourcePaths(paths, "repositories").filter(
-    (entry) =>
-      entry.app !== "core" && // core is the server itself, not a content family
-      hasPostOperation(paths, entry.path) // e.g. container/container-push: created by `podman push`, not this UI
+  const repositories = listResourcePaths(paths, "repositories").filter((entry) =>
+    isDerivableRepository(paths, entry)
   );
 
   const remotesByApp = groupByApp(listResourcePaths(paths, "remotes"));
@@ -398,19 +542,7 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
   const distributionsByApp = groupByApp(listResourcePaths(paths, "distributions"));
   const contentByApp = groupByApp(listResourcePaths(paths, "content"));
 
-  const remoteSchemas = [...remotesByApp.values()]
-    .flat()
-    .map((entry) => postRequestSchema(paths, schemas, entry.path))
-    .filter((s): s is SchemaRecord => s !== null);
-  // Excluded on top of the computed base: policy is a download-policy enum almost every remote
-  // declares, but PulpRemoteField has no control for a string enum, so deriving it would render
-  // a free-text box that lets a user post an invalid value. Deliberate exclusion, to revisit.
-  const remoteExcluded = new Set([...commonPropertyNames(remoteSchemas), "policy"]);
-
-  const repoSchemas = repositories
-    .map((entry) => postRequestSchema(paths, schemas, entry.path))
-    .filter((s): s is SchemaRecord => s !== null);
-  const repoExcluded = commonPropertyNames(repoSchemas);
+  const { remote: remoteExcluded, repository: repoExcluded } = excludedBaseFieldsOf(paths, schemas);
 
   const typeEnum = pulpTypeEnum(paths);
 
@@ -462,6 +594,11 @@ export function derivePulpPlugins(spec: unknown): PulpPluginDescriptor[] {
       syncFields,
       extraRemoteFields: buildExtraRemoteFields(paths, schemas, remotePath, remoteExcluded),
       extraRepoFields: buildExtraRepoFields(paths, schemas, repo.path, repoExcluded),
+      baseFieldHints: buildBaseFieldHints(paths, schemas, {
+        remote: remotePath,
+        repository: repo.path,
+        distribution: distributionPath,
+      }),
     };
     families.push(descriptor);
   }

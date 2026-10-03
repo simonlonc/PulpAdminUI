@@ -19,7 +19,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { GET } from "@/app/api/pulp/repositories/[kind]/route";
+import { GET, PATCH } from "@/app/api/pulp/repositories/[kind]/route";
 
 function paramsFor(kind: string) {
   return { params: Promise.resolve({ kind }) };
@@ -124,5 +124,68 @@ describe("GET /api/pulp/repositories/[kind]", () => {
 
     expect(response.status).toBe(403);
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
+  });
+});
+
+describe("PATCH /api/pulp/repositories/[kind] retain_checkpoints", () => {
+  const href = "/pulp/api/v3/repositories/rpm/rpm/abc/";
+  let fetchMock: ReturnType<typeof fetchImpl>;
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
+    fetchMock = fetchImpl(() => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/t/" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function patch(extra: Record<string, unknown>) {
+    return PATCH(
+      new Request("http://pulp.test/api/pulp/repositories/rpm", {
+        method: "PATCH",
+        body: JSON.stringify({ pulp_href: href, name: "repo", ...extra }),
+      }),
+      paramsFor("rpm")
+    );
+  }
+
+  function sentBody(): Record<string, unknown> {
+    const call = fetchMock.mock.calls.findLast(([, init]) => (init as RequestInit | undefined)?.method === "PATCH");
+    if (!call) throw new Error("no PATCH reached Pulp");
+    return JSON.parse(String((call[1] as RequestInit).body));
+  }
+
+  it("sends a stored retain_checkpoints value to Pulp", async () => {
+    const response = await patch({ retain_checkpoints: 3 });
+
+    expect(response.status).toBe(200);
+    expect(sentBody().retain_checkpoints).toBe(3);
+  });
+
+  it("sends null when it is blank or absent, which clears it", async () => {
+    await patch({ retain_checkpoints: null });
+    expect(sentBody().retain_checkpoints).toBeNull();
+    await patch({});
+    expect(sentBody().retain_checkpoints).toBeNull();
+  });
+
+  it("rejects 0, a fraction and a string with a 400 and never calls Pulp", async () => {
+    for (const bad of [0, -2, 1.5, "3"]) {
+      fetchMock.mockClear();
+      const response = await patch({ retain_checkpoints: bad });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        detail: "Retain checkpoints must be a whole number of at least 1.",
+      });
+      expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")).toBe(
+        false
+      );
+    }
   });
 });
