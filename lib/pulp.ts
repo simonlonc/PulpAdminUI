@@ -1,5 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
+import { logError, logWarn } from "@/lib/log";
+
 export const PULP_AUTH_COOKIE = "pulp_auth";
 
 export type PulpAuth = {
@@ -153,6 +155,36 @@ export function decodePulpAuth(value: string): PulpAuth | null {
   }
 }
 
+// A successful Pulp call is only logged when it takes at least this long.
+const SLOW_FETCH_MS = 5000;
+
+// Origin plus pathname: which host and port, and which endpoint, without the query string
+// (which can carry user search text) or any userinfo in PULP_BASE_URL.
+export function loggableUrl(apiUrl: string): string {
+  try {
+    const { origin, pathname } = new URL(apiUrl);
+    return `${origin}${pathname}`;
+  } catch {
+    return "unparseable";
+  }
+}
+
+// undici reports a refused or unresolvable connection as `TypeError: fetch failed` and puts the
+// errno, address and port on `error.cause`, so the useful primitives are copied out of it.
+function fetchCauseFields(error: unknown) {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause === null || typeof cause !== "object") {
+    return {};
+  }
+
+  const { code, message, address } = cause as Record<string, unknown>;
+  return {
+    cause_code: typeof code === "string" ? code : undefined,
+    cause_message: typeof message === "string" && message.length > 0 ? message : undefined,
+    cause_address: typeof address === "string" ? address : undefined,
+  };
+}
+
 export async function pulpFetch<TData>(
   pathname: string,
   auth: PulpAuth,
@@ -167,6 +199,8 @@ export async function pulpFetch<TData>(
   }
 
   const apiUrl = getPulpApiUrl(pathname);
+  const method = (init?.method ?? "GET").toUpperCase();
+  const startedAt = performance.now();
 
   let response: Response;
   try {
@@ -177,6 +211,13 @@ export async function pulpFetch<TData>(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    logError("pulp_fetch_unreachable", {
+      method,
+      url: loggableUrl(apiUrl),
+      message,
+      ...fetchCauseFields(error),
+      ms: Math.round(performance.now() - startedAt),
+    });
     return {
       ok: false,
       status: 502,
@@ -194,6 +235,12 @@ export async function pulpFetch<TData>(
     }
   } else {
     parsed = undefined;
+  }
+
+  const ms = Math.round(performance.now() - startedAt);
+
+  if (response.ok && ms >= SLOW_FETCH_MS) {
+    logWarn("pulp_fetch_slow", { method, url: loggableUrl(apiUrl), status: response.status, ms });
   }
 
   if (!response.ok) {
@@ -215,6 +262,7 @@ export async function pulpFetch<TData>(
         }
       }
     }
+    logWarn("pulp_fetch_failed", { method, url: loggableUrl(apiUrl), status: response.status, detail, ms });
     return { ok: false, status: response.status, detail };
   }
 
@@ -229,6 +277,7 @@ export async function pulpFetch<TData>(
     // every other 2xx caller immediately dereferences `.data`, so returning it as `TData` here
     // only trades a clean error now for an uncaught TypeError at the call site. Report it the
     // same way an upstream failure is reported instead.
+    logWarn("pulp_fetch_bad_body", { method, url: loggableUrl(apiUrl), status: response.status, ms });
     return {
       ok: false,
       status: 502,

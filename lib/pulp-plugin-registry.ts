@@ -8,6 +8,7 @@
  * Server-side only: fetches through pulpFetch, so this must not be imported from client code.
  */
 
+import { logError, logInfo, logWarn } from "@/lib/log";
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
 import {
   PULP_PLUGINS,
@@ -94,12 +95,10 @@ function applyOverlay(
     const index = result.findIndex((plugin) => plugin.kind === entry.kind);
     if (index === -1) {
       if (!isCompleteDescriptor(entry)) {
-        console.error(
-          `getPulpPluginRegistry: overlay kind "${entry.kind}" is not on this server and the entry is not a complete descriptor`
-        );
+        logWarn("plugin_registry_overlay_incomplete", { kind: entry.kind });
         continue;
       }
-      console.error(`getPulpPluginRegistry: admitted overlay plugin family "${entry.kind}"`);
+      logInfo("plugin_registry_overlay_admitted", { kind: entry.kind });
       result.push(entry);
       continue;
     }
@@ -145,13 +144,13 @@ async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPlugi
   try {
     const result = await pulpFetch<unknown>("/docs/api.json", auth);
     if (!result.ok) {
-      console.error("getPulpPluginRegistry: failed to fetch the Pulp OpenAPI document:", result.detail);
+      logWarn("plugin_registry_spec_fetch_failed", { detail: result.detail });
       return applyOverlay(PULP_PLUGINS, overlay);
     }
 
     const built = buildRegistryFromSpec(result.data);
     if (!built.ok) {
-      console.error("getPulpPluginRegistry: derived zero plugin families from the Pulp OpenAPI document");
+      logWarn("plugin_registry_spec_empty");
       return applyOverlay(PULP_PLUGINS, overlay);
     }
 
@@ -160,7 +159,10 @@ async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPlugi
     cachedAt = Date.now();
     return registry;
   } catch (error) {
-    console.error("getPulpPluginRegistry: failed to build the plugin registry:", error);
+    logError("plugin_registry_build_failed", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return applyOverlay(PULP_PLUGINS, overlay);
   }
 }

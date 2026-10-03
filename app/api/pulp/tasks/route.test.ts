@@ -42,6 +42,7 @@ describe("GET /api/pulp/tasks", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -96,10 +97,12 @@ describe("GET /api/pulp/tasks", () => {
   // bare 500 with a stack trace.
   it("returns 502 with a detail body instead of throwing when Pulp is unreachable", async () => {
     fetchMock.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
     const response = await GET(new Request("http://pulp.test/api/pulp/tasks"));
 
     expect(response.status).toBe(502);
+    expect(String(write.mock.calls[0][0])).toContain('"event":"pulp_fetch_unreachable"');
     expect(await response.json()).toEqual({
       detail: "Could not reach Pulp server at http://pulp.test/pulp/api/v3: connect ECONNREFUSED",
     });

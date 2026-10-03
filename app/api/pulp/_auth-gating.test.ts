@@ -3,6 +3,9 @@ import { join, relative } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
+import { encodePulpAuth } from "@/lib/pulp";
+
 // requirePulpAuth() (app/api/pulp/_helpers.ts) is the first thing every route handler below
 // calls, so this file drives it directly by stubbing next/headers' cookies() and asserting the
 // resulting 401 responses, without a running Pulp server.
@@ -135,4 +138,87 @@ describe("auth gating for every route handler", () => {
       }
     });
   }
+});
+
+describe("withPulpAuth logging", () => {
+  const PASSWORD = "hunter2-recognizable-password";
+  let lines: string[] = [];
+  let encodedCookie: string;
+
+  beforeEach(() => {
+    vi.stubEnv("LOG_LEVEL", "info");
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    encodedCookie = encodePulpAuth({ username: "admin", password: PASSWORD });
+    cookieState.value = encodedCookie;
+    deleteCookieMock.mockClear();
+    lines = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      lines.push(String(chunk));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  function expectNoCredentials() {
+    const output = lines.join("");
+    expect(output).not.toContain(PASSWORD);
+    expect(output).not.toContain(encodedCookie);
+  }
+
+  it("logs one warn line for a PulpApiError and still returns its JSON", async () => {
+    const handler = withPulpAuth(async () => {
+      throw new PulpApiError(404, "Repository not found.");
+    });
+
+    const response = await handler(new Request("http://pulp.test/api/pulp/x?name=secretish", { method: "GET" }), undefined);
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ detail: "Repository not found." });
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toEqual({
+      level: "warn",
+      event: "pulp_route_failed",
+      route: "GET /api/pulp/x",
+      status: 404,
+      detail: "Repository not found.",
+    });
+    expectNoCredentials();
+  });
+
+  it("logs one error line with the stack for any other error and still rethrows it", async () => {
+    const failure = new TypeError("Cannot read properties of undefined");
+    const handler = withPulpAuth(async () => {
+      throw failure;
+    });
+
+    await expect(
+      handler(new Request("http://pulp.test/api/pulp/x?name=secretish", { method: "POST" }), undefined)
+    ).rejects.toBe(failure);
+
+    expect(lines).toHaveLength(1);
+    const line = JSON.parse(lines[0]);
+    expect(line).toMatchObject({
+      level: "error",
+      event: "pulp_route_crashed",
+      route: "POST /api/pulp/x",
+      message: "Cannot read properties of undefined",
+    });
+    expect(line.stack).toContain("TypeError: Cannot read properties of undefined");
+    expectNoCredentials();
+  });
+
+  it("does not log a missing or invalid session", async () => {
+    const handler = withPulpAuth(async () => Response.json({}));
+
+    cookieState.value = undefined;
+    expect((await handler(new Request("http://pulp.test/x"), undefined)).status).toBe(401);
+    cookieState.value = "not-valid-base64url-json";
+    expect((await handler(new Request("http://pulp.test/x"), undefined)).status).toBe(401);
+
+    expect(lines).toEqual([]);
+  });
 });

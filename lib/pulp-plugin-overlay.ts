@@ -21,6 +21,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { logError, logWarn } from "@/lib/log";
 import type { PulpPluginDescriptor } from "@/lib/pulp-plugins";
 
 type JsonRecord = Record<string, unknown>;
@@ -236,7 +237,10 @@ export async function loadPulpPluginOverlay(): Promise<readonly Partial<PulpPlug
       .map((entry) => entry.name)
       .sort((a, b) => a.localeCompare(b));
   } catch (error) {
-    console.error(`loadPulpPluginOverlay: cannot read PULP_PLUGIN_DIR (${directory}):`, error);
+    logError("plugin_overlay_dir_unreadable", {
+      directory,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 
@@ -248,25 +252,26 @@ export async function loadPulpPluginOverlay(): Promise<readonly Partial<PulpPlug
     try {
       parsed = JSON.parse(await readFile(file, "utf8"));
     } catch (error) {
-      console.error(`loadPulpPluginOverlay: skipping ${file}:`, error);
+      logWarn("plugin_overlay_file_unreadable", {
+        file,
+        message: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
 
     const read = readOverlayEntry(parsed);
     if (!read.ok) {
-      console.error(`loadPulpPluginOverlay: skipping ${file}: ${read.problem}`);
+      logWarn("plugin_overlay_entry_invalid", { file, problem: read.problem });
       continue;
     }
     if (read.ignored.length > 0) {
-      console.error(
-        `loadPulpPluginOverlay: ${file}: ignoring unknown key(s) ${read.ignored.join(", ")}`
-      );
+      logWarn("plugin_overlay_keys_ignored", { file, keys: read.ignored.join(", ") });
     }
 
     const entry = read.entry;
     const kind = entry.kind as string;
     if (byKind.has(kind)) {
-      console.error(`loadPulpPluginOverlay: ${file} replaces an earlier entry for kind "${kind}"`);
+      logWarn("plugin_overlay_kind_replaced", { file, kind });
     }
     byKind.set(kind, entry);
   }

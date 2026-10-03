@@ -42,8 +42,7 @@
  *      hang.
  *   2. Auth succeeds in every test (cookie via encodePulpAuth + PULP_SESSION_SECRET/PULP_BASE_URL
  *      stubbed), so every handler gets past requirePulpAuth/withPulpAuth.
- *   3. uploads/route.ts calls requirePulpAuth directly (not withPulpAuth) and reads
- *      request.formData(); it's excluded from the generic JSON-bodied sweep (a JSON body always
+ *   3. uploads/route.ts reads request.formData(); it's excluded from the generic JSON-bodied sweep (a JSON body always
  *      throws at request.formData(), a pre-existing, already-cataloged request-shape issue, not a
  *      response-shape one -- see routes.fuzz.test.ts's FORMDATA_SEEDS) and driven with a real
  *      multipart request in its own dedicated test instead.
@@ -388,9 +387,13 @@ beforeEach(() => {
       new Response(JSON.stringify({ count: 0, next: null, previous: null, results: [] }), { status: 200 })
   );
   vi.stubGlobal("fetch", fetchMock);
+  // The "throw" responses are an unreachable Pulp on purpose, which pulpFetch logs at error
+  // level; nothing in this file asserts on that line, so keep it out of the test output.
+  vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });

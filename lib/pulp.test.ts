@@ -1,3 +1,5 @@
+import { createServer } from "node:net";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -194,16 +196,33 @@ describe("encodePulpAuth / decodePulpAuth", () => {
 });
 
 describe("pulpFetch", () => {
-  const auth: PulpAuth = { username: "admin", password: "admin" };
+  const auth: PulpAuth = { username: "admin", password: "recognizable-password" };
+  let lines: string[] = [];
 
   beforeEach(() => {
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    vi.stubEnv("LOG_LEVEL", "info");
+    lines = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      lines.push(String(chunk));
+      return true;
+    });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
+
+  function expectNoSecretsLogged(requestBody: string) {
+    const output = lines.join("");
+    expect(output).not.toContain("recognizable-password");
+    expect(output).not.toContain(Buffer.from("admin:recognizable-password").toString("base64"));
+    expect(output).not.toContain("Basic ");
+    expect(output).not.toContain(requestBody);
+  }
 
   it("returns a 502 with a detail naming the base URL when the server is unreachable", async () => {
     vi.stubGlobal(
@@ -263,5 +282,146 @@ describe("pulpFetch", () => {
     const result = await pulpFetch("/users/1/", auth, { method: "DELETE" });
 
     expect(result).toEqual({ ok: true, status: 204, data: undefined });
+  });
+
+  it("logs one error line naming the host, port and errno when a real connection is refused", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    await new Promise((resolve) => server.close(resolve));
+    vi.stubEnv("PULP_BASE_URL", `http://127.0.0.1:${port}/pulp/api/v3`);
+
+    const result = await pulpFetch("/status/?search=secretish", auth, {
+      method: "POST",
+      body: JSON.stringify({ note: "request-body-marker" }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      level: "error",
+      event: "pulp_fetch_unreachable",
+      method: "POST",
+      url: `http://127.0.0.1:${port}/pulp/api/v3/status/`,
+      message: "fetch failed",
+      cause_code: "ECONNREFUSED",
+      cause_message: `connect ECONNREFUSED 127.0.0.1:${port}`,
+      cause_address: "127.0.0.1",
+    });
+    expect(typeof JSON.parse(lines[0]).ms).toBe("number");
+    expect(lines[0]).not.toContain("secretish");
+    expectNoSecretsLogged("request-body-marker");
+  });
+
+  it("logs the cause code of a wrapped transport error and omits it when there is none", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND pulp.test"), { code: "ENOTFOUND" }) });
+      })
+    );
+    await pulpFetch("/status/", auth);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("plain failure");
+      })
+    );
+    await pulpFetch("/status/", auth);
+
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      event: "pulp_fetch_unreachable",
+      cause_code: "ENOTFOUND",
+      cause_message: "getaddrinfo ENOTFOUND pulp.test",
+    });
+    expect(JSON.parse(lines[1])).not.toHaveProperty("cause_code");
+    expect(JSON.parse(lines[1])).toMatchObject({ message: "plain failure" });
+  });
+
+  it("logs one warn line with status, method, url and detail for a non-2xx response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: "Repository not found." }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          })
+      )
+    );
+
+    const result = await pulpFetch("/repositories/rpm/rpm/abc/?name=secretish", auth, {
+      method: "patch",
+      body: JSON.stringify({ note: "request-body-marker" }),
+    });
+
+    expect(result).toEqual({ ok: false, status: 404, detail: "Repository not found." });
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      level: "warn",
+      event: "pulp_fetch_failed",
+      method: "PATCH",
+      url: "http://pulp.test/pulp/api/v3/repositories/rpm/rpm/abc/",
+      status: 404,
+      detail: "Repository not found.",
+    });
+    expect(typeof JSON.parse(lines[0]).ms).toBe("number");
+    expect(lines[0]).not.toContain("secretish");
+    expectNoSecretsLogged("request-body-marker");
+  });
+
+  it("logs one warn line for a 2xx whose body is empty or unparseable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{", { status: 200, headers: { "Content-Type": "application/json" } }))
+    );
+
+    await pulpFetch("/repositories/rpm/rpm/abc/", auth);
+
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      level: "warn",
+      event: "pulp_fetch_bad_body",
+      method: "GET",
+      status: 200,
+    });
+  });
+
+  it("logs a successful call only when it is slow", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        vi.advanceTimersByTime(6000);
+        return new Response('{"ok":true}', { status: 200, headers: { "Content-Type": "application/json" } });
+      })
+    );
+
+    const result = await pulpFetch("/status/", auth, { body: JSON.stringify({ note: "request-body-marker" }) });
+
+    expect(result.ok).toBe(true);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toEqual({
+      level: "warn",
+      event: "pulp_fetch_slow",
+      method: "GET",
+      url: "http://pulp.test/pulp/api/v3/status/",
+      status: 200,
+      ms: 6000,
+    });
+    expectNoSecretsLogged("request-body-marker");
+  });
+
+  it("writes nothing for a fast successful call", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"ok":true}', { status: 200, headers: { "Content-Type": "application/json" } }))
+    );
+
+    await pulpFetch("/status/", auth);
+
+    expect(lines).toEqual([]);
   });
 });

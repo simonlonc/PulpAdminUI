@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { cookies } from "next/headers";
-import { getPulpApiUrl, PULP_AUTH_COOKIE, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
-import { requirePulpAuth } from "../_helpers";
+import { getPulpApiUrl, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
+import { PulpApiError, withPulpAuth } from "../_helpers";
 import { authHeaders, normalizePulpHrefToApiPath, readDetail } from "../repositories/_server";
 
 const CHUNK_SIZE = 8 * 1024 * 1024;
@@ -84,27 +83,22 @@ async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskRespon
   throw new Error("Task did not complete within timeout period.");
 }
 
-export async function POST(request: Request) {
-  const authResult = await requirePulpAuth();
-  if (!authResult.ok) {
-    return authResult.response;
-  }
-
+export const POST = withPulpAuth(async (request, auth) => {
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return Response.json({ detail: "Invalid multipart form data." }, { status: 400 });
+    throw new PulpApiError(400, "Invalid multipart form data.");
   }
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
-    return Response.json({ detail: "Missing file." }, { status: 400 });
+    throw new PulpApiError(400, "Missing file.");
   }
 
   const fileBuffer = Buffer.from(await file.arrayBuffer());
   if (fileBuffer.byteLength === 0) {
-    return Response.json({ detail: "File must not be empty." }, { status: 400 });
+    throw new PulpApiError(400, "File must not be empty.");
   }
 
   const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
@@ -112,26 +106,21 @@ export async function POST(request: Request) {
   // pulpFetch cannot express (it always assumes/serializes a JSON request body), so that one call
   // stays on raw fetch with the shared authHeaders()/readDetail() helpers; every other call in
   // this route is plain JSON and goes through pulpFetch.
-  const authHeader = toBasicAuthHeader(authResult.auth);
+  const authHeader = toBasicAuthHeader(auth);
 
-  const createUploadResult = await pulpFetch<CreateUploadResponse>("/uploads/", authResult.auth, {
+  const createUploadResult = await pulpFetch<CreateUploadResponse>("/uploads/", auth, {
     method: "POST",
     body: JSON.stringify({ size: fileBuffer.byteLength }),
   });
 
   if (!createUploadResult.ok) {
-    if (createUploadResult.status === 401 || createUploadResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: createUploadResult.detail }, { status: createUploadResult.status });
+    throw new PulpApiError(createUploadResult.status, createUploadResult.detail);
   }
 
   const created = createUploadResult.data;
   const uploadHref = created.pulp_href ?? created.href;
   if (!uploadHref) {
-    return Response.json({ detail: "Upload creation failed." }, { status: 502 });
+    throw new PulpApiError(502, "Upload creation failed.");
   }
 
   for (let start = 0; start < fileBuffer.byteLength; start += CHUNK_SIZE) {
@@ -153,18 +142,13 @@ export async function POST(request: Request) {
     });
 
     if (!uploadChunkResponse.ok) {
-      if (uploadChunkResponse.status === 401 || uploadChunkResponse.status === 403) {
-        const cookieStore = await cookies();
-        cookieStore.delete(PULP_AUTH_COOKIE);
-      }
-
-      return Response.json({ detail: await readDetail(uploadChunkResponse) }, { status: uploadChunkResponse.status });
+      throw new PulpApiError(uploadChunkResponse.status, await readDetail(uploadChunkResponse));
     }
   }
 
   const commitUploadResult = await pulpFetch<CommitUploadResponse>(
     normalizePulpHrefToApiPath(`${uploadHref}commit/`),
-    authResult.auth,
+    auth,
     {
       method: "POST",
       body: JSON.stringify({ sha256 }),
@@ -172,12 +156,7 @@ export async function POST(request: Request) {
   );
 
   if (!commitUploadResult.ok) {
-    if (commitUploadResult.status === 401 || commitUploadResult.status === 403) {
-      const cookieStore = await cookies();
-      cookieStore.delete(PULP_AUTH_COOKIE);
-    }
-
-    return Response.json({ detail: commitUploadResult.detail }, { status: commitUploadResult.status });
+    throw new PulpApiError(commitUploadResult.status, commitUploadResult.detail);
   }
 
   const committed = commitUploadResult.data;
@@ -185,7 +164,7 @@ export async function POST(request: Request) {
 
   if (committed.task) {
     try {
-      const task = await waitForTask(committed.task, authResult.auth);
+      const task = await waitForTask(committed.task, auth);
       artifact =
         task.created_resources?.[0] ??
         task.artifact ??
@@ -199,7 +178,7 @@ export async function POST(request: Request) {
         throw error;
       }
 
-      const existingArtifact = await findArtifactBySha256(authResult.auth, duplicateSha256);
+      const existingArtifact = await findArtifactBySha256(auth, duplicateSha256);
       if (!existingArtifact) {
         throw error;
       }
@@ -216,4 +195,4 @@ export async function POST(request: Request) {
     artifact,
     task: committed.task ?? null,
   });
-}
+});
