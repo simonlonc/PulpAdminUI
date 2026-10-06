@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PULP_CONTENT_FILTERS,
   applyPulpContentFilters,
+  contentSummaryLink,
+  describeContentVersionScope,
   parsePulpContentFilters,
   parseRepositoryVersionHref,
   pulpContentFiltersToUrlParams,
@@ -109,5 +111,55 @@ describe("parseRepositoryVersionHref", () => {
     expect(parseRepositoryVersionHref("/pulp/api/v3/repositories/rpm/rpm/abc/")).toBeNull();
     expect(parseRepositoryVersionHref("/pulp/api/v3/repositories/rpm/rpm/abc/versions/x/")).toBeNull();
     expect(parseRepositoryVersionHref("garbage")).toBeNull();
+  });
+});
+
+describe("contentSummaryLink", () => {
+  const href = "/pulp/api/v3/repositories/rpm/rpm/abc/versions/3/";
+
+  it("puts the version href in the param chosen by the bucket", () => {
+    const added = new URLSearchParams(contentSummaryLink(href, "added", "rpm.package").split("?")[1]);
+    expect(added.get("repository_version_added")).toBe(href);
+    expect(added.get("pulp_type")).toBe("rpm.package");
+    expect(added.has("repository_version")).toBe(false);
+    const removed = new URLSearchParams(contentSummaryLink(href, "removed", "rpm.package").split("?")[1]);
+    expect(removed.get("repository_version_removed")).toBe(href);
+    const present = new URLSearchParams(contentSummaryLink(href, "present", "rpm.package").split("?")[1]);
+    expect(present.get("repository_version")).toBe(href);
+    expect(present.has("repository_version_added")).toBe(false);
+  });
+
+  it("points at the content list", () => {
+    expect(contentSummaryLink(href, "added", "x").startsWith("/content/list?")).toBe(true);
+  });
+});
+
+describe("describeContentVersionScope", () => {
+  const href = "/pulp/api/v3/repositories/rpm/rpm/abc/versions/3/";
+  const none = DEFAULT_PULP_CONTENT_FILTERS;
+
+  it("is null without a version scope", () => {
+    expect(describeContentVersionScope({ ...none, pulpType: "rpm.package" }, null)).toBeNull();
+  });
+
+  it("names the repository, version and content type", () => {
+    expect(
+      describeContentVersionScope(
+        { ...none, repositoryVersionAdded: href, pulpType: "rpm.package" },
+        "my-repo"
+      )
+    ).toBe("Content added in my-repo version 3 (rpm.package)");
+    expect(describeContentVersionScope({ ...none, repositoryVersionRemoved: href }, "r")).toBe(
+      "Content removed in r version 3"
+    );
+    expect(describeContentVersionScope({ ...none, repositoryVersion: href }, "r")).toBe(
+      "Content present in r version 3"
+    );
+  });
+
+  it("falls back to the raw href when the repository is unknown", () => {
+    expect(describeContentVersionScope({ ...none, repositoryVersion: href }, null)).toBe(
+      `Content present in ${href}`
+    );
   });
 });

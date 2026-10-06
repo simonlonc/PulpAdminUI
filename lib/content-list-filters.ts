@@ -83,3 +83,53 @@ export function parseRepositoryVersionHref(
   if (!match) return null;
   return { repositoryHref: match[1], versionNumber: Number(match[2]) };
 }
+
+export type ContentSummaryBucketName = "added" | "removed" | "present";
+
+/**
+ * The /content/list link for one content_summary entry: the bucket picks which
+ * version param carries the version href, and the entry key is the pulp_type.
+ */
+export function contentSummaryLink(
+  versionHref: string,
+  bucket: ContentSummaryBucketName,
+  pulpType: string
+): string {
+  const params = pulpContentFiltersToUrlParams({
+    ...DEFAULT_PULP_CONTENT_FILTERS,
+    repositoryVersion: bucket === "present" ? versionHref : "",
+    repositoryVersionAdded: bucket === "added" ? versionHref : "",
+    repositoryVersionRemoved: bucket === "removed" ? versionHref : "",
+    pulpType,
+  });
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  return `/content/list?${search.toString()}`;
+}
+
+/**
+ * The line shown above the content table when a version scope is in the URL
+ * (e.g. "Content added in my-repo version 3 (rpm.package)"), or null when no
+ * version scope is set. repositoryName is the resolved name of the scope's
+ * repository, or null to fall back to the raw version href.
+ */
+export function describeContentVersionScope(
+  filters: PulpContentFilters,
+  repositoryName: string | null
+): string | null {
+  const scopes: Array<[string, string]> = [
+    ["added in", filters.repositoryVersionAdded],
+    ["removed in", filters.repositoryVersionRemoved],
+    ["present in", filters.repositoryVersion],
+  ];
+  const scope = scopes.find(([, href]) => href !== "");
+  if (!scope) return null;
+  const [verb, href] = scope;
+  const parsed = parseRepositoryVersionHref(href);
+  const where =
+    parsed && repositoryName !== null ? `${repositoryName} version ${parsed.versionNumber}` : href;
+  const type = filters.pulpType ? ` (${filters.pulpType})` : "";
+  return `Content ${verb} ${where}${type}`;
+}

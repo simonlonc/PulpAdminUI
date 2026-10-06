@@ -6,6 +6,7 @@ import { Suspense, useMemo } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import {
   applyPulpContentFilters,
+  describeContentVersionScope,
   parsePulpContentFilters,
   parseRepositoryVersionHref,
   pulpContentFiltersToUrlParams,
@@ -85,6 +86,31 @@ function ContentListPageContent() {
     };
   }, [repositoryVersion, repositoryOptions]);
 
+  /* A pulp_type from a link (e.g. rpm.advisory) may not be among the plugins'
+     content endpoints; without an option the select would show "All content
+     types" while still filtering. */
+  const extraTypeOption = useMemo(() => {
+    if (
+      !pulpType ||
+      plugins.some((plugin) =>
+        plugin.contentEndpoints.some((endpoint) => endpoint.contentType === pulpType)
+      )
+    ) {
+      return null;
+    }
+    return { value: pulpType, label: pulpType };
+  }, [pulpType, plugins]);
+
+  const scopeHref = repositoryVersionAdded || repositoryVersionRemoved || repositoryVersion;
+  const scopeParsed = scopeHref ? parseRepositoryVersionHref(scopeHref) : null;
+  const scopeRepository = scopeParsed
+    ? repositoryOptions.find((option) => option.href === scopeParsed.repositoryHref)
+    : undefined;
+  const scopeText = describeContentVersionScope(
+    { repositoryVersion, repositoryVersionAdded, repositoryVersionRemoved, pulpType },
+    scopeRepository?.name ?? null
+  );
+
   function handleRepositoryFilterChange(value: string) {
     setExtraParams(
       pulpContentFiltersToUrlParams({
@@ -133,6 +159,27 @@ function ContentListPageContent() {
               q={query.q}
               showQ
             />
+            {scopeText ? (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                {scopeText}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExtraParams(
+                      pulpContentFiltersToUrlParams({
+                        ...filters,
+                        repositoryVersion: "",
+                        repositoryVersionAdded: "",
+                        repositoryVersionRemoved: "",
+                      })
+                    )
+                  }
+                  className="ml-2 text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Clear
+                </button>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Repository">
                 <select
@@ -164,6 +211,9 @@ function ContentListPageContent() {
                   className={selectClassName}
                 >
                   <option value="">All content types</option>
+                  {extraTypeOption ? (
+                    <option value={extraTypeOption.value}>{extraTypeOption.label}</option>
+                  ) : null}
                   {plugins.flatMap((plugin) => {
                     /* A derived endpoint whose pulp_type could not be determined has
                        contentType === "", indistinguishable from "All content types". */
