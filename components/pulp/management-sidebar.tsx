@@ -21,6 +21,7 @@ type NavIconName =
   | "remotes"
   | "upload"
   | "repos"
+  | "exporters"
   | "orphans"
   | "status"
   | "purge";
@@ -97,6 +98,17 @@ const navSections = [
       },
       { href: "/content/list", label: "Content", hint: "Packages and metadata", icon: "content" },
       { href: "/uploads/create", label: "Upload file", hint: "Send file to Pulp", icon: "upload" },
+    ] satisfies NavItem[],
+  },
+  {
+    title: "Export & import",
+    items: [
+      {
+        href: "/exporters/list",
+        label: "Exporters",
+        hint: "Export repositories as a portable bundle",
+        icon: "exporters",
+      },
     ] satisfies NavItem[],
   },
   {
@@ -315,6 +327,23 @@ function SidebarIcon({ name }: { name: NavIconName }) {
           <ellipse cx="12" cy="6" rx="7" ry="2.5" />
           <path d="M5 6v5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6" />
           <path d="M5 11v5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-5" />
+        </svg>
+      );
+    case "exporters":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <path d="M4 9.5 6 4.5h12l2 5" />
+          <rect x="4" y="9.5" width="16" height="10" rx="2" />
+          <path d="M12 16.5v-4" />
+          <path d="m10 14.5 2-2 2 2" />
         </svg>
       );
     case "orphans":
