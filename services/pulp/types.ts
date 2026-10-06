@@ -328,6 +328,52 @@ export type RunPulpExportResult = {
   task: string;
 };
 
+/**
+ * Row from GET /importers/core/pulp/. `repo_mapping` maps a repository name inside an export to a
+ * repository name on this Pulp.
+ */
+export type PulpImporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  repo_mapping: Record<string, string>;
+};
+
+/** Row from GET {importer_href}imports/. `params` holds the `path` or `toc` the import was run with. */
+export type PulpImport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  params: Record<string, unknown>;
+};
+
+/**
+ * What POST .../imports answers: the dispatched task group's href only. An import spawns one task
+ * per repository, so this is not the single `task` the other dispatch routes return, and it is not
+ * awaited: the caller links to /task-groups/detail?pulp_href=... instead.
+ */
+export type RunPulpImportResult = {
+  task_group: string;
+};
+
+/** One field of an import-check answer. `is_valid: false` is a normal answer, not an error. */
+export type PulpImportEvaluation = {
+  context: string;
+  is_valid: boolean;
+  messages: string[];
+};
+
+/** POST /importers/core/pulp/import-check/ answer: only the fields that were sent come back. */
+export type PulpImportCheckResult = {
+  path?: PulpImportEvaluation;
+  toc?: PulpImportEvaluation;
+  repo_mapping?: PulpImportEvaluation;
+};
+
 /** Row from GET /publications/, the generic cross-plugin publication list. No PATCH; DELETE is synchronous. */
 export type PulpPublication = {
   pulp_href: string;
@@ -828,6 +874,30 @@ export type RunPulpExportPayload = {
   versions?: string[];
   start_versions?: string[];
   meta?: Record<string, unknown>;
+};
+
+export type CreatePulpImporterPayload = {
+  name: string;
+  repo_mapping?: Record<string, string>;
+};
+
+export type UpdatePulpImporterPayload = {
+  name?: string;
+  repo_mapping?: Record<string, string>;
+};
+
+/** POST .../imports body; at least one of `path` (an export archive) and `toc` (its table of contents) is required. */
+export type RunPulpImportPayload = {
+  path?: string;
+  toc?: string;
+  create_repositories?: boolean;
+};
+
+/** POST import-check body; `repo_mapping` is an object here and the route JSON-encodes it for Pulp. */
+export type PulpImportCheckPayload = {
+  path?: string;
+  toc?: string;
+  repo_mapping?: Record<string, string>;
 };
 
 export type CreatePulpUserPayload = {
