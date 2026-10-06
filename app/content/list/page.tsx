@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
+import {
+  applyPulpContentFilters,
+  parsePulpContentFilters,
+  parseRepositoryVersionHref,
+  pulpContentFiltersToUrlParams,
+} from "@/lib/content-list-filters";
 import { extractRpmPackageContentId } from "@/lib/extract-rpm-package-content-id";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpContent } from "@/components/pulp/use-pulp-content";
@@ -34,34 +41,63 @@ function ContentListPageContent() {
     usePulpAuthContext();
   const { plugins, getPlugin, findContentForHref } = usePulpPluginsContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { query, params, setPage, setPageSize, setFilters } = usePulpListQuery({
+  const { query, params, setPage, setPageSize, setFilters, setExtraParams } = usePulpListQuery({
     pageSize: PAGE_SIZE,
   });
   const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
-  const [repositoryFilter, setRepositoryFilter] = useState("");
-  const [contentTypeFilter, setContentTypeFilter] = useState("");
+  const searchParams = useSearchParams();
+  const filters = parsePulpContentFilters(searchParams);
+  const { repositoryVersion, repositoryVersionAdded, repositoryVersionRemoved, pulpType } = filters;
   const requestParams = useMemo(() => {
     const next = new URLSearchParams(params);
-    if (repositoryFilter) {
-      next.set("repository_version", repositoryFilter);
-    }
-    if (contentTypeFilter) {
-      next.set("pulp_type", contentTypeFilter);
-    }
+    applyPulpContentFilters(next, {
+      repositoryVersion,
+      repositoryVersionAdded,
+      repositoryVersionRemoved,
+      pulpType,
+    });
     return next;
-  }, [params, repositoryFilter, contentTypeFilter]);
+  }, [params, repositoryVersion, repositoryVersionAdded, repositoryVersionRemoved, pulpType]);
   const { contentItems, count, loading } = usePulpContent(hasSession, requestParams);
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
+  /* A repository_version from a link may be an older version than any option's
+     latestVersionHref; without an option for it the select would show "All
+     repositories" while still filtering. */
+  const extraVersionOption = useMemo(() => {
+    if (
+      !repositoryVersion ||
+      repositoryOptions.some((option) => option.latestVersionHref === repositoryVersion)
+    ) {
+      return null;
+    }
+    const parsed = parseRepositoryVersionHref(repositoryVersion);
+    const repository = parsed
+      ? repositoryOptions.find((option) => option.href === parsed.repositoryHref)
+      : undefined;
+    return {
+      value: repositoryVersion,
+      label:
+        parsed && repository
+          ? `${repository.name} version ${parsed.versionNumber}`
+          : repositoryVersion,
+    };
+  }, [repositoryVersion, repositoryOptions]);
+
   function handleRepositoryFilterChange(value: string) {
-    setRepositoryFilter(value);
-    setPage(1);
+    setExtraParams(
+      pulpContentFiltersToUrlParams({
+        ...filters,
+        repositoryVersion: value,
+        repositoryVersionAdded: "",
+        repositoryVersionRemoved: "",
+      })
+    );
   }
 
   function handleContentTypeFilterChange(value: string) {
-    setContentTypeFilter(value);
-    setPage(1);
+    setExtraParams(pulpContentFiltersToUrlParams({ ...filters, pulpType: value }));
   }
 
   return (
@@ -100,12 +136,15 @@ function ContentListPageContent() {
             <div className="flex flex-wrap items-end gap-3">
               <FormField label="Repository">
                 <select
-                  value={repositoryFilter}
+                  value={repositoryVersion}
                   onChange={(event) => handleRepositoryFilterChange(event.target.value)}
                   disabled={loading}
                   className={selectClassName}
                 >
                   <option value="">All repositories</option>
+                  {extraVersionOption ? (
+                    <option value={extraVersionOption.value}>{extraVersionOption.label}</option>
+                  ) : null}
                   {repositoryOptions
                     /* Repositories that have never been synced have no latest_version_href
                        to filter content by, so they cannot be offered here. */
@@ -119,7 +158,7 @@ function ContentListPageContent() {
               </FormField>
               <FormField label="Content Type">
                 <select
-                  value={contentTypeFilter}
+                  value={pulpType}
                   onChange={(event) => handleContentTypeFilterChange(event.target.value)}
                   disabled={loading}
                   className={selectClassName}
