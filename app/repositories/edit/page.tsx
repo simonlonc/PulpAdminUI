@@ -27,6 +27,14 @@ import type { PulpRemote, RepositoryUpdatePayload } from "@/services/pulp/types"
 
 type RepoKind = PulpPluginKind;
 
+/* Activity line ids only need to be unique within this page. Not crypto.randomUUID:
+   it exists only in secure contexts, so the page crashed over plain http on a LAN host. */
+let activityLineCounter = 0;
+function nextActivityLineId(): string {
+  activityLineCounter += 1;
+  return `line-${activityLineCounter}`;
+}
+
 function RepositoriesEditInner() {
   const searchParams = useSearchParams();
   const rawKind = searchParams.get("kind");
@@ -68,7 +76,7 @@ function RepositoriesEditInner() {
     let active = true;
 
     async function load() {
-      const loadLineId = crypto.randomUUID();
+      const loadLineId = nextActivityLineId();
       setIsLoadingDetail(true);
       setError(null);
       setSaveAlsoPublish(false);
@@ -206,7 +214,7 @@ function RepositoriesEditInner() {
     setError(null);
     setIsSubmitting(true);
 
-    const saveLineId = crypto.randomUUID();
+    const saveLineId = nextActivityLineId();
     setActivityLog((prev) => [
       ...prev,
       { id: saveLineId, label: "Save — write repository settings to Pulp", phase: "running" },
@@ -258,7 +266,7 @@ function RepositoriesEditInner() {
 
       let publishFailed = false;
       if (saveAlsoPublish) {
-        const publishLineId = crypto.randomUUID();
+        const publishLineId = nextActivityLineId();
         setActivityLog((prev) => [
           ...prev,
           { id: publishLineId, label: "Publish — create publication from repository", phase: "running" },
@@ -298,7 +306,7 @@ function RepositoriesEditInner() {
       }
 
       if (saveAlsoDistribute && loadedKind === "rpm" && !(saveAlsoPublish && publishFailed)) {
-        const distLineId = crypto.randomUUID();
+        const distLineId = nextActivityLineId();
         setActivityLog((prev) => [
           ...prev,
           { id: distLineId, label: "Distribute — create or update RPM distribution", phase: "running" },
