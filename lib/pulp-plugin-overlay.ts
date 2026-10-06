@@ -125,6 +125,9 @@ function remoteFieldProblem(value: unknown): string | null {
   if (record.options !== undefined && !isStringArray(record.options)) {
     return '"options" must be an array of strings';
   }
+  if (record.minimum !== undefined && !Number.isFinite(record.minimum)) {
+    return '"minimum" must be a number';
+  }
   return null;
 }
 

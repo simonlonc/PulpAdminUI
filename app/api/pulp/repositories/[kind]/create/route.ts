@@ -2,7 +2,7 @@ import { pulpFetch } from "@/lib/pulp";
 import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
-import { retainCheckpointsProblem } from "@/lib/repository-edit-form";
+import { retainCheckpointsProblem, retainRepoVersionsProblem } from "@/lib/repository-edit-form";
 import { TaskRefResponse } from "../../_server";
 
 function trimOrNull(value: unknown): string | null {
@@ -44,7 +44,7 @@ function buildCreateBody(
   raw: Record<string, unknown>,
   name: string,
   labels: Record<string, string>,
-  description: string
+  description: string | null
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     pulp_labels: labels,
@@ -101,7 +101,13 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: checkpointsProblem }, { status: 400 });
   }
 
-  const description = typeof raw.description === "string" ? raw.description : "";
+  const versionsProblem = retainRepoVersionsProblem(raw.retain_repo_versions);
+  if (versionsProblem) {
+    return Response.json({ detail: versionsProblem }, { status: 400 });
+  }
+
+  // Pulp rejects "" for a description ("may not be blank") but accepts null.
+  const description = typeof raw.description === "string" && raw.description.trim() !== "" ? raw.description : null;
 
   const pulpBody = buildCreateBody(plugin, raw, name, labels, description);
 
