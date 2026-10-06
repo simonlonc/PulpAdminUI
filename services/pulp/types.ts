@@ -282,6 +282,52 @@ export type PulpContentGuardDetail = PulpContentGuard & {
   groups?: { name: string; pulp_href: string; prn: string }[];
 };
 
+/**
+ * Row from GET /exporters/core/pulp/. `path` is a directory on the Pulp host, checked against
+ * that server's ALLOWED_EXPORT_PATHS setting.
+ */
+export type PulpExporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  path: string;
+  repositories: string[];
+  last_export: string | null;
+};
+
+/**
+ * Row from GET {exporter_href}exports/. Pulp never hands back the exported bytes: the bundle sits
+ * at the exporter's `path` on the Pulp host, and `output_file_info` is the manifest to verify it
+ * with. Its keys are absolute paths on that host (the table-of-contents file included) and its
+ * values are checksums whose algorithm Pulp does not name -- crc32 (8 hex characters) for the
+ * archive and sha256 (64) for the table of contents on 3.119.
+ */
+export type PulpExport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  exported_resources: string[];
+  params: Record<string, unknown>;
+  output_file_info: Record<string, string>;
+  toc_info: {
+    file?: string;
+    sha256?: string;
+    meta?: Record<string, unknown>;
+  };
+};
+
+/**
+ * What POST .../exports answers: the dispatched task's href only. The export itself is not
+ * awaited (it can run for a long time), so the caller links to /tasks/detail?pulp_href=... instead.
+ */
+export type RunPulpExportResult = {
+  task: string;
+};
+
 /** Row from GET /publications/, the generic cross-plugin publication list. No PATCH; DELETE is synchronous. */
 export type PulpPublication = {
   pulp_href: string;
@@ -760,6 +806,28 @@ export type UpdatePulpContentGuardPayload = {
   jq_filter?: string | null;
   ca_certificate?: string;
   guards?: string[];
+};
+
+export type CreatePulpExporterPayload = {
+  name: string;
+  path: string;
+  repositories: string[];
+};
+
+export type UpdatePulpExporterPayload = {
+  name?: string;
+  path?: string;
+  repositories?: string[];
+};
+
+/** POST .../exports body; every field is optional. `chunk_size` takes units of B/KB/MB/GB/TB (e.g. "500MB"). */
+export type RunPulpExportPayload = {
+  full?: boolean;
+  dry_run?: boolean;
+  chunk_size?: string;
+  versions?: string[];
+  start_versions?: string[];
+  meta?: Record<string, unknown>;
 };
 
 export type CreatePulpUserPayload = {
