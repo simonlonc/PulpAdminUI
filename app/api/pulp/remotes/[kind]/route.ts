@@ -1,7 +1,14 @@
 import { pulpFetch, type PulpAuth } from "@/lib/pulp";
-import { findPulpPluginIn, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
+import { findPulpPluginIn, getBaseFieldHint, type PulpPluginDescriptor } from "@/lib/pulp-plugins";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
 import { PulpApiError, readJsonBody, withPulpAuth } from "@/app/api/pulp/_helpers";
+import {
+  DOWNLOAD_CONCURRENCY_MINIMUM,
+  numericProblem,
+  parseFloatInput,
+  parseIntegerInput,
+  REMOTE_TUNING_NUMBER_FIELDS,
+} from "@/lib/remote-form";
 import type { PulpRemote } from "@/services/pulp/types";
 import {
   buildUpstreamListParams,
@@ -36,16 +43,6 @@ type RemoteBody = {
   headers?: unknown;
 };
 
-/** The base remote tuning numbers: integers (`whole`) and floats, all nullable in Pulp. */
-const TUNING_NUMBER_FIELDS = [
-  { name: "rate_limit", whole: true },
-  { name: "max_retries", whole: true },
-  { name: "connect_timeout", whole: false },
-  { name: "sock_connect_timeout", whole: false },
-  { name: "sock_read_timeout", whole: false },
-  { name: "total_timeout", whole: false },
-] as const;
-
 function trimOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const t = value.trim();
@@ -59,25 +56,49 @@ function normalizePolicy(value: unknown): (typeof REMOTE_POLICIES)[number] {
   return "immediate";
 }
 
-function parseNullableConcurrency(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : null;
+/**
+ * Parses a numeric body value with the form's parsers: blank/absent is `value: null`, anything that
+ * is not a safe integer (`whole`) or finite number, or is below `minimum`, is `{ problem }`.
+ * Numbers go through their decimal text, so 1.5 and 1e+56 are rejected for a whole number.
+ */
+function parseNumberValue(
+  value: unknown,
+  label: string,
+  whole: boolean,
+  minimum?: number
+): { value: number | null } | { problem: string } {
+  if (value === null || value === undefined) return { value: null };
+  if (typeof value !== "string" && typeof value !== "number") {
+    return { problem: numericProblem(label, whole, minimum) };
+  }
+  const text = String(value);
+  const parsed = whole ? parseIntegerInput(text, minimum) : parseFloatInput(text, minimum);
+  return parsed.ok ? { value: parsed.value } : { problem: numericProblem(label, whole, minimum) };
 }
 
-/** Copies the tuning numbers the body supplies (all of them when not `onlySupplied`); blank is null. */
+/**
+ * Copies the tuning numbers the body supplies (all of them when not `onlySupplied`); blank is null.
+ * Returns a 400 response for the first bad value.
+ */
 function assignTuningNumbers(
   target: Record<string, unknown>,
+  plugin: PulpPluginDescriptor,
   body: RemoteBody,
   onlySupplied: boolean
-): void {
+): Response | null {
   const source = body as Record<string, unknown>;
-  for (const field of TUNING_NUMBER_FIELDS) {
+  for (const field of REMOTE_TUNING_NUMBER_FIELDS) {
     if (onlySupplied && source[field.name] === undefined) continue;
-    target[field.name] = field.whole
-      ? parseNullableInteger(source[field.name])
-      : parseNullableFloat(source[field.name]);
+    const parsed = parseNumberValue(
+      source[field.name],
+      field.label,
+      field.whole,
+      getBaseFieldHint(plugin, field.name).minimum
+    );
+    if ("problem" in parsed) return Response.json({ detail: parsed.problem }, { status: 400 });
+    target[field.name] = parsed.value;
   }
+  return null;
 }
 
 /** Parses `headers`: an array of objects, blank/absent is []. Returns null when it is any other shape. */
@@ -96,20 +117,6 @@ function isRemoteApiPath(plugin: PulpPluginDescriptor, path: string): boolean {
 function parseStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === "string" && v.trim() !== "");
-}
-
-/** Parses an "integer" field, or null when blank/absent. */
-function parseNullableInteger(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
-}
-
-/** Parses a "float" field, or null when blank/absent. */
-function parseNullableFloat(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
 }
 
 /** Parses a "json" field: a JSON object, or null when blank/absent. Throws on invalid JSON. */
@@ -150,17 +157,19 @@ function assignExtraRemoteFields(
     }
     if (field.type === "integer") {
       // Pulp rejects null here, so a blank value leaves the field out and its default stands.
-      const parsed = parseNullableInteger(source[field.name]);
-      if (parsed !== null) {
-        target[field.name] = parsed;
+      const parsed = parseNumberValue(source[field.name], field.label, true, field.minimum);
+      if ("problem" in parsed) return Response.json({ detail: parsed.problem }, { status: 400 });
+      if (parsed.value !== null) {
+        target[field.name] = parsed.value;
       }
       continue;
     }
     if (field.type === "float") {
       // Same as "integer": null is rejected, so a blank value leaves the field out.
-      const parsed = parseNullableFloat(source[field.name]);
-      if (parsed !== null) {
-        target[field.name] = parsed;
+      const parsed = parseNumberValue(source[field.name], field.label, false, field.minimum);
+      if ("problem" in parsed) return Response.json({ detail: parsed.problem }, { status: 400 });
+      if (parsed.value !== null) {
+        target[field.name] = parsed.value;
       }
       continue;
     }
@@ -254,6 +263,16 @@ export const POST = withPulpAuth(
       return Response.json({ detail: "Remote URL is required." }, { status: 400 });
     }
 
+    const concurrency = parseNumberValue(
+      body.download_concurrency,
+      "Download concurrency",
+      true,
+      DOWNLOAD_CONCURRENCY_MINIMUM
+    );
+    if ("problem" in concurrency) {
+      return Response.json({ detail: concurrency.problem }, { status: 400 });
+    }
+
     const payload: Record<string, unknown> = {
       name,
       url: remoteUrl,
@@ -262,9 +281,12 @@ export const POST = withPulpAuth(
       proxy_url: trimOrNull(body.proxy_url),
       ca_cert: trimOrNull(body.ca_cert),
       client_cert: trimOrNull(body.client_cert),
-      download_concurrency: parseNullableConcurrency(body.download_concurrency),
+      download_concurrency: concurrency.value,
     };
-    assignTuningNumbers(payload, body, false);
+    const tuningError = assignTuningNumbers(payload, plugin, body, false);
+    if (tuningError) {
+      return tuningError;
+    }
     const headers = parseHeaders(body.headers);
     if (headers === null) {
       return Response.json({ detail: "Headers must be a JSON array of objects." }, { status: 400 });
@@ -343,9 +365,21 @@ export const PATCH = withPulpAuth(
       patchPayload.client_cert = trimOrNull(body.client_cert);
     }
     if (body.download_concurrency !== undefined) {
-      patchPayload.download_concurrency = parseNullableConcurrency(body.download_concurrency);
+      const concurrency = parseNumberValue(
+        body.download_concurrency,
+        "Download concurrency",
+        true,
+        DOWNLOAD_CONCURRENCY_MINIMUM
+      );
+      if ("problem" in concurrency) {
+        return Response.json({ detail: concurrency.problem }, { status: 400 });
+      }
+      patchPayload.download_concurrency = concurrency.value;
     }
-    assignTuningNumbers(patchPayload, body, true);
+    const tuningError = assignTuningNumbers(patchPayload, plugin, body, true);
+    if (tuningError) {
+      return tuningError;
+    }
     if (body.headers !== undefined) {
       const headers = parseHeaders(body.headers);
       if (headers === null) {

@@ -158,6 +158,35 @@ describe("loadPulpPluginOverlay", () => {
       ]);
     });
 
+    it("rejects a non-numeric minimum on a baseFieldHints entry and on a remote field", async () => {
+      const field = { name: "n", type: "integer", label: "N" };
+      await writeFile(
+        join(directory, "a.json"),
+        JSON.stringify({ kind: "a", baseFieldHints: { max_retries: { placeholder: "x", minimum: "0" } } })
+      );
+      await writeFile(
+        join(directory, "b.json"),
+        JSON.stringify({ kind: "b", extraRemoteFields: [{ ...field, minimum: "1" }] })
+      );
+      await writeFile(
+        join(directory, "c.json"),
+        JSON.stringify({ kind: "c", extraRemoteFields: [{ ...field, minimum: null }] })
+      );
+      await writeFile(
+        join(directory, "d.json"),
+        JSON.stringify({ kind: "d", extraRemoteFields: [{ ...field, type: "float", minimum: 0.5 }] })
+      );
+      vi.stubEnv("PULP_PLUGIN_DIR", directory);
+
+      const entries = await loadPulpPluginOverlay();
+      expect(entries.map((entry) => entry.kind)).toEqual(["d"]);
+      expect(logged()).toEqual([
+        expect.objectContaining({ event: "plugin_overlay_entry_invalid", file: join(directory, "a.json") }),
+        expect.objectContaining({ event: "plugin_overlay_entry_invalid", file: join(directory, "b.json") }),
+        expect.objectContaining({ event: "plugin_overlay_entry_invalid", file: join(directory, "c.json") }),
+      ]);
+    });
+
     it("warns when a later file replaces an earlier entry for the same kind", async () => {
       await writeFile(join(directory, "a.json"), JSON.stringify({ kind: "widget" }));
       await writeFile(join(directory, "b.json"), JSON.stringify({ kind: "widget" }));

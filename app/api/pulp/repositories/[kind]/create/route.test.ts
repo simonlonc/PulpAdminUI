@@ -75,4 +75,30 @@ describe("POST /api/pulp/repositories/[kind]/create retain_checkpoints", () => {
       );
     }
   });
+
+  it("sends a null description when it is blank or absent, since Pulp rejects an empty string", async () => {
+    for (const extra of [{}, { description: "" }, { description: "   " }, { description: null }]) {
+      await create(extra);
+      expect(sentBody().description).toBeNull();
+    }
+    await create({ description: "mirror" });
+    expect(sentBody().description).toBe("mirror");
+  });
+
+  it("rejects a retain_repo_versions that is a fraction, too large or below 1, and keeps blank as null", async () => {
+    for (const bad of [1.5, 1e56, 0, -2, "abc"]) {
+      fetchMock.mockClear();
+      const response = await create({ retain_repo_versions: bad });
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).detail).toMatch(/Retain repo versions must be a whole number of at least 1/);
+      expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(
+        false
+      );
+    }
+    await create({ retain_repo_versions: null });
+    expect(sentBody().retain_repo_versions).toBeNull();
+    await create({ retain_repo_versions: 3 });
+    expect(sentBody().retain_repo_versions).toBe(3);
+  });
 });

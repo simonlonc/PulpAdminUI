@@ -18,6 +18,19 @@ export function retainCheckpointsProblem(value: unknown): string | null {
     : RETAIN_CHECKPOINTS_PROBLEM;
 }
 
+/** retain_repo_versions is a whole number of at least 1 (the spec's `minimum`), or null to keep every version. */
+export const RETAIN_REPO_VERSIONS_MINIMUM = 1;
+
+export const RETAIN_REPO_VERSIONS_PROBLEM = `Retain repo versions must be a whole number of at least ${RETAIN_REPO_VERSIONS_MINIMUM}.`;
+
+/** A message when `value` is neither blank (null/undefined/"") nor a whole number at or above the minimum, or null. */
+export function retainRepoVersionsProblem(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= RETAIN_REPO_VERSIONS_MINIMUM
+    ? null
+    : RETAIN_REPO_VERSIONS_PROBLEM;
+}
+
 export const checksumAlgorithms = ["sha256", "sha1", "md5", "sha224", "sha384", "sha512"] as const;
 
 export function rpmDetailToForm(d: PulpRpmRepositoryDetail): RepositoryUpdatePayload {
