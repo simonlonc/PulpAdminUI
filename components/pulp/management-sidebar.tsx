@@ -116,6 +116,12 @@ const navSections = [
         hint: "Load an exported bundle into this Pulp",
         icon: "importers",
       },
+      {
+        href: "/filesystem-exporters/list",
+        label: "Filesystem exporters",
+        hint: "Write a publication's files to a directory",
+        icon: "exporters",
+      },
     ] satisfies NavItem[],
   },
   {

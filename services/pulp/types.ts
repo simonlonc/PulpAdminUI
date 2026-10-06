@@ -328,6 +328,38 @@ export type RunPulpExportResult = {
   task: string;
 };
 
+/** How a FilesystemExporter puts the files at its path: copy them, hardlink them or symlink them. */
+export type PulpFilesystemExportMethod = "write" | "hardlink" | "symlink";
+
+/**
+ * Row from GET /exporters/core/filesystem/. `path` is a directory on the Pulp host, checked against
+ * that server's ALLOWED_EXPORT_PATHS setting like a PulpExporter's. Nothing imports what it writes.
+ */
+export type PulpFilesystemExporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  path: string;
+  method: PulpFilesystemExportMethod;
+};
+
+/**
+ * Row from GET {filesystem_exporter_href}exports/. There is no file manifest: the files sit at the
+ * exporter's `path` on the Pulp host. `params` holds the bare uuid (not the href) of what was
+ * exported, under `publication` or `repository_version`; `exported_resources` holds the hrefs.
+ */
+export type PulpFilesystemExport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  exported_resources: string[];
+  params: Record<string, unknown>;
+};
+
 /**
  * Row from GET /importers/core/pulp/. `repo_mapping` maps a repository name inside an export to a
  * repository name on this Pulp.
@@ -874,6 +906,25 @@ export type RunPulpExportPayload = {
   versions?: string[];
   start_versions?: string[];
   meta?: Record<string, unknown>;
+};
+
+export type CreatePulpFilesystemExporterPayload = {
+  name: string;
+  path: string;
+  method?: PulpFilesystemExportMethod;
+};
+
+export type UpdatePulpFilesystemExporterPayload = {
+  name?: string;
+  path?: string;
+  method?: PulpFilesystemExportMethod;
+};
+
+/** POST .../exports body; Pulp wants exactly one of `publication` and `repository_version`. */
+export type RunPulpFilesystemExportPayload = {
+  publication?: string;
+  repository_version?: string;
+  start_repository_version?: string;
 };
 
 export type CreatePulpImporterPayload = {
