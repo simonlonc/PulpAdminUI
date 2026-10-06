@@ -37,7 +37,7 @@ Seven plugin families: RPM, Debian APT, File, Python, npm, Ruby gem, and Maven. 
 - **Publish**: Dispatches an async publish task where the family supports it, with a result panel linking to the publication and the task.
 - **Distribute**: Creates or updates a distribution bound to the repository. This works across all seven families (it resolves the repository's kind from its href and uses that family's distribution endpoint), not just RPM.
 - **Repository content**: Browse the content in a repository version, generic across families, with a link to per-item content detail.
-- **Versions**: List repository versions with added/removed/present content summaries; roll back to an earlier version (sets `base_version`); modify a version's content directly.
+- **Versions**: List repository versions with added/removed/present content summaries, where each non-zero count links to exactly that content in the content list; roll back to an earlier version (sets `base_version`); modify a version's content directly.
 - **Version detail**: A single version: metadata, content summary, "repair" (re-verify or re-check existence of stored artifacts) and delete.
 - **Reclaim space**: Free disk space used by repository artifacts (selected repositories or all of them, with an optional keeplist of versions to exclude) while keeping metadata; dispatches an async task.
 
@@ -52,7 +52,7 @@ Seven plugin families: RPM, Debian APT, File, Python, npm, Ruby gem, and Maven. 
 
 ### Content & uploads
 
-- **Content**: A generic, multi-family content list and detail view driven by each family's `contentEndpoints` (not RPM-only): package/content rows with family-appropriate columns, and a detail page per item. `/content/preview` is a redirect helper: it resolves an `id` or `href` query param to an RPM package detail page, and falls back to the content list when it cannot.
+- **Content**: A generic, multi-family content list and detail view driven by each family's `contentEndpoints` (not RPM-only): package/content rows with family-appropriate columns, and a detail page per item. Filterable by repository version and content type; the filters live in the URL (`repository_version`, `repository_version_added`, `repository_version_removed`, `pulp_type`), so a filtered list can be shared or reloaded, and a version-scoped list says which version and bucket it shows. `/content/preview` is a redirect helper: it resolves an `id` or `href` query param to an RPM package detail page, and falls back to the content list when it cannot.
 - **Uploads**: Chunked upload of a file to Pulp, plus a shortcut to create RPM package content directly from an uploaded artifact.
 
 ### Tasks & workers
