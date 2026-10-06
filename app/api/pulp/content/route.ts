@@ -16,11 +16,19 @@ type PulpPaginatedResponse<T> = {
 };
 
 /**
- * GET /content/ has no name filter of any kind; only pulp_type and
- * repository_version narrow results. There is no `repository` param -- the
- * UI passes a repository's latest_version_href as repository_version instead.
+ * GET /content/ has no name filter of any kind. It narrows by pulp_type and by
+ * three repository-version scopes: repository_version (content in that
+ * version), repository_version_added (content that version introduced) and
+ * repository_version_removed (content that version dropped). There is no
+ * `repository` param -- the UI passes a repository's latest_version_href as
+ * repository_version instead.
  */
-const CONTENT_LIST_PARAMS = ["pulp_type", "repository_version"] as const;
+const CONTENT_LIST_PARAMS = [
+  "pulp_type",
+  "repository_version",
+  "repository_version_added",
+  "repository_version_removed",
+] as const;
 
 export const GET = withPulpAuth(async (request, auth) => {
   const url = new URL(request.url);
