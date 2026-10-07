@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { ExporterFields } from "./exporter-fields";
 import { PulpRepositoryOption } from "./use-pulp-repository-options";
 import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
 import { pulpExportService } from "@/services/pulp/export-service";
-
-const selectClassName =
-  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
 export type ExporterCreateModalProps = {
   repositoryOptions: PulpRepositoryOption[];
@@ -114,45 +110,16 @@ export function ExporterCreateModal({
         ) : null}
 
         <div className="mt-4 flex flex-col gap-3">
-          <FormField label="Name">
-            <Input value={name} onChange={(event) => setName(event.target.value)} disabled={isSaving} />
-          </FormField>
-          <FormField label="Path">
-            <Input
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              disabled={isSaving}
-              placeholder="/var/lib/pulp/exports/my-exporter"
-              className="font-mono"
-            />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              A directory on the Pulp server, not on this app&apos;s host. It must sit under one of
-              the Pulp server&apos;s <span className="font-mono">ALLOWED_EXPORT_PATHS</span>. That
-              is a Pulp server setting this app cannot change; ask whoever runs the server to add
-              the directory if Pulp rejects it.
-            </span>
-          </FormField>
-          <FormField label="Repositories">
-            <select
-              multiple
-              value={repositories}
-              onChange={(event) =>
-                setRepositories(Array.from(event.target.selectedOptions, (option) => option.value))
-              }
-              disabled={isSaving}
-              size={Math.min(6, Math.max(3, repositoryOptions.length))}
-              className={selectClassName}
-            >
-              {repositoryOptions.map((repository) => (
-                <option key={repository.href} value={repository.href}>
-                  {repository.name} ({repository.kind.toUpperCase()})
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              Hold Ctrl or Cmd to select several. May be left empty.
-            </span>
-          </FormField>
+          <ExporterFields
+            name={name}
+            onNameChange={setName}
+            path={path}
+            onPathChange={setPath}
+            repositories={repositories}
+            onRepositoriesChange={setRepositories}
+            repositoryOptions={repositoryOptions}
+            disabled={isSaving}
+          />
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">

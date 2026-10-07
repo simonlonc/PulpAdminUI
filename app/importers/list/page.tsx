@@ -1,13 +1,13 @@
 "use client";
 
-import { Fragment, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpImporters } from "@/components/pulp/use-pulp-importers";
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronRight, Play, Trash2 } from "lucide-react";
+import { History, Pencil, Play, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { ImportRunModal } from "@/components/pulp/import-run-modal";
 import { ImporterCreateModal } from "@/components/pulp/importer-create-modal";
-import { ImporterImportsPanel } from "@/components/pulp/importer-imports-panel";
+import { ImporterEditModal } from "@/components/pulp/importer-edit-modal";
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
@@ -36,43 +36,23 @@ function ImportersListPageContent() {
     params
   );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<PulpImporter | null>(null);
   const [runTarget, setRunTarget] = useState<PulpImporter | null>(null);
-  const [expanded, setExpanded] = useState<string[]>([]);
-  const [historyRefreshes, setHistoryRefreshes] = useState<Record<string, number>>({});
 
   const totalPages = Math.max(1, Math.ceil(count / query.pageSize));
 
-  function expand(href: string) {
-    setExpanded((current) => (current.includes(href) ? current : [...current, href]));
-  }
-
-  function toggleExpanded(href: string) {
-    setExpanded((current) =>
-      current.includes(href) ? current.filter((item) => item !== href) : [...current, href]
-    );
-  }
-
   async function removeImporter(importer: PulpImporter) {
-    if (!window.confirm(`Delete importer "${importer.name}"?`)) {
+    if (!window.confirm(`Delete importer “${importer.name}”? This cannot be undone.`)) {
       return;
     }
 
     await deleteImporter(importer.pulp_href);
   }
 
-  function closeRunModal(dispatched: boolean) {
-    if (runTarget && dispatched) {
-      const href = runTarget.pulp_href;
-      setHistoryRefreshes((current) => ({ ...current, [href]: (current[href] ?? 0) + 1 }));
-      expand(href);
-    }
-    setRunTarget(null);
-  }
-
   return (
     <AdminShell
       title="Importers"
-      description="Load an exported bundle into this Pulp server."
+      description="Load an exported bundle from the Pulp server's filesystem into this Pulp server."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
@@ -92,12 +72,6 @@ function ImportersListPageContent() {
             ) : null}
           </CardTitle>
           <CardContent className="space-y-4">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              An import reads a bundle from the Pulp server&apos;s own filesystem, so the bundle has
-              to be carried to that server first; this app cannot upload one. An importer holds the
-              repository mapping. Its row menu runs an import, but only once the bundle has passed a
-              check. To change a mapping, delete the importer and create it again.
-            </p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsCreateOpen(true)}>
                 New importer
@@ -116,9 +90,6 @@ function ImportersListPageContent() {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell className="w-10">
-                      <span className="sr-only">Imports</span>
-                    </TableHeaderCell>
                     <TableHeaderCell>
                       <SortableColumnHeader
                         label="Name"
@@ -134,79 +105,69 @@ function ImportersListPageContent() {
                 <TableBody>
                   {importers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-zinc-500">
+                      <TableCell colSpan={3} className="text-zinc-500">
                         No importers found.
                       </TableCell>
                     </TableRow>
                   ) : (
                     importers.map((importer) => {
-                      const isExpanded = expanded.includes(importer.pulp_href);
-                      const ToggleIcon = isExpanded ? ChevronDown : ChevronRight;
                       const mapping = Object.entries(importer.repo_mapping);
                       return (
-                        <Fragment key={importer.pulp_href}>
-                          <TableRow>
-                            <TableCell>
-                              <button
-                                type="button"
-                                aria-expanded={isExpanded}
-                                aria-label={`${isExpanded ? "Hide" : "Show"} imports of ${importer.name}`}
-                                onClick={() => toggleExpanded(importer.pulp_href)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                              >
-                                <ToggleIcon className="size-4" aria-hidden />
-                              </button>
-                            </TableCell>
-                            <TableCell className="font-medium">{importer.name}</TableCell>
-                            <TableCell>
-                              {mapping.length === 0 ? (
-                                <span className="text-zinc-500">None</span>
-                              ) : (
-                                <ul className="space-y-0.5">
-                                  {mapping.map(([exportName, localName]) => (
-                                    <li key={exportName} className="break-all font-mono text-xs">
-                                      {`${exportName} -> ${localName}`}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end">
-                                <RowActionMenu
-                                  label={importer.name}
-                                  items={[
-                                    {
-                                      key: "run",
-                                      label: "Run import",
-                                      icon: Play,
-                                      disabled: isLoading,
-                                      onSelect: () => setRunTarget(importer),
-                                    },
-                                    {
-                                      key: "delete",
-                                      label: "Delete",
-                                      icon: Trash2,
-                                      destructive: true,
-                                      disabled: isLoading,
-                                      onSelect: () => removeImporter(importer),
-                                    },
-                                  ]}
-                                />
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                          {isExpanded ? (
-                            <TableRow>
-                              <TableCell colSpan={4} className="bg-zinc-50/60 dark:bg-zinc-900/30">
-                                <ImporterImportsPanel
-                                  importer={importer}
-                                  refreshKey={historyRefreshes[importer.pulp_href] ?? 0}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ) : null}
-                        </Fragment>
+                        <TableRow key={importer.pulp_href}>
+                          <TableCell className="font-medium">{importer.name}</TableCell>
+                          <TableCell>
+                            {mapping.length === 0 ? (
+                              <span className="text-zinc-500">None</span>
+                            ) : (
+                              <ul className="space-y-0.5">
+                                {mapping.map(([exportName, localName]) => (
+                                  <li key={exportName} className="break-all font-mono text-xs">
+                                    {`${exportName} -> ${localName}`}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end">
+                              <RowActionMenu
+                                label={importer.name}
+                                items={[
+                                  {
+                                    key: "edit",
+                                    label: "Edit",
+                                    icon: Pencil,
+                                    disabled: isLoading,
+                                    onSelect: () => setEditTarget(importer),
+                                  },
+                                  {
+                                    key: "imports",
+                                    label: "Imports",
+                                    icon: History,
+                                    href: `/importers/imports?pulp_href=${encodeURIComponent(importer.pulp_href)}`,
+                                  },
+                                  { key: "sep-1", separator: true },
+                                  {
+                                    key: "run",
+                                    label: "Run import",
+                                    icon: Play,
+                                    disabled: isLoading,
+                                    onSelect: () => setRunTarget(importer),
+                                  },
+                                  { key: "sep-2", separator: true },
+                                  {
+                                    key: "delete",
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    disabled: isLoading,
+                                    onSelect: () => removeImporter(importer),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       );
                     })
                   )}
@@ -233,7 +194,18 @@ function ImportersListPageContent() {
         />
       ) : null}
 
-      {runTarget ? <ImportRunModal importer={runTarget} onClose={closeRunModal} /> : null}
+      {editTarget ? (
+        <ImporterEditModal
+          importer={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            void refreshImporters();
+          }}
+        />
+      ) : null}
+
+      {runTarget ? <ImportRunModal importer={runTarget} onClose={() => setRunTarget(null)} /> : null}
     </AdminShell>
   );
 }
@@ -244,7 +216,7 @@ function ImportersListSuspenseFallback() {
   return (
     <AdminShell
       title="Importers"
-      description="Load an exported bundle into this Pulp server."
+      description="Load an exported bundle from the Pulp server's filesystem into this Pulp server."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}

@@ -174,8 +174,8 @@ export function ImportRunModal({ importer, onClose }: ImportRunModalProps) {
               <p className="font-medium text-emerald-900 dark:text-emerald-100">Import dispatched</p>
               <p className="mt-1 text-emerald-800 dark:text-emerald-200/90">
                 The import runs in the background, one task per repository; open the task group to
-                follow its progress. Closing this dialog reloads the importer&apos;s history, which
-                lists the import once its task has been created.
+                follow its progress. The importer&apos;s Imports page lists the import once its task
+                has been created.
               </p>
               <p className="mt-1 break-all font-mono text-xs text-emerald-800/80 dark:text-emerald-300/70">
                 Task group:{" "}

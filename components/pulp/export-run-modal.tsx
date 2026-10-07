@@ -111,9 +111,8 @@ export function ExportRunModal({ exporter, onClose }: ExportRunModalProps) {
             <div className="mt-4 rounded-lg border border-emerald-300/80 bg-emerald-50/90 p-4 text-sm dark:border-emerald-800 dark:bg-emerald-950/35">
               <p className="font-medium text-emerald-900 dark:text-emerald-100">Export dispatched</p>
               <p className="mt-1 text-emerald-800 dark:text-emerald-200/90">
-                The export runs in the background; open the task to follow its progress. Closing
-                this dialog reloads the exporter&apos;s history, which lists the export once the
-                task has created it.
+                The export runs in the background; open the task to follow its progress. The
+                exporter&apos;s Exports page lists the export once the task has created it.
               </p>
               <p className="mt-1 break-all font-mono text-xs text-emerald-800/80 dark:text-emerald-300/70">
                 Task:{" "}

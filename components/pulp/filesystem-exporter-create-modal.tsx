@@ -1,15 +1,10 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { FilesystemExporterFields } from "./filesystem-exporter-fields";
 import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/ui/form-field";
-import { Input } from "@/components/ui/input";
-import { PULP_FILESYSTEM_EXPORT_METHODS } from "@/services/pulp/filesystem-export-methods";
 import { pulpFilesystemExportService } from "@/services/pulp/filesystem-export-service";
 import { PulpFilesystemExportMethod } from "@/services/pulp/types";
-
-const selectClassName =
-  "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
 export type FilesystemExporterCreateModalProps = {
   onClose: () => void;
@@ -113,41 +108,15 @@ export function FilesystemExporterCreateModal({
         ) : null}
 
         <div className="mt-4 flex flex-col gap-3">
-          <FormField label="Name">
-            <Input value={name} onChange={(event) => setName(event.target.value)} disabled={isSaving} />
-          </FormField>
-          <FormField label="Path">
-            <Input
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              disabled={isSaving}
-              placeholder="/var/lib/pulp/exports/my-exporter"
-              className="font-mono"
-            />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              A directory on the Pulp server, not on this app&apos;s host. It must sit under one of
-              the Pulp server&apos;s <span className="font-mono">ALLOWED_EXPORT_PATHS</span>. That
-              is a Pulp server setting this app cannot change; ask whoever runs the server to add
-              the directory if Pulp rejects it.
-            </span>
-          </FormField>
-          <FormField label="Method">
-            <select
-              value={method}
-              onChange={(event) => setMethod(event.target.value as PulpFilesystemExportMethod)}
-              disabled={isSaving}
-              className={selectClassName}
-            >
-              {PULP_FILESYSTEM_EXPORT_METHODS.map((descriptor) => (
-                <option key={descriptor.method} value={descriptor.method}>
-                  {descriptor.method}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {PULP_FILESYSTEM_EXPORT_METHODS.find((descriptor) => descriptor.method === method)?.hint}
-            </span>
-          </FormField>
+          <FilesystemExporterFields
+            name={name}
+            onNameChange={setName}
+            path={path}
+            onPathChange={setPath}
+            method={method}
+            onMethodChange={setMethod}
+            disabled={isSaving}
+          />
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
