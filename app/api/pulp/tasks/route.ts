@@ -11,6 +11,7 @@ const TASK_LIST_PARAMS = [
   "started_at__lte",
   "finished_at__gte",
   "finished_at__lte",
+  "pulp_href__in",
 ] as const;
 
 /** Tasks default to a smaller page (100) and a hard cap (500) than the shared list default. */

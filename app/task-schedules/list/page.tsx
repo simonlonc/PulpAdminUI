@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AdminShell } from "@/components/pulp/admin-shell";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { usePulpTaskSchedules } from "@/components/pulp/use-pulp-task-schedules";
@@ -18,6 +18,7 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { cn } from "@/components/ui/cn";
+import { formatNextDispatchCountdown, formatTaskDuration } from "@/lib/task-schedule-time";
 
 const PAGE_SIZE = 100;
 
@@ -76,7 +77,13 @@ function TaskSchedulesListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { data, loading, totalPages } = usePulpTaskSchedules(hasSession, page, PAGE_SIZE);
+  const { data, lastTasks, loading, totalPages } = usePulpTaskSchedules(hasSession, page, PAGE_SIZE);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!data || totalPages < 1 || page <= totalPages) {
@@ -114,6 +121,10 @@ function TaskSchedulesListPageContent() {
             ) : null}
           </CardTitle>
           <CardContent className="space-y-4">
+            {/* Read-only: Pulp answers POST /pulp/api/v3/task-schedules/ with 405 and the OpenAPI spec lists only GET. */}
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Schedules are defined in Pulp&apos;s server settings and cannot be created or edited here.
+            </p>
             {totalPages > 1 ? (
               <nav
                 className="flex flex-wrap items-center gap-1 text-sm"
@@ -177,26 +188,49 @@ function TaskSchedulesListPageContent() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((s) => (
-                      <TableRow key={s.pulp_href}>
-                        <TableCell className="max-w-[14rem] font-medium">{s.name}</TableCell>
-                        <TableCell className="max-w-[16rem] truncate font-mono text-xs" title={s.task_name}>
-                          {shortTaskName(s.task_name)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                          {s.dispatch_interval}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatIso(s.next_dispatch)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatIso(s.pulp_created)}
-                        </TableCell>
-                        <TableCell className="max-w-[10rem] truncate font-mono text-xs">
-                          {s.last_task ? idFromHref(s.last_task) : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    rows.map((s) => {
+                      const task = s.last_task ? lastTasks[s.last_task] : undefined;
+                      const duration = task ? formatTaskDuration(task.started_at, task.finished_at) : null;
+                      return (
+                        <TableRow key={s.pulp_href}>
+                          <TableCell className="max-w-[14rem] font-medium">{s.name}</TableCell>
+                          <TableCell className="max-w-[16rem] truncate font-mono text-xs" title={s.task_name}>
+                            {shortTaskName(s.task_name)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                            {s.dispatch_interval}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {formatIso(s.next_dispatch)}
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {formatNextDispatchCountdown(s.next_dispatch, now)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {formatIso(s.pulp_created)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {s.last_task ? (
+                              <Link
+                                href={`/tasks/detail?pulp_href=${encodeURIComponent(s.last_task)}`}
+                                className="font-mono underline"
+                              >
+                                {idFromHref(s.last_task)}
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                            {task ? (
+                              <div className="text-zinc-500 dark:text-zinc-400">
+                                {[task.state, task.finished_at ? formatIso(task.finished_at) : null, duration]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
