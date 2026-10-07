@@ -81,6 +81,18 @@ describe("GET /api/pulp/tasks", () => {
     expect(url.searchParams.has("arbitrary")).toBe(false);
   });
 
+  it("forwards pulp_href__in so callers can fetch several tasks in one request", async () => {
+    await GET(
+      new Request(
+        "http://pulp.test/api/pulp/tasks?pulp_href__in=/pulp/api/v3/tasks/a/,/pulp/api/v3/tasks/b/"
+      )
+    );
+
+    expect(calledUrl(fetchMock).searchParams.get("pulp_href__in")).toBe(
+      "/pulp/api/v3/tasks/a/,/pulp/api/v3/tasks/b/"
+    );
+  });
+
   it("deletes the auth cookie when the upstream call returns 401", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ detail: "Not authenticated." }), { status: 401 })
