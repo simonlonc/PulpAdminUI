@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { getContentOriginOverride } from "@/lib/content-origin";
+import { getExportHttpMapping } from "@/lib/export-http";
 import { logInfo, resolveLogLevel } from "@/lib/log";
 import { getPulpBaseUrl, loggableUrl } from "@/lib/pulp";
 
@@ -34,6 +35,7 @@ function pulpBaseUrlForLog(): string | null {
 
 export function logStartupConfig() {
   const cacheDirectory = join(process.cwd(), ".next/cache");
+  const exportHttp = getExportHttpMapping();
 
   logInfo("server_started", {
     pulp_base_url: pulpBaseUrlForLog(),
@@ -41,6 +43,8 @@ export function logStartupConfig() {
     session_secret_set: Boolean(process.env.PULP_SESSION_SECRET?.trim()),
     log_level: resolveLogLevel(),
     content_origin: getContentOriginOverride(),
+    export_http_base_url: exportHttp?.baseUrl ?? null,
+    export_http_path_prefix: exportHttp?.pathPrefix ?? null,
     plugin_dir: process.env.PULP_PLUGIN_DIR?.trim() || null,
     dashboard_cache: cacheDirectory,
     dashboard_cache_writable: dashboardCacheWritable(cacheDirectory),

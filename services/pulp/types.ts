@@ -328,6 +328,37 @@ export type RunPulpExportResult = {
   task: string;
 };
 
+/**
+ * One file of an export as the publish route reports it: `file_url` is where the configured
+ * export HTTP server serves it, or null when no mapping is configured or the file is not under it.
+ */
+export type PulpExportPublishFile = {
+  path: string;
+  checksum: string;
+  file_url: string | null;
+};
+
+/** What GET .../exports/{id}/publish answers. `configured` is true when the export HTTP mapping is set. */
+export type PulpExportPublishFiles = {
+  configured: boolean;
+  files: PulpExportPublishFile[];
+};
+
+/**
+ * POST .../exports/{id}/publish body: one export file (`path`, a key of the export's
+ * `output_file_info`) into a File repository. `file_url` falls back to the derived URL when omitted.
+ */
+export type PublishPulpExportFilePayload = {
+  path: string;
+  repository: string;
+  file_url?: string;
+};
+
+/** The dispatched task's href only: the Pulp worker's download is not awaited. */
+export type PublishPulpExportFileResult = {
+  task: string;
+};
+
 /** How a FilesystemExporter puts the files at its path: copy them, hardlink them or symlink them. */
 export type PulpFilesystemExportMethod = "write" | "hardlink" | "symlink";
 

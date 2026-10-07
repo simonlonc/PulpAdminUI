@@ -232,6 +232,7 @@ function ExportersListPageContent() {
                                 <ExporterExportsPanel
                                   exporter={exporter}
                                   refreshKey={historyRefreshes[exporter.pulp_href] ?? 0}
+                                  repositoryOptions={repositoryOptions}
                                 />
                               </TableCell>
                             </TableRow>

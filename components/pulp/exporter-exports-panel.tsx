@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Upload } from "lucide-react";
 import { usePulpAuthContext } from "./auth-context";
 import { ExportFilesManifest } from "./export-files-manifest";
+import { ExportPublishModal } from "./export-publish-modal";
 import { RowActionMenu } from "./row-action-menu";
+import { PulpRepositoryOption } from "./use-pulp-repository-options";
 import { Button } from "@/components/ui/button";
-import { exportParamsSummary } from "@/lib/pulp-export-manifest";
+import { exportManifestEntries, exportParamsSummary } from "@/lib/pulp-export-manifest";
 import { pulpExportService } from "@/services/pulp/export-service";
 import { PulpExport, PulpExporter } from "@/services/pulp/types";
 
@@ -28,16 +30,23 @@ export type ExporterExportsPanelProps = {
   exporter: PulpExporter;
   /** Bump to reload the history, e.g. after an export was dispatched from the page. */
   refreshKey: number;
+  /** Where an export's files can be published; only the File repositories are offered. */
+  repositoryOptions: PulpRepositoryOption[];
 };
 
 /** The export history of one exporter: one entry per export, newest first, files manifest included. */
-export function ExporterExportsPanel({ exporter, refreshKey }: ExporterExportsPanelProps) {
+export function ExporterExportsPanel({
+  exporter,
+  refreshKey,
+  repositoryOptions,
+}: ExporterExportsPanelProps) {
   const { setError } = usePulpAuthContext();
   const [exportRows, setExportRows] = useState<PulpExport[]>([]);
   const [count, setCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+  const [publishTarget, setPublishTarget] = useState<PulpExport | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -149,7 +158,16 @@ export function ExporterExportsPanel({ exporter, refreshKey }: ExporterExportsPa
                   <RowActionMenu
                     label={`export of ${formatIso(exportRow.pulp_created)}`}
                     items={[
-                      // AA6: add the "Publish to repository" item here.
+                      {
+                        key: "publish",
+                        label: "Publish to repository",
+                        icon: Upload,
+                        // A dry run never wrote its files, and there is nothing to publish without any.
+                        disabled:
+                          exportRow.params?.dry_run === true ||
+                          exportManifestEntries(exportRow).length === 0,
+                        onSelect: () => setPublishTarget(exportRow),
+                      },
                       {
                         key: "delete",
                         label: "Delete",
@@ -173,6 +191,14 @@ export function ExporterExportsPanel({ exporter, refreshKey }: ExporterExportsPa
         <p className="text-xs text-zinc-500">
           Showing the first {exportRows.length.toLocaleString()} of {count.toLocaleString()} exports.
         </p>
+      ) : null}
+
+      {publishTarget ? (
+        <ExportPublishModal
+          exportRow={publishTarget}
+          repositoryOptions={repositoryOptions}
+          onClose={() => setPublishTarget(null)}
+        />
       ) : null}
     </div>
   );

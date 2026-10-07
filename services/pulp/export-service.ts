@@ -2,8 +2,11 @@ import { readApiDetail } from "./http";
 import { settleDispatchedTask } from "./task-service";
 import {
   CreatePulpExporterPayload,
+  PublishPulpExportFilePayload,
+  PublishPulpExportFileResult,
   PulpExport,
   PulpExporter,
+  PulpExportPublishFiles,
   PulpPaginatedResponse,
   RunPulpExportPayload,
   RunPulpExportResult,
@@ -19,6 +22,17 @@ const EXPORT_HREF_PATTERN = /^(.*\/)exports\/[^/]+\/?$/;
 
 /** What the update and delete routes return before the browser has polled the dispatched task. */
 type ExporterTaskResponse = { task: string | null };
+
+/** `/api/pulp/exporters/pulp/{exporter}/exports/{export}/publish`, or null for a malformed export href. */
+function exportPublishUrl(exportHref: string): string | null {
+  const normalized = exportHref.trim();
+  const match = normalized.match(EXPORT_HREF_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  return `${EXPORTERS_PATH}/${encodeURIComponent(match[1])}/exports/${encodeURIComponent(normalized)}/publish`;
+}
 
 function encodeExporterRef(pulpHref: string): string | null {
   const normalized = pulpHref.trim();
@@ -184,5 +198,45 @@ export const pulpExportService = {
     }
 
     return { ok: true };
+  },
+
+  /** The files of one export with the URL each is served under, for publishing it into a File repository. */
+  async getPublishFiles(exportHref: string): Promise<PulpExportPublishFiles> {
+    const url = exportPublishUrl(exportHref);
+    if (!url) {
+      throw new Error("Invalid export identifier.");
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(await readApiDetail(response));
+    }
+
+    return (await response.json()) as PulpExportPublishFiles;
+  },
+
+  /**
+   * Dispatches the content-unit creation for one export file and returns its task href WITHOUT
+   * waiting for it: Pulp's worker downloads the file from `file_url`, which can take a while.
+   */
+  async publishFile(
+    exportHref: string,
+    payload: PublishPulpExportFilePayload
+  ): Promise<ServiceDataResult<PublishPulpExportFileResult>> {
+    const url = exportPublishUrl(exportHref);
+    if (!url) {
+      return { ok: false, detail: "Invalid export identifier." };
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      return { ok: false, detail: await readApiDetail(response) };
+    }
+
+    return { ok: true, data: (await response.json()) as PublishPulpExportFileResult };
   },
 };

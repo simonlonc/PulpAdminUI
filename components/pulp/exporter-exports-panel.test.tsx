@@ -3,19 +3,25 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExporterExportsPanel } from "@/components/pulp/exporter-exports-panel";
+import type { PulpRepositoryOption } from "@/components/pulp/use-pulp-repository-options";
 import type { PulpExport, PulpExporter } from "@/services/pulp/types";
 
-const { setErrorMock, listExportsMock, removeExportMock } = vi.hoisted(() => ({
+const { setErrorMock, listExportsMock, removeExportMock, getPublishFilesMock } = vi.hoisted(() => ({
   setErrorMock: vi.fn(),
   listExportsMock: vi.fn(),
   removeExportMock: vi.fn(),
+  getPublishFilesMock: vi.fn(),
 }));
 
 vi.mock("@/components/pulp/auth-context", () => ({
   usePulpAuthContext: () => ({ setError: setErrorMock }),
 }));
 vi.mock("@/services/pulp/export-service", () => ({
-  pulpExportService: { listExports: listExportsMock, removeExport: removeExportMock },
+  pulpExportService: {
+    listExports: listExportsMock,
+    removeExport: removeExportMock,
+    getPublishFiles: getPublishFilesMock,
+  },
 }));
 
 // Radix positions its menu with pointer-capture and ResizeObserver APIs that
@@ -41,6 +47,9 @@ const TOC = "/var/lib/pulp/exports/aa-test/export-new-toc.json";
 const SHA256 = "c8e8a7ff309aff3d5a23c97ea623cb95de7c362ee59d3aa00b7d65b750632f55";
 
 const exporter = { pulp_href: EXPORTER_HREF, name: "aa-test" } as PulpExporter;
+const repositoryOptions: PulpRepositoryOption[] = [
+  { href: "/pulp/api/v3/repositories/file/file/r/", name: "aa-files", kind: "file", latestVersionHref: null },
+];
 
 function exportRow(href: string, created: string, extra: Partial<PulpExport> = {}) {
   return {
@@ -68,6 +77,13 @@ beforeEach(() => {
     ],
   });
   removeExportMock.mockResolvedValue({ ok: true });
+  getPublishFilesMock.mockResolvedValue({
+    configured: true,
+    files: [
+      { path: TAR, checksum: "2e1a1f6d", file_url: "http://files.test/export-new.tar" },
+      { path: TOC, checksum: SHA256, file_url: "http://files.test/export-new-toc.json" },
+    ],
+  });
 });
 
 afterEach(() => {
@@ -78,7 +94,7 @@ afterEach(() => {
 
 describe("ExporterExportsPanel", () => {
   it("lists the exporter's exports newest first with task link, params summary and files", async () => {
-    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} />);
+    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
 
     await screen.findByRole("list", { name: "Exported files" });
     expect(listExportsMock.mock.calls[0][0]).toBe(EXPORTER_HREF);
@@ -98,30 +114,30 @@ describe("ExporterExportsPanel", () => {
 
   it("says so when the exporter has no exports", async () => {
     listExportsMock.mockResolvedValue({ count: 0, results: [] });
-    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} />);
+    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
 
     expect(await screen.findByText("No exports yet.")).toBeTruthy();
   });
 
   it("shows the load error", async () => {
     listExportsMock.mockRejectedValue(new Error("Pulp is down"));
-    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} />);
+    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
 
     expect((await screen.findByRole("alert")).textContent).toBe("Pulp is down");
   });
 
   it("reloads when the refresh key changes", async () => {
-    const { rerender } = render(<ExporterExportsPanel exporter={exporter} refreshKey={0} />);
+    const { rerender } = render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
     await waitFor(() => expect(listExportsMock).toHaveBeenCalledTimes(1));
 
-    rerender(<ExporterExportsPanel exporter={exporter} refreshKey={1} />);
+    rerender(<ExporterExportsPanel exporter={exporter} refreshKey={1} repositoryOptions={repositoryOptions} />);
     await waitFor(() => expect(listExportsMock).toHaveBeenCalledTimes(2));
   });
 
   it("deletes an export only after confirmation, then reloads", async () => {
     const confirmMock = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     vi.stubGlobal("confirm", confirmMock);
-    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} />);
+    render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
     await screen.findByRole("list", { name: "Exported files" });
 
     const openDelete = async () => {
@@ -136,5 +152,60 @@ describe("ExporterExportsPanel", () => {
     await openDelete();
     await waitFor(() => expect(removeExportMock).toHaveBeenCalledWith(NEW_HREF));
     await waitFor(() => expect(listExportsMock).toHaveBeenCalledTimes(2));
+  });
+
+  describe("Publish to repository", () => {
+    async function openMenu(index: number) {
+      const trigger = screen.getAllByRole("button", { name: /^Actions for export/ })[index];
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+      return screen.findByRole("menuitem", { name: "Publish to repository" });
+    }
+
+    it("is enabled for an export that wrote files and opens the publish dialog", async () => {
+      render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
+      await screen.findByRole("list", { name: "Exported files" });
+
+      const item = await openMenu(0);
+      expect(item.getAttribute("aria-disabled")).toBeNull();
+      fireEvent.click(item);
+
+      const dialog = await screen.findByRole("dialog", { name: "Publish to repository" });
+      expect(getPublishFilesMock).toHaveBeenCalledWith(NEW_HREF);
+      await within(dialog).findByRole("list", { name: "Files to publish" });
+      expect(within(dialog).getByRole("option", { name: "aa-files" })).toBeTruthy();
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("is disabled for a dry-run export, whose files were never written", async () => {
+      listExportsMock.mockResolvedValue({
+        count: 1,
+        results: [
+          exportRow(NEW_HREF, "2026-10-06T10:00:00Z", {
+            params: { full: true, dry_run: true },
+            output_file_info: { [TAR]: "2e1a1f6d", [TOC]: SHA256 },
+            toc_info: { file: TOC, sha256: SHA256 },
+          }),
+        ],
+      });
+      render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
+      await screen.findByRole("list", { name: "Exported files" });
+
+      const item = await openMenu(0);
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(item);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(getPublishFilesMock).not.toHaveBeenCalled();
+    });
+
+    it("is disabled for an export with no files", async () => {
+      render(<ExporterExportsPanel exporter={exporter} refreshKey={0} repositoryOptions={repositoryOptions} />);
+      await screen.findByRole("list", { name: "Exported files" });
+
+      // The history is newest first, so the second row is the old export without files.
+      const item = await openMenu(1);
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+    });
   });
 });
