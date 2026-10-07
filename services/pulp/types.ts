@@ -282,6 +282,161 @@ export type PulpContentGuardDetail = PulpContentGuard & {
   groups?: { name: string; pulp_href: string; prn: string }[];
 };
 
+/**
+ * Row from GET /exporters/core/pulp/. `path` is a directory on the Pulp host, checked against
+ * that server's ALLOWED_EXPORT_PATHS setting.
+ */
+export type PulpExporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  path: string;
+  repositories: string[];
+  last_export: string | null;
+};
+
+/**
+ * Row from GET {exporter_href}exports/. Pulp never hands back the exported bytes: the bundle sits
+ * at the exporter's `path` on the Pulp host, and `output_file_info` is the manifest to verify it
+ * with. Its keys are absolute paths on that host (the table-of-contents file included) and its
+ * values are checksums whose algorithm Pulp does not name -- crc32 (8 hex characters) for the
+ * archive and sha256 (64) for the table of contents on 3.119.
+ */
+export type PulpExport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  exported_resources: string[];
+  params: Record<string, unknown>;
+  output_file_info: Record<string, string>;
+  toc_info: {
+    file?: string;
+    sha256?: string;
+    meta?: Record<string, unknown>;
+  };
+};
+
+/**
+ * What POST .../exports answers: the dispatched task's href only. The export itself is not
+ * awaited (it can run for a long time), so the caller links to /tasks/detail?pulp_href=... instead.
+ */
+export type RunPulpExportResult = {
+  task: string;
+};
+
+/**
+ * One file of an export as the publish route reports it: `file_url` is where the configured
+ * export HTTP server serves it, or null when no mapping is configured or the file is not under it.
+ */
+export type PulpExportPublishFile = {
+  path: string;
+  checksum: string;
+  file_url: string | null;
+};
+
+/** What GET .../exports/{id}/publish answers. `configured` is true when the export HTTP mapping is set. */
+export type PulpExportPublishFiles = {
+  configured: boolean;
+  files: PulpExportPublishFile[];
+};
+
+/**
+ * POST .../exports/{id}/publish body: one export file (`path`, a key of the export's
+ * `output_file_info`) into a File repository. `file_url` falls back to the derived URL when omitted.
+ */
+export type PublishPulpExportFilePayload = {
+  path: string;
+  repository: string;
+  file_url?: string;
+};
+
+/** The dispatched task's href only: the Pulp worker's download is not awaited. */
+export type PublishPulpExportFileResult = {
+  task: string;
+};
+
+/** How a FilesystemExporter puts the files at its path: copy them, hardlink them or symlink them. */
+export type PulpFilesystemExportMethod = "write" | "hardlink" | "symlink";
+
+/**
+ * Row from GET /exporters/core/filesystem/. `path` is a directory on the Pulp host, checked against
+ * that server's ALLOWED_EXPORT_PATHS setting like a PulpExporter's. Nothing imports what it writes.
+ */
+export type PulpFilesystemExporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  path: string;
+  method: PulpFilesystemExportMethod;
+};
+
+/**
+ * Row from GET {filesystem_exporter_href}exports/. There is no file manifest: the files sit at the
+ * exporter's `path` on the Pulp host. `params` holds the bare uuid (not the href) of what was
+ * exported, under `publication` or `repository_version`; `exported_resources` holds the hrefs.
+ */
+export type PulpFilesystemExport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  exported_resources: string[];
+  params: Record<string, unknown>;
+};
+
+/**
+ * Row from GET /importers/core/pulp/. `repo_mapping` maps a repository name inside an export to a
+ * repository name on this Pulp.
+ */
+export type PulpImporter = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  name: string;
+  repo_mapping: Record<string, string>;
+};
+
+/** Row from GET {importer_href}imports/. `params` holds the `path` or `toc` the import was run with. */
+export type PulpImport = {
+  pulp_href: string;
+  prn: string;
+  pulp_created: string;
+  pulp_last_updated: string;
+  task: string | null;
+  params: Record<string, unknown>;
+};
+
+/**
+ * What POST .../imports answers: the dispatched task group's href only. An import spawns one task
+ * per repository, so this is not the single `task` the other dispatch routes return, and it is not
+ * awaited: the caller links to /task-groups/detail?pulp_href=... instead.
+ */
+export type RunPulpImportResult = {
+  task_group: string;
+};
+
+/** One field of an import-check answer. `is_valid: false` is a normal answer, not an error. */
+export type PulpImportEvaluation = {
+  context: string;
+  is_valid: boolean;
+  messages: string[];
+};
+
+/** POST /importers/core/pulp/import-check/ answer: only the fields that were sent come back. */
+export type PulpImportCheckResult = {
+  path?: PulpImportEvaluation;
+  toc?: PulpImportEvaluation;
+  repo_mapping?: PulpImportEvaluation;
+};
+
 /** Row from GET /publications/, the generic cross-plugin publication list. No PATCH; DELETE is synchronous. */
 export type PulpPublication = {
   pulp_href: string;
@@ -760,6 +915,71 @@ export type UpdatePulpContentGuardPayload = {
   jq_filter?: string | null;
   ca_certificate?: string;
   guards?: string[];
+};
+
+export type CreatePulpExporterPayload = {
+  name: string;
+  path: string;
+  repositories: string[];
+};
+
+export type UpdatePulpExporterPayload = {
+  name?: string;
+  path?: string;
+  repositories?: string[];
+};
+
+/** POST .../exports body; every field is optional. `chunk_size` takes units of B/KB/MB/GB/TB (e.g. "500MB"). */
+export type RunPulpExportPayload = {
+  full?: boolean;
+  dry_run?: boolean;
+  chunk_size?: string;
+  versions?: string[];
+  start_versions?: string[];
+  meta?: Record<string, unknown>;
+};
+
+export type CreatePulpFilesystemExporterPayload = {
+  name: string;
+  path: string;
+  method?: PulpFilesystemExportMethod;
+};
+
+export type UpdatePulpFilesystemExporterPayload = {
+  name?: string;
+  path?: string;
+  method?: PulpFilesystemExportMethod;
+};
+
+/** POST .../exports body; Pulp wants exactly one of `publication` and `repository_version`. */
+export type RunPulpFilesystemExportPayload = {
+  publication?: string;
+  repository_version?: string;
+  start_repository_version?: string;
+};
+
+export type CreatePulpImporterPayload = {
+  name: string;
+  repo_mapping?: Record<string, string>;
+};
+
+export type UpdatePulpImporterPayload = {
+  name?: string;
+  repo_mapping?: Record<string, string>;
+};
+
+/** POST .../imports body; at least one of `path` (an export archive) and `toc` (its table of contents) is required. */
+export type RunPulpImportPayload = {
+  path?: string;
+  toc?: string;
+  create_repositories?: boolean;
+};
+
+/** POST import-check body; `repo_mapping` is an object here and the route JSON-encodes it for Pulp. */
+export type PulpImportCheckPayload = {
+  path?: string;
+  toc?: string;
+  repo_mapping?: Record<string, string>;
 };
 
 export type CreatePulpUserPayload = {

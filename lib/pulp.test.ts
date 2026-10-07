@@ -35,6 +35,25 @@ describe("pulpErrorDetailFromBody", () => {
     expect(pulpErrorDetailFromBody({ detail: [] })).toBeNull();
   });
 
+  it("joins a bare top-level list of messages without an index prefix", () => {
+    expect(
+      pulpErrorDetailFromBody([
+        "Failed to find repositories from repo_mapping: names: ['aa-probe-dst']",
+      ])
+    ).toBe("Failed to find repositories from repo_mapping: names: ['aa-probe-dst']");
+    expect(pulpErrorDetailFromBody(["Error one.", "Error two."])).toBe("Error one. Error two.");
+  });
+
+  it("caps a bare top-level list at 500 characters", () => {
+    const result = pulpErrorDetailFromBody(["a".repeat(400), "b".repeat(400)]);
+    expect((result as string).length).toBe(500);
+  });
+
+  it("returns null for an empty bare top-level list", () => {
+    expect(pulpErrorDetailFromBody([])).toBeNull();
+    expect(pulpErrorDetailFromBody(["", "  "])).toBeNull();
+  });
+
   it("reports field-keyed errors", () => {
     expect(pulpErrorDetailFromBody({ name: ["This field is required."] })).toBe(
       "name: This field is required."

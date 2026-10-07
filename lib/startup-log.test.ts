@@ -11,6 +11,8 @@ beforeEach(() => {
   vi.stubEnv("PULP_PROJECT_NAME", "Test Project");
   vi.stubEnv("PULP_SESSION_SECRET", "recognizable-secret-value-123");
   vi.stubEnv("PULP_CONTENT_ORIGIN", undefined);
+  vi.stubEnv("PULP_EXPORT_HTTP_BASE_URL", undefined);
+  vi.stubEnv("PULP_EXPORT_HTTP_PATH_PREFIX", undefined);
   vi.stubEnv("PULP_PLUGIN_DIR", undefined);
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     lines.push(String(chunk));
@@ -26,6 +28,8 @@ afterEach(() => {
 describe("logStartupConfig", () => {
   it("writes one info line with the configuration", () => {
     vi.stubEnv("PULP_CONTENT_ORIGIN", "https://content.example.test/ignored");
+    vi.stubEnv("PULP_EXPORT_HTTP_BASE_URL", "http://files.example.test:8099/");
+    vi.stubEnv("PULP_EXPORT_HTTP_PATH_PREFIX", " /var/lib/pulp/exports ");
     vi.stubEnv("PULP_PLUGIN_DIR", " /etc/pulp-plugins ");
 
     logStartupConfig();
@@ -39,6 +43,8 @@ describe("logStartupConfig", () => {
       session_secret_set: true,
       log_level: "info",
       content_origin: "https://content.example.test",
+      export_http_base_url: "http://files.example.test:8099",
+      export_http_path_prefix: "/var/lib/pulp/exports",
       plugin_dir: "/etc/pulp-plugins",
       dashboard_cache: expect.stringMatching(/\.next[\\/]cache$/),
       dashboard_cache_writable: expect.any(Boolean),
@@ -57,6 +63,8 @@ describe("logStartupConfig", () => {
       project_name: null,
       session_secret_set: false,
       content_origin: null,
+      export_http_base_url: null,
+      export_http_path_prefix: null,
       plugin_dir: null,
     });
   });

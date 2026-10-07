@@ -17,6 +17,18 @@ export function pulpErrorDetailFromBody(body: unknown): string | null {
     return null;
   }
 
+  // A bare top-level list of messages, e.g. Pulp's 400 for an importer whose repo_mapping names a
+  // repository that does not exist. Left to the field loop below it would come out as "0: <message>".
+  if (Array.isArray(body)) {
+    const joined = body
+      .map((x) => (typeof x === "string" ? x.trim() : JSON.stringify(x)))
+      .filter((m) => m.length > 0)
+      .join(" ");
+    if (joined.length > 0) {
+      return joined.slice(0, 500);
+    }
+  }
+
   const o = body as Record<string, unknown>;
   const detail = o.detail;
 
