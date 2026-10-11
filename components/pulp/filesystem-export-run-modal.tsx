@@ -21,7 +21,7 @@ export type FilesystemExportRunModalProps = {
 };
 
 export function FilesystemExportRunModal({ exporter, onClose }: FilesystemExportRunModalProps) {
-  const { repositoryOptions } = usePulpRepositoryOptions(true);
+  const { repositoryOptions, isLoading: repositoryOptionsLoading } = usePulpRepositoryOptions(true);
   const { publicationOptions } = usePulpPublicationOptions(true);
   const [modalError, setModalError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -187,7 +187,9 @@ export function FilesystemExportRunModal({ exporter, onClose }: FilesystemExport
                   disabled={isRunning}
                   className={selectClassName}
                 >
-                  <option value="">Select a repository</option>
+                  <option value="">
+                    {repositoryOptionsLoading ? "Loading repositories…" : "Select a repository"}
+                  </option>
                   {repositoryOptions.map((option) => (
                     <option
                       key={option.href}

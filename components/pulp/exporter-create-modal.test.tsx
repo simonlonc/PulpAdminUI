@@ -59,6 +59,32 @@ describe("ExporterCreateModal", () => {
     expect(screen.getByRole("option", { name: "beta (RPM)" })).toBeTruthy();
   });
 
+  it("says the repositories are loading rather than showing an empty list", () => {
+    render(
+      <ExporterCreateModal
+        repositoryOptions={[]}
+        repositoryOptionsLoading
+        onClose={onClose}
+        onCreated={onCreated}
+      />
+    );
+
+    expect(screen.getByText("Loading repositories…")).toBeTruthy();
+  });
+
+  it("says there are no repositories once loaded empty, and still allows creating", () => {
+    render(<ExporterCreateModal repositoryOptions={[]} onClose={onClose} onCreated={onCreated} />);
+
+    expect(screen.getByText(/There are no repositories yet/)).toBeTruthy();
+    expect(screen.queryByText("Loading repositories…")).toBeNull();
+  });
+
+  it("shows the multi-select hint once repositories are listed", () => {
+    renderModal();
+
+    expect(screen.getByText(/Hold Ctrl or Cmd to select several/)).toBeTruthy();
+  });
+
   it("shows Pulp's error text as returned when create fails, and stays open", async () => {
     createMock.mockResolvedValue({
       ok: false,

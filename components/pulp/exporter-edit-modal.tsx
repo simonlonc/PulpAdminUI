@@ -14,6 +14,7 @@ function sameSet(a: string[], b: string[]): boolean {
 export type ExporterEditModalProps = {
   exporter: PulpExporter;
   repositoryOptions: PulpRepositoryOption[];
+  repositoryOptionsLoading?: boolean;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -21,6 +22,7 @@ export type ExporterEditModalProps = {
 export function ExporterEditModal({
   exporter,
   repositoryOptions,
+  repositoryOptionsLoading = false,
   onClose,
   onSaved,
 }: ExporterEditModalProps) {
@@ -139,6 +141,7 @@ export function ExporterEditModal({
             repositories={repositories}
             onRepositoriesChange={setRepositories}
             repositoryOptions={repositoryOptions}
+            repositoryOptionsLoading={repositoryOptionsLoading}
             keepListed={exporter.repositories}
             disabled={isSaving}
           />
