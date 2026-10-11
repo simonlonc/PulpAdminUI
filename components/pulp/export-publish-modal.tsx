@@ -34,10 +34,16 @@ type PublishOutcome = { path: string; basename: string; task: string | null; err
 export type ExportPublishModalProps = {
   exportRow: PulpExport;
   repositoryOptions: PulpRepositoryOption[];
+  repositoryOptionsLoading?: boolean;
   onClose: () => void;
 };
 
-export function ExportPublishModal({ exportRow, repositoryOptions, onClose }: ExportPublishModalProps) {
+export function ExportPublishModal({
+  exportRow,
+  repositoryOptions,
+  repositoryOptionsLoading = false,
+  onClose,
+}: ExportPublishModalProps) {
   const [modalError, setModalError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -267,7 +273,9 @@ export function ExportPublishModal({ exportRow, repositoryOptions, onClose }: Ex
               </select>
               {fileRepositories.length === 0 ? (
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  There are no File repositories yet. Create one on the Repositories page first.
+                  {repositoryOptionsLoading
+                    ? "Loading repositories…"
+                    : "There are no File repositories yet. Create one on the Repositories page first."}
                 </span>
               ) : null}
             </FormField>

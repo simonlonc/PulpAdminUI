@@ -37,7 +37,8 @@ function ExporterExportsInner() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
-  const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
+  const { repositoryOptions, isLoading: repositoryOptionsLoading } =
+    usePulpRepositoryOptions(hasSession);
 
   const [exporter, setExporter] = useState<PulpExporter | null>(null);
   const [count, setCount] = useState(0);
@@ -304,6 +305,7 @@ function ExporterExportsInner() {
         <ExporterEditModal
           exporter={exporter}
           repositoryOptions={repositoryOptions}
+          repositoryOptionsLoading={repositoryOptionsLoading}
           onClose={() => setIsEditOpen(false)}
           onSaved={() => {
             setIsEditOpen(false);
@@ -328,6 +330,7 @@ function ExporterExportsInner() {
         <ExportPublishModal
           exportRow={publishTarget}
           repositoryOptions={repositoryOptions}
+          repositoryOptionsLoading={repositoryOptionsLoading}
           onClose={() => setPublishTarget(null)}
         />
       ) : null}

@@ -136,6 +136,21 @@ describe("ExportPublishModal", () => {
     expect(within(repositorySelect()).getAllByRole("option")).toHaveLength(1);
   });
 
+  it("says the repositories are loading instead of claiming there are none", async () => {
+    render(
+      <ExportPublishModal
+        exportRow={exportRow}
+        repositoryOptions={[]}
+        repositoryOptionsLoading
+        onClose={onClose}
+      />
+    );
+    await screen.findByRole("list", { name: "Files to publish" });
+
+    expect(screen.getByText("Loading repositories…")).toBeTruthy();
+    expect(screen.queryByText(/There are no File repositories yet/)).toBeNull();
+  });
+
   it("dispatches one publishFile per checked file, in order and one at a time, with the edited url", async () => {
     const resolvers: ((value: unknown) => void)[] = [];
     publishFileMock.mockImplementation(

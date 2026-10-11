@@ -8,12 +8,14 @@ import { pulpExportService } from "@/services/pulp/export-service";
 
 export type ExporterCreateModalProps = {
   repositoryOptions: PulpRepositoryOption[];
+  repositoryOptionsLoading?: boolean;
   onClose: () => void;
   onCreated: () => void;
 };
 
 export function ExporterCreateModal({
   repositoryOptions,
+  repositoryOptionsLoading = false,
   onClose,
   onCreated,
 }: ExporterCreateModalProps) {
@@ -118,6 +120,7 @@ export function ExporterCreateModal({
             repositories={repositories}
             onRepositoriesChange={setRepositories}
             repositoryOptions={repositoryOptions}
+            repositoryOptionsLoading={repositoryOptionsLoading}
             disabled={isSaving}
           />
         </div>

@@ -16,6 +16,8 @@ export type ExporterFieldsProps = {
   repositories: string[];
   onRepositoriesChange: (value: string[]) => void;
   repositoryOptions: PulpRepositoryOption[];
+  /** True until the repository options have loaded, so an empty list is not read as "none". */
+  repositoryOptionsLoading?: boolean;
   /**
    * Hrefs to keep listed even when `repositoryOptions` has no entry for them (not loaded yet, or
    * past the options' page size), so editing never silently drops a repository the exporter holds.
@@ -33,12 +35,14 @@ export function ExporterFields({
   repositories,
   onRepositoriesChange,
   repositoryOptions,
+  repositoryOptionsLoading = false,
   keepListed = [],
   disabled,
 }: ExporterFieldsProps) {
   const unlisted = keepListed.filter(
     (href) => !repositoryOptions.some((repository) => repository.href === href)
   );
+  const isEmpty = repositoryOptions.length === 0 && unlisted.length === 0;
 
   return (
     <>
@@ -83,7 +87,11 @@ export function ExporterFields({
           ))}
         </select>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          Hold Ctrl or Cmd to select several. May be left empty.
+          {repositoryOptionsLoading && isEmpty
+            ? "Loading repositories…"
+            : isEmpty
+              ? "There are no repositories yet. The exporter can be created without any and edited later."
+              : "Hold Ctrl or Cmd to select several. May be left empty."}
         </span>
       </FormField>
     </>

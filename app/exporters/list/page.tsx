@@ -36,7 +36,8 @@ function ExportersListPageContent() {
     hasSession,
     params
   );
-  const { repositoryOptions } = usePulpRepositoryOptions(hasSession);
+  const { repositoryOptions, isLoading: repositoryOptionsLoading } =
+    usePulpRepositoryOptions(hasSession);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PulpExporter | null>(null);
   const [runTarget, setRunTarget] = useState<PulpExporter | null>(null);
@@ -198,6 +199,7 @@ function ExportersListPageContent() {
       {isCreateOpen ? (
         <ExporterCreateModal
           repositoryOptions={repositoryOptions}
+          repositoryOptionsLoading={repositoryOptionsLoading}
           onClose={() => setIsCreateOpen(false)}
           onCreated={() => {
             setIsCreateOpen(false);
@@ -210,6 +212,7 @@ function ExportersListPageContent() {
         <ExporterEditModal
           exporter={editTarget}
           repositoryOptions={repositoryOptions}
+          repositoryOptionsLoading={repositoryOptionsLoading}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
             setEditTarget(null);

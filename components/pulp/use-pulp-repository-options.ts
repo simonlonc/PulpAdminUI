@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
+import type { PulpRepository } from "@/services/pulp/types";
 
 export type PulpRepositoryOption = {
   href: string;
@@ -14,53 +15,37 @@ export type PulpRepositoryOption = {
 };
 
 /**
- * Flat, name-sorted list of repositories across every plugin kind in
- * PULP_PLUGINS, for filter dropdowns on pages that span plugin families
- * (e.g. distributions, whose `repository` field may point at any kind).
- * One kind failing to load does not lose the options from the others.
+ * Flat, name-sorted list of repositories across every plugin kind, for pickers and filter
+ * dropdowns on pages that span plugin families (e.g. distributions, whose `repository` field may
+ * point at any kind). Loads once from Pulp's generic repository list and takes each row's kind
+ * from its href, so the plugin registry arriving later re-maps the rows without refetching.
+ * Rows of a kind the registry does not know are left out. `isLoading` is true until the first
+ * load settles, so callers can tell "still loading" from "there are none".
  */
 export function usePulpRepositoryOptions(enabled: boolean) {
   const { setError } = usePulpAuthContext();
-  const { plugins } = usePulpPluginsContext();
-  const [repositoryOptions, setRepositoryOptions] = useState<PulpRepositoryOption[]>([]);
+  const { findPluginForRepositoryHref } = usePulpPluginsContext();
+  // null while loading.
+  const [repositories, setRepositories] = useState<PulpRepository[] | null>(null);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
       if (!enabled) {
-        setRepositoryOptions([]);
+        setRepositories([]);
         return;
       }
 
-      const settled = await Promise.allSettled(
-        plugins.map((plugin) => pulpRepositoryManagementService.list(plugin.kind))
-      );
-      if (!active) return;
-
-      const nextOptions: PulpRepositoryOption[] = [];
-      settled.forEach((result, index) => {
-        const plugin = plugins[index];
-        if (result.status === "fulfilled") {
-          for (const repo of result.value.results) {
-            nextOptions.push({
-              href: repo.pulp_href,
-              name: repo.name,
-              kind: plugin.kind,
-              latestVersionHref: repo.latest_version_href,
-            });
-          }
-        } else {
-          setError(
-            result.reason instanceof Error
-              ? result.reason.message
-              : `Failed to load ${plugin.label} repositories.`
-          );
-        }
-      });
-
-      nextOptions.sort((a, b) => a.name.localeCompare(b.name));
-      setRepositoryOptions(nextOptions);
+      setRepositories(null);
+      try {
+        const nextRepositories = await pulpRepositoryManagementService.listAll();
+        if (active) setRepositories(nextRepositories);
+      } catch (error) {
+        if (!active) return;
+        setError(error instanceof Error ? error.message : "Failed to load repositories.");
+        setRepositories([]);
+      }
     }
 
     void load();
@@ -68,7 +53,23 @@ export function usePulpRepositoryOptions(enabled: boolean) {
     return () => {
       active = false;
     };
-  }, [enabled, setError, plugins]);
+  }, [enabled, setError]);
 
-  return { repositoryOptions };
+  const repositoryOptions = useMemo(() => {
+    const nextOptions: PulpRepositoryOption[] = [];
+    for (const repo of repositories ?? []) {
+      const plugin = findPluginForRepositoryHref(repo.pulp_href);
+      if (!plugin) continue;
+      nextOptions.push({
+        href: repo.pulp_href,
+        name: repo.name,
+        kind: plugin.kind,
+        latestVersionHref: repo.latest_version_href,
+      });
+    }
+    nextOptions.sort((a, b) => a.name.localeCompare(b.name));
+    return nextOptions;
+  }, [repositories, findPluginForRepositoryHref]);
+
+  return { repositoryOptions, isLoading: enabled && repositories === null };
 }
