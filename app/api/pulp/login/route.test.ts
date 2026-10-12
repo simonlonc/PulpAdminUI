@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { encodePulpAuth } from "@/lib/pulp";
 
 const { cookieState, setCookieMock } = vi.hoisted(() => ({
   cookieState: {} as Record<string, { value: string; options: Record<string, unknown> }>,
@@ -18,7 +19,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { POST } from "@/app/api/pulp/login/route";
+import { GET, POST } from "@/app/api/pulp/login/route";
 
 describe("login route", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -147,5 +148,43 @@ describe("login route", () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       "http://pulp.test/pulp/api/v3/users/?username=a%20b%2Fc"
     );
+  });
+
+  describe("GET /api/pulp/login", () => {
+    it("responds 200 with username when given a valid cookie and never calls fetch", async () => {
+      const encodedAuth = encodePulpAuth({ username: "admin", password: "adminpass" });
+      cookieState["pulp_auth"] = {
+        value: encodedAuth,
+        options: {},
+      };
+
+      const response = await GET();
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ username: "admin" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("responds 401 with 'Not authenticated.' when no cookie is present", async () => {
+      const response = await GET();
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ detail: "Not authenticated." });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("responds 401 with 'Invalid session.' when cookie is corrupted and deletes the cookie", async () => {
+      cookieState["pulp_auth"] = {
+        value: "not-a-valid-encoded-session",
+        options: {},
+      };
+
+      const response = await GET();
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ detail: "Invalid session." });
+      expect(cookieState["pulp_auth"]).toBeUndefined();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

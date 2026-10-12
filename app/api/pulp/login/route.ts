@@ -85,11 +85,5 @@ export async function GET() {
     return Response.json({ detail: "Invalid session." }, { status: 401 });
   }
 
-  const result = await pulpFetch("/users/?limit=1", auth);
-  if (!result.ok) {
-    cookieStore.delete(PULP_AUTH_COOKIE);
-    return Response.json({ detail: "Session expired." }, { status: 401 });
-  }
-
   return Response.json({ username: auth.username });
 }
