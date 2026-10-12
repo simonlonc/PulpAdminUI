@@ -28,7 +28,7 @@ export async function requirePulpAuth(): Promise<
 
 /**
  * Thrown by a `withPulpAuth` handler to report a failed upstream Pulp call. `withPulpAuth`
- * catches it, clears the auth cookie on a 401/403, and turns it into the same
+ * catches it, clears the auth cookie on a 401, and turns it into the same
  * `{ detail }` JSON response every route already returned by hand for a `pulpFetch` failure.
  * Any other thrown error passes through `withPulpAuth` unchanged.
  */
@@ -133,9 +133,9 @@ export function decodeRefOrNull(encodedRef: string): string | null {
 /**
  * Wraps a route handler with the `requirePulpAuth` preamble every Pulp API route repeats: run
  * the auth check, hand the decoded `auth` to the handler, and if it throws a `PulpApiError`,
- * clear the auth cookie on a 401/403 and return the standard `{ detail }` JSON response. The
- * dynamic-segment `context` argument (`{ params: Promise<...> }`) is passed through untouched
- * so wrapped handlers can destructure it exactly as they did before.
+ * clear the auth cookie on a 401 only (a 403 keeps the session) and return the standard
+ * `{ detail }` JSON response. The dynamic-segment `context` argument (`{ params: Promise<...> }`)
+ * is passed through untouched so wrapped handlers can destructure it exactly as they did before.
  *
  * Every failure that gets past the auth check is logged here, once: a `PulpApiError` at `warn`
  * (an expected failure such as a 404 or 403) and anything else at `error` with its stack before
@@ -168,7 +168,7 @@ export function withPulpAuth<Context = unknown>(
 
       logWarn("pulp_route_failed", { route, status: error.status, detail: error.detail });
 
-      if (error.status === 401 || error.status === 403) {
+      if (error.status === 401) {
         const cookieStore = await cookies();
         cookieStore.delete(PULP_AUTH_COOKIE);
       }

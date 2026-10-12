@@ -116,14 +116,14 @@ describe("GET /api/pulp/repositories/[kind]", () => {
     expect(await response.json()).toEqual({ detail: "name: Invalid filter." });
   });
 
-  it("deletes the auth cookie when the list endpoint returns 403", async () => {
+  it("keeps the auth cookie when the list endpoint returns 403", async () => {
     fetchMock = fetchImpl(() => new Response(JSON.stringify({ detail: "Forbidden." }), { status: 403 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await GET(new Request("http://pulp.test/api/pulp/repositories/rpm"), paramsFor("rpm"));
 
     expect(response.status).toBe(403);
-    expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
+    expect(deleteCookieMock).not.toHaveBeenCalled();
   });
 });
 

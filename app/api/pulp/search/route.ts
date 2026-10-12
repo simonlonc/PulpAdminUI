@@ -53,7 +53,7 @@ export const GET = withPulpAuth(async (request, auth) => {
       continue;
     }
     const result = outcome.value;
-    if (!result.ok && (result.status === 401 || result.status === 403)) {
+    if (!result.ok && result.status === 401) {
       throw new PulpApiError(result.status, result.detail);
     }
   }
