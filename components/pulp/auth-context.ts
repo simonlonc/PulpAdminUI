@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { pulpAuthService } from "@/services/pulp/auth-service";
+import { SESSION_LOST_EVENT } from "@/services/pulp/http";
 
 type PulpAuthContextValue = {
   sessionUser: string | null;
@@ -46,6 +47,18 @@ export function PulpAuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleSessionLost() {
+      setSessionUser(null);
+    }
+
+    window.addEventListener(SESSION_LOST_EVENT, handleSessionLost);
+
+    return () => {
+      window.removeEventListener(SESSION_LOST_EVENT, handleSessionLost);
     };
   }, []);
 

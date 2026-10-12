@@ -29,7 +29,7 @@ export const pulpAuthService = {
     if (!response.ok) {
       return {
         ok: false,
-        detail: await readApiDetail(response),
+        detail: await readApiDetail(response, { signalSessionLost: false }),
       };
     }
 
