@@ -10,6 +10,14 @@ import { PulpApiError, readJsonBody } from "../_helpers";
 
 type PulpUserCountResponse = { count: number };
 
+function isCookieSecure(): boolean {
+  const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "false" || override === "0") {
+    return false;
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 export async function POST(request: Request) {
   let payload: Partial<PulpAuth>;
 
@@ -63,7 +71,7 @@ export async function POST(request: Request) {
   cookieStore.set(PULP_AUTH_COOKIE, encodedAuth, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: isCookieSecure(),
     path: "/",
     maxAge: 60 * 60 * 8,
   });

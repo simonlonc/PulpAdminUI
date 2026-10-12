@@ -75,7 +75,17 @@ export function PulpAuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    setSessionUser(result.username);
+    // Confirm the browser kept the cookie; a Secure cookie set over plain HTTP is silently dropped.
+    const confirmedUser = await pulpAuthService.getSessionUser();
+    if (!confirmedUser) {
+      setError(
+        "The browser refused the session cookie because this page is served over plain HTTP. Serve the app over HTTPS, or set PULP_COOKIE_SECURE=false on the server for a trusted network."
+      );
+      setIsLoading(false);
+      return false;
+    }
+
+    setSessionUser(confirmedUser);
     setIsLoading(false);
     return true;
   }

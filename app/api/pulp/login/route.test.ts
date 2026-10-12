@@ -187,4 +187,41 @@ describe("login route", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
+
+  describe("cookie secure flag", () => {
+    async function loginAndGetCookieOptions() {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ count: 1 }), { status: 200 })
+      );
+      const request = new Request("http://pulp.test/api/pulp/login", {
+        method: "POST",
+        body: JSON.stringify({ username: "admin", password: "adminpass" }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      return setCookieMock.mock.calls[0][2] as Record<string, unknown>;
+    }
+
+    it("is secure in production by default", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+
+      expect((await loginAndGetCookieOptions()).secure).toBe(true);
+    });
+
+    it.each(["false", "FALSE", "0"])(
+      "is not secure in production when PULP_COOKIE_SECURE=%s",
+      async (value) => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("PULP_COOKIE_SECURE", value);
+
+        expect((await loginAndGetCookieOptions()).secure).toBe(false);
+      }
+    );
+
+    it("is not secure outside production", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+
+      expect((await loginAndGetCookieOptions()).secure).toBe(false);
+    });
+  });
 });
