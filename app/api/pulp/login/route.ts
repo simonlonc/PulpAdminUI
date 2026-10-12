@@ -10,6 +10,14 @@ import { PulpApiError, readJsonBody } from "../_helpers";
 
 type PulpUserCountResponse = { count: number };
 
+function isCookieSecure(): boolean {
+  const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "false" || override === "0") {
+    return false;
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 export async function POST(request: Request) {
   let payload: Partial<PulpAuth>;
 
@@ -63,7 +71,7 @@ export async function POST(request: Request) {
   cookieStore.set(PULP_AUTH_COOKIE, encodedAuth, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: isCookieSecure(),
     path: "/",
     maxAge: 60 * 60 * 8,
   });
@@ -83,12 +91,6 @@ export async function GET() {
   if (!auth) {
     cookieStore.delete(PULP_AUTH_COOKIE);
     return Response.json({ detail: "Invalid session." }, { status: 401 });
-  }
-
-  const result = await pulpFetch("/users/?limit=1", auth);
-  if (!result.ok) {
-    cookieStore.delete(PULP_AUTH_COOKIE);
-    return Response.json({ detail: "Session expired." }, { status: 401 });
   }
 
   return Response.json({ username: auth.username });

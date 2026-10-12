@@ -51,7 +51,7 @@ export function AdminShell({
                     {hasSession ? (
                       <>
                         <p className="font-medium">{sessionUser}</p>
-                        <p className="text-zinc-600 dark:text-zinc-400">Connected to Pulp server</p>
+                        <p className="text-zinc-600 dark:text-zinc-400">Signed in</p>
                       </>
                     ) : (
                       <p className="text-zinc-600 dark:text-zinc-400">Authentication required</p>

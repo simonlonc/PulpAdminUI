@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { pulpAuthService } from "@/services/pulp/auth-service";
+import { SESSION_LOST_EVENT } from "@/services/pulp/http";
 
 type PulpAuthContextValue = {
   sessionUser: string | null;
@@ -49,6 +50,18 @@ export function PulpAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    function handleSessionLost() {
+      setSessionUser(null);
+    }
+
+    window.addEventListener(SESSION_LOST_EVENT, handleSessionLost);
+
+    return () => {
+      window.removeEventListener(SESSION_LOST_EVENT, handleSessionLost);
+    };
+  }, []);
+
   const hasSession = useMemo(() => sessionUser !== null, [sessionUser]);
 
   async function login(username: string, password: string): Promise<boolean> {
@@ -62,7 +75,17 @@ export function PulpAuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    setSessionUser(result.username);
+    // Confirm the browser kept the cookie; a Secure cookie set over plain HTTP is silently dropped.
+    const confirmedUser = await pulpAuthService.getSessionUser();
+    if (!confirmedUser) {
+      setError(
+        "The browser refused the session cookie because this page is served over plain HTTP. Serve the app over HTTPS, or set PULP_COOKIE_SECURE=false on the server for a trusted network."
+      );
+      setIsLoading(false);
+      return false;
+    }
+
+    setSessionUser(confirmedUser);
     setIsLoading(false);
     return true;
   }

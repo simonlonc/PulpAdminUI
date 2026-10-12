@@ -4,7 +4,8 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { AlertCircle, KeyRound, Loader2, UserRound } from "lucide-react";
-import { pulpAuthService } from "@/services/pulp/auth-service";
+import { usePulpAuthContext } from "@/components/pulp/auth-context";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -15,41 +16,23 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { sessionUser, isLoading, isCheckingSession, error, login } = usePulpAuthContext();
 
-  const nextPath = searchParams.get("next") || "/dashboard";
+  const nextPath = safeNextPath(searchParams.get("next"));
 
   useEffect(() => {
-    let active = true;
-
-    async function check() {
-      const sessionUser = await pulpAuthService.getSessionUser();
-      if (active && sessionUser) {
-        router.replace(nextPath);
-      }
+    if (!isCheckingSession && sessionUser) {
+      router.replace(nextPath);
     }
-
-    void check();
-
-    return () => {
-      active = false;
-    };
-  }, [nextPath, router]);
+  }, [isCheckingSession, sessionUser, nextPath, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setIsLoading(true);
 
-    const result = await pulpAuthService.login(username, password);
-    if (!result.ok) {
-      setError(result.detail);
-      setIsLoading(false);
-      return;
+    const ok = await login(username, password);
+    if (ok) {
+      router.replace(nextPath);
     }
-
-    router.replace(nextPath);
   }
 
   return (

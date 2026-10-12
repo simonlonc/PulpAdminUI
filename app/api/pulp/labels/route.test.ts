@@ -121,7 +121,7 @@ describe("labels route", () => {
     expect(await response.json()).toEqual({ detail: "key: This field is required." });
   });
 
-  it("deletes the auth cookie when the upstream call returns 403", async () => {
+  it("keeps the auth cookie when the upstream call returns 403", async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Forbidden." }), { status: 403 }));
     const request = new Request("http://pulp.test/api/pulp/labels", {
       method: "POST",
@@ -131,7 +131,7 @@ describe("labels route", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(403);
-    expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
+    expect(deleteCookieMock).not.toHaveBeenCalled();
   });
 
   // normalizePulpHrefToApiPath (app/api/pulp/repositories/_server.ts) resolves parent-directory

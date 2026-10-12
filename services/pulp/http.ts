@@ -1,6 +1,19 @@
 import { pulpErrorDetailFromBody } from "@/lib/pulp";
 
-export async function readApiDetail(response: Response): Promise<string> {
+export const SESSION_LOST_EVENT = "pulp:session-lost";
+
+export async function readApiDetail(
+  response: Response,
+  options: { signalSessionLost?: boolean } = {}
+): Promise<string> {
+  if (
+    response.status === 401 &&
+    options.signalSessionLost !== false &&
+    typeof window !== "undefined"
+  ) {
+    window.dispatchEvent(new Event(SESSION_LOST_EVENT));
+  }
+
   try {
     const body = (await response.json()) as unknown;
     const formatted = pulpErrorDetailFromBody(body);

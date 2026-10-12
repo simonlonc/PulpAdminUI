@@ -67,4 +67,46 @@ describe("GET /api/pulp/search response-shape guard (F-16)", () => {
       expect(group.error.length).toBeGreaterThan(0);
     }
   });
+
+  it("turns a 403 from one family into that family's error while the others still return results", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes("/remotes/")) {
+          return new Response(JSON.stringify({ detail: "Forbidden." }), { status: 403 });
+        }
+        return new Response(JSON.stringify({ count: 0, results: [] }), { status: 200 });
+      })
+    );
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const remote = body.groups.find((group: { family: string }) => group.family === "remote");
+    expect(remote).toEqual({ family: "remote", count: 0, results: [], error: "Forbidden." });
+    for (const group of body.groups.filter((g: { family: string }) => g.family !== "remote")) {
+      expect(group.error).toBeNull();
+    }
+    expect(deleteCookieMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes the auth cookie when a family returns 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.includes("/remotes/")) {
+          return new Response(JSON.stringify({ detail: "Not authenticated." }), { status: 401 });
+        }
+        return new Response(JSON.stringify({ count: 0, results: [] }), { status: 200 });
+      })
+    );
+
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+
+    expect(response.status).toBe(401);
+    expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
+  });
 });

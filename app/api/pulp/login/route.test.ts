@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { encodePulpAuth } from "@/lib/pulp";
 
 const { cookieState, setCookieMock } = vi.hoisted(() => ({
   cookieState: {} as Record<string, { value: string; options: Record<string, unknown> }>,
@@ -18,7 +19,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { POST } from "@/app/api/pulp/login/route";
+import { GET, POST } from "@/app/api/pulp/login/route";
 
 describe("login route", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -147,5 +148,80 @@ describe("login route", () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       "http://pulp.test/pulp/api/v3/users/?username=a%20b%2Fc"
     );
+  });
+
+  describe("GET /api/pulp/login", () => {
+    it("responds 200 with username when given a valid cookie and never calls fetch", async () => {
+      const encodedAuth = encodePulpAuth({ username: "admin", password: "adminpass" });
+      cookieState["pulp_auth"] = {
+        value: encodedAuth,
+        options: {},
+      };
+
+      const response = await GET();
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ username: "admin" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("responds 401 with 'Not authenticated.' when no cookie is present", async () => {
+      const response = await GET();
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ detail: "Not authenticated." });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("responds 401 with 'Invalid session.' when cookie is corrupted and deletes the cookie", async () => {
+      cookieState["pulp_auth"] = {
+        value: "not-a-valid-encoded-session",
+        options: {},
+      };
+
+      const response = await GET();
+
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ detail: "Invalid session." });
+      expect(cookieState["pulp_auth"]).toBeUndefined();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("cookie secure flag", () => {
+    async function loginAndGetCookieOptions() {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ count: 1 }), { status: 200 })
+      );
+      const request = new Request("http://pulp.test/api/pulp/login", {
+        method: "POST",
+        body: JSON.stringify({ username: "admin", password: "adminpass" }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      return setCookieMock.mock.calls[0][2] as Record<string, unknown>;
+    }
+
+    it("is secure in production by default", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+
+      expect((await loginAndGetCookieOptions()).secure).toBe(true);
+    });
+
+    it.each(["false", "FALSE", "0"])(
+      "is not secure in production when PULP_COOKIE_SECURE=%s",
+      async (value) => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("PULP_COOKIE_SECURE", value);
+
+        expect((await loginAndGetCookieOptions()).secure).toBe(false);
+      }
+    );
+
+    it("is not secure outside production", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+
+      expect((await loginAndGetCookieOptions()).secure).toBe(false);
+    });
   });
 });
