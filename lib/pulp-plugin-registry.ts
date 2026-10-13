@@ -19,9 +19,14 @@ import { derivePulpPlugins } from "@/lib/pulp-plugin-derive";
 import { isCompleteDescriptor, loadPulpPluginOverlay } from "@/lib/pulp-plugin-overlay";
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+// How long a failed refresh, or the compiled-in fallback when no registry was ever loaded, is
+// trusted before the spec is fetched again.
+const FAILURE_RETRY_MS = 60 * 1000;
 
 let cachedRegistry: readonly PulpPluginDescriptor[] | null = null;
 let cachedAt = 0;
+let fallbackRegistry: readonly PulpPluginDescriptor[] | null = null;
+let fallbackAt = 0;
 let inFlight: Promise<readonly PulpPluginDescriptor[]> | null = null;
 
 /**
@@ -132,11 +137,29 @@ function buildRegistryFromSpec(
 }
 
 /**
- * Fetches the server's OpenAPI document and builds the registry from it. Falls back to the
- * curated PULP_PLUGINS -- uncached, logged once -- on a non-ok response, a spec that derives zero
- * families (parse failures included, see buildRegistryFromSpec), or a fetch that throws outright.
- * The deployment's overlay is applied on every path, so it still corrects the fallback registry
- * when the server's document is unreachable.
+ * What a failed build returns. With a good registry already cached it is kept, and cachedAt is set
+ * so it expires FAILURE_RETRY_MS from now rather than at once (no refetch on every call during an
+ * outage). With none, the curated PULP_PLUGINS (with the overlay, so it still corrects them) are
+ * cached for FAILURE_RETRY_MS.
+ */
+function fallbackOrKeepRegistry(
+  overlay: readonly Partial<PulpPluginDescriptor>[]
+): readonly PulpPluginDescriptor[] {
+  if (cachedRegistry) {
+    cachedAt = Date.now() - CACHE_TTL_MS + FAILURE_RETRY_MS;
+    return cachedRegistry;
+  }
+  fallbackRegistry = applyOverlay(PULP_PLUGINS, overlay);
+  fallbackAt = Date.now();
+  return fallbackRegistry;
+}
+
+/**
+ * Fetches the server's OpenAPI document and builds the registry from it. Falls back (logged once,
+ * see fallbackOrKeepRegistry) on a non-ok response, a spec that derives zero families (parse
+ * failures included, see buildRegistryFromSpec), or a fetch that throws outright. The
+ * deployment's overlay is applied on every path, so it still corrects the fallback registry when
+ * the server's document is unreachable.
  */
 async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
   const overlay = await loadPulpPluginOverlay();
@@ -145,39 +168,53 @@ async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPlugi
     const result = await pulpFetch<unknown>("/docs/api.json", auth);
     if (!result.ok) {
       logWarn("plugin_registry_spec_fetch_failed", { detail: result.detail });
-      return applyOverlay(PULP_PLUGINS, overlay);
+      return fallbackOrKeepRegistry(overlay);
     }
 
     const built = buildRegistryFromSpec(result.data);
     if (!built.ok) {
       logWarn("plugin_registry_spec_empty");
-      return applyOverlay(PULP_PLUGINS, overlay);
+      return fallbackOrKeepRegistry(overlay);
     }
 
     const registry = applyOverlay(built.registry, overlay);
     cachedRegistry = registry;
     cachedAt = Date.now();
+    fallbackRegistry = null;
     return registry;
   } catch (error) {
     logError("plugin_registry_build_failed", {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return applyOverlay(PULP_PLUGINS, overlay);
+    return fallbackOrKeepRegistry(overlay);
   }
 }
 
 /**
- * The plugin registry for the connected Pulp server: the 10-minute-cached, derived-and-merged
- * result of fetchAndBuildRegistry, or the curated PULP_PLUGINS on any failure. Concurrent callers
- * during a cache miss share one in-flight fetch instead of each fetching the (6.6MB) spec.
+ * The plugin registry for the connected Pulp server: the derived-and-merged result of
+ * fetchAndBuildRegistry, or the curated PULP_PLUGINS on any failure. A loaded registry is served
+ * at once even after CACHE_TTL_MS; the first caller past it starts one background refresh (shared
+ * through inFlight) and a failed refresh keeps the old registry. Only a caller with neither a
+ * registry nor a fresh fallback waits for the (6.6MB) spec, sharing one in-flight fetch.
  */
 export async function getPulpPluginRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
   const now = Date.now();
-  if (cachedRegistry && now - cachedAt < CACHE_TTL_MS) {
+  if (cachedRegistry) {
+    if (now - cachedAt >= CACHE_TTL_MS) {
+      refreshRegistry(auth).catch(() => {});
+    }
     return cachedRegistry;
   }
 
+  if (fallbackRegistry && now - fallbackAt < FAILURE_RETRY_MS) {
+    return fallbackRegistry;
+  }
+
+  return refreshRegistry(auth);
+}
+
+function refreshRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
   if (!inFlight) {
     inFlight = fetchAndBuildRegistry(auth).finally(() => {
       inFlight = null;
