@@ -365,7 +365,7 @@ export async function pulpLogout(auth: PulpAuth): Promise<void> {
       headers: pulpAuthHeaders(auth, "DELETE"),
       cache: "no-store",
     });
-    await response.body?.cancel();
+    await response.text();
   } catch {
     // The cookie is cleared by the caller regardless.
   }
@@ -478,7 +478,9 @@ export async function pulpFetch<TData>(
     if (!isReplayableBody(init?.body)) {
       break;
     }
-    await response.body?.cancel();
+    // Drain, not cancel: under Next's patched fetch the body can be one branch of a tee, and
+    // cancelling one branch waits for the other, so `body.cancel()` hung the request forever.
+    await response.text();
   }
 
   const rawText = await response.text();

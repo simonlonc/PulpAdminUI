@@ -538,6 +538,20 @@ describe("Pulp session auth", () => {
     expect(takePulpAuthRenewal(auth)).toBe(false);
   });
 
+  it("does not hang on a 401 whose body is one branch of a tee, as under Next's patched fetch", async () => {
+    // Cancelling one branch of a tee waits for the other, so a retry that cancels the rejected
+    // response's body instead of reading it never resumes.
+    const [branch] = new Response(JSON.stringify({ detail: "no" })).body!.tee();
+    fetchMock
+      .mockResolvedValueOnce(new Response(branch, { status: 401 }))
+      .mockResolvedValueOnce(loginResponse("sess-new", "csrf-new"))
+      .mockResolvedValueOnce(jsonResponse(200, { count: 0 }));
+
+    const result = await pulpFetch("/x/", auth);
+
+    expect(result).toEqual({ ok: true, status: 200, data: { count: 0 } });
+  }, 2000);
+
   it("drops the session and retries with Basic when /login/ answers 404", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(401))
