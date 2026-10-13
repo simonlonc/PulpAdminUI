@@ -13,6 +13,7 @@ import {
 import { usePulpAuthContext } from "./auth-context";
 import {
   findContentForHrefIn,
+  findPluginForRemoteHrefIn,
   findPluginForRepositoryHrefIn,
   findPulpPluginIn,
   getPulpPluginIn,
@@ -30,6 +31,7 @@ type PulpPluginsContextValue = {
   isPluginKind: (value: unknown) => value is PulpPluginKind;
   findContentForHref: (href: string) => { kind: PulpPluginKind; path: string; id: string } | null;
   findPluginForRepositoryHref: (href: string) => PulpPluginDescriptor | null;
+  findPluginForRemoteHref: (href: string) => PulpPluginDescriptor | null;
 };
 
 const PulpPluginsContext = createContext<PulpPluginsContextValue | null>(null);
@@ -87,6 +89,11 @@ export function PulpPluginsProvider({ children }: { children: ReactNode }) {
     [plugins]
   );
 
+  const findPluginForRemoteHref = useCallback(
+    (href: string): PulpPluginDescriptor | null => findPluginForRemoteHrefIn(plugins, href),
+    [plugins]
+  );
+
   const value = useMemo(
     () => ({
       plugins,
@@ -95,8 +102,17 @@ export function PulpPluginsProvider({ children }: { children: ReactNode }) {
       isPluginKind,
       findContentForHref,
       findPluginForRepositoryHref,
+      findPluginForRemoteHref,
     }),
-    [plugins, getPlugin, findPlugin, isPluginKind, findContentForHref, findPluginForRepositoryHref]
+    [
+      plugins,
+      getPlugin,
+      findPlugin,
+      isPluginKind,
+      findContentForHref,
+      findPluginForRepositoryHref,
+      findPluginForRemoteHref,
+    ]
   );
 
   return createElement(PulpPluginsContext.Provider, { value }, children);

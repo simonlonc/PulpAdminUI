@@ -557,6 +557,17 @@ export function findPluginForRepositoryHrefIn(
 }
 
 /**
+ * Descriptor for the plugin whose remotePath appears in a remote href (relative API path or
+ * absolute URL), or null when the href matches no plugin.
+ */
+export function findPluginForRemoteHrefIn(
+  plugins: readonly PulpPluginDescriptor[],
+  href: string
+): PulpPluginDescriptor | null {
+  return plugins.find((p) => href.includes(p.remotePath)) ?? null;
+}
+
+/**
  * Kind, endpoint path and id extracted from a content unit href (relative API path or absolute
  * URL) whose path matches one of a plugin's content endpoints, or null when none matches.
  */
