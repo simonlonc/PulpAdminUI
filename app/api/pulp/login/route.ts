@@ -1,22 +1,14 @@
 import { cookies } from "next/headers";
 import {
   decodePulpAuth,
-  encodePulpAuth,
   PULP_AUTH_COOKIE,
   PulpAuth,
   pulpFetch,
+  pulpLogin,
 } from "@/lib/pulp";
-import { PulpApiError, readJsonBody } from "../_helpers";
+import { PulpApiError, readJsonBody, setPulpAuthCookie } from "../_helpers";
 
 type PulpUserCountResponse = { count: number };
-
-function isCookieSecure(): boolean {
-  const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
-  if (override === "false" || override === "0") {
-    return false;
-  }
-  return process.env.NODE_ENV === "production";
-}
 
 export async function POST(request: Request) {
   let payload: Partial<PulpAuth>;
@@ -40,6 +32,16 @@ export async function POST(request: Request) {
     password: payload.password,
   };
 
+  // The password check: Pulp's own session when it has `/login/`, otherwise (404) Basic auth
+  // checked by the users lookup below, exactly as before.
+  const login = await pulpLogin(auth);
+  if (login.kind === "failed") {
+    return Response.json({ detail: login.detail }, { status: login.status });
+  }
+  if (login.kind === "session") {
+    auth.pulpSession = login.session;
+  }
+
   const result = await pulpFetch<PulpUserCountResponse>(
     `/users/?username=${encodeURIComponent(auth.username)}`,
     auth
@@ -57,24 +59,14 @@ export async function POST(request: Request) {
     );
   }
 
-  let encodedAuth: string;
   try {
-    encodedAuth = encodePulpAuth(auth);
+    await setPulpAuthCookie(auth);
   } catch (error) {
     return Response.json(
       { detail: error instanceof Error ? error.message : "Failed to encode session." },
       { status: 500 }
     );
   }
-
-  const cookieStore = await cookies();
-  cookieStore.set(PULP_AUTH_COOKIE, encodedAuth, {
-    httpOnly: true,
-    sameSite: "strict",
-    secure: isCookieSecure(),
-    path: "/",
-    maxAge: 60 * 60 * 8,
-  });
 
   return Response.json({ username: auth.username });
 }

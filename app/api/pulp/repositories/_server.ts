@@ -1,4 +1,10 @@
-import { getPulpBaseUrl, pulpErrorDetailFromBody, pulpFetch, type PulpAuth } from "@/lib/pulp";
+import {
+  getPulpBaseUrl,
+  pulpAuthHeaders,
+  pulpErrorDetailFromBody,
+  pulpFetch,
+  type PulpAuth,
+} from "@/lib/pulp";
 import type { PulpTaskProgressReport } from "@/services/pulp/types";
 import {
   type CreatedResourceEntry,
@@ -145,9 +151,8 @@ export function toPulpHrefPath(href: string): string {
   return `${baseApiPath}${normalizedRawPath}`;
 }
 
-export function authHeaders(authHeader: string): Headers {
-  const headers = new Headers();
-  headers.set("Authorization", authHeader);
+export function authHeaders(auth: PulpAuth, method = "GET"): Headers {
+  const headers = pulpAuthHeaders(auth, method);
   headers.set("Accept", "application/json");
   return headers;
 }

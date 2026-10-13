@@ -7,6 +7,7 @@ import {
   encodePulpAuth,
   pulpErrorDetailFromBody,
   pulpFetch,
+  takePulpAuthRenewal,
   type PulpAuth,
 } from "@/lib/pulp";
 
@@ -442,5 +443,206 @@ describe("pulpFetch", () => {
     await pulpFetch("/status/", auth);
 
     expect(lines).toEqual([]);
+  });
+});
+
+describe("Pulp session auth", () => {
+  const session = { sessionid: "sess-old", csrftoken: "csrf-old" };
+  let auth: PulpAuth;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  function loginResponse(sessionid: string, csrftoken: string): Response {
+    const headers = new Headers();
+    headers.append("Set-Cookie", `csrftoken=${csrftoken}; Max-Age=31449600; Path=/`);
+    headers.append("Set-Cookie", `sessionid=${sessionid}; HttpOnly; Max-Age=1209600; Path=/`);
+    return new Response(JSON.stringify({ username: "admin" }), { status: 201, headers });
+  }
+
+  function jsonResponse(status: number, body: unknown = {}): Response {
+    return new Response(JSON.stringify(body), { status });
+  }
+
+  function headersOf(call: number): Headers {
+    return fetchMock.mock.calls[call][1].headers as Headers;
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    auth = { username: "admin", password: "pw", pulpSession: { ...session } };
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the session cookie and no Authorization on a read", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { count: 0 }));
+
+    await pulpFetch("/repositories/", auth);
+
+    expect(headersOf(0).get("Cookie")).toBe("sessionid=sess-old; csrftoken=csrf-old");
+    expect(headersOf(0).has("Authorization")).toBe(false);
+    expect(headersOf(0).has("X-CSRFToken")).toBe(false);
+    expect(headersOf(0).has("Referer")).toBe(false);
+  });
+
+  it("adds X-CSRFToken and a same-origin Referer on unsafe methods only", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(200, { ok: 1 }));
+
+    for (const method of ["POST", "PATCH", "DELETE", "PUT"]) {
+      fetchMock.mockClear();
+      await pulpFetch("/x/", auth, { method, body: "{}" });
+      expect(headersOf(0).get("X-CSRFToken")).toBe("csrf-old");
+      expect(headersOf(0).get("Referer")).toBe("http://pulp.test/");
+    }
+    for (const method of ["GET", "HEAD", "OPTIONS"]) {
+      fetchMock.mockClear();
+      await pulpFetch("/x/", auth, { method });
+      expect(headersOf(0).has("X-CSRFToken")).toBe(false);
+      expect(headersOf(0).has("Referer")).toBe(false);
+    }
+  });
+
+  it("sends Basic and no cookie without a session", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { count: 0 }));
+
+    await pulpFetch("/x/", { username: "admin", password: "pw" });
+
+    expect(headersOf(0).get("Authorization")).toMatch(/^Basic /);
+    expect(headersOf(0).has("Cookie")).toBe(false);
+  });
+
+  it("renews the session once on a 401, retries, updates auth and marks the renewal", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Authentication credentials were not provided." }))
+      .mockResolvedValueOnce(loginResponse("sess-new", "csrf-new"))
+      .mockResolvedValueOnce(jsonResponse(201, { task: "t" }));
+
+    const result = await pulpFetch("/x/", auth, { method: "POST", body: JSON.stringify({ a: 1 }) });
+
+    expect(result).toEqual({ ok: true, status: 201, data: { task: "t" } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1][0])).toBe("http://pulp.test/pulp/api/v3/login/");
+    expect(fetchMock.mock.calls[1][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toMatch(/^Basic /);
+    expect(headersOf(2).get("Cookie")).toBe("sessionid=sess-new; csrftoken=csrf-new");
+    expect(headersOf(2).get("X-CSRFToken")).toBe("csrf-new");
+    expect(fetchMock.mock.calls[2][1].body).toBe(JSON.stringify({ a: 1 }));
+    expect(auth.pulpSession).toEqual({ sessionid: "sess-new", csrftoken: "csrf-new" });
+    expect(takePulpAuthRenewal(auth)).toBe(true);
+    expect(takePulpAuthRenewal(auth)).toBe(false);
+  });
+
+  it("drops the session and retries with Basic when /login/ answers 404", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401))
+      .mockResolvedValueOnce(jsonResponse(404))
+      .mockResolvedValueOnce(jsonResponse(200, { count: 0 }));
+
+    const result = await pulpFetch("/x/", auth);
+
+    expect(result.ok).toBe(true);
+    expect(headersOf(2).get("Authorization")).toMatch(/^Basic /);
+    expect(headersOf(2).has("Cookie")).toBe(false);
+    expect(auth.pulpSession).toBeUndefined();
+    expect(takePulpAuthRenewal(auth)).toBe(true);
+  });
+
+  it("returns the original 401 and leaves auth untouched when the renewal is refused", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Session expired." }))
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Invalid username/password." }));
+
+    const result = await pulpFetch("/x/", auth);
+
+    expect(result).toEqual({ ok: false, status: 401, detail: "Session expired." });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(auth.pulpSession).toEqual(session);
+    expect(takePulpAuthRenewal(auth)).toBe(false);
+  });
+
+  it("retries only once when the renewed session is rejected too", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401))
+      .mockResolvedValueOnce(loginResponse("sess-new", "csrf-new"))
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Nope." }));
+
+    const result = await pulpFetch("/x/", auth);
+
+    expect(result).toEqual({ ok: false, status: 401, detail: "Nope." });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("shares one renewal between concurrent 401s", async () => {
+    let loginCalls = 0;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      if (String(url).endsWith("/login/")) {
+        loginCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return loginResponse("sess-new", "csrf-new");
+      }
+      const cookie = (init.headers as Headers).get("Cookie");
+      return cookie === "sessionid=sess-new; csrftoken=csrf-new"
+        ? jsonResponse(200, { count: 0 })
+        : jsonResponse(401);
+    });
+
+    const results = await Promise.all([
+      pulpFetch("/a/", auth),
+      pulpFetch("/b/", auth),
+      pulpFetch("/c/", auth),
+    ]);
+
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(loginCalls).toBe(1);
+  });
+
+  it("renews but does not retry a streamed body", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Session expired." }))
+      .mockResolvedValueOnce(loginResponse("sess-new", "csrf-new"));
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x"));
+        controller.close();
+      },
+    });
+
+    const result = await pulpFetch("/x/", auth, {
+      method: "POST",
+      body,
+      duplex: "half",
+    } as RequestInit);
+
+    expect(result).toEqual({ ok: false, status: 401, detail: "Session expired." });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(auth.pulpSession).toEqual({ sessionid: "sess-new", csrftoken: "csrf-new" });
+    expect(takePulpAuthRenewal(auth)).toBe(true);
+  });
+
+  it("does not renew a 401 for a request that used Basic", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(401, { detail: "Bad password." }));
+
+    const result = await pulpFetch("/x/", { username: "admin", password: "pw" });
+
+    expect(result).toEqual({ ok: false, status: 401, detail: "Bad password." });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("decodes a cookie written before sessions existed", () => {
+    const encoded = encodePulpAuth({ username: "admin", password: "pw" });
+    expect(decodePulpAuth(encoded)).toEqual({ username: "admin", password: "pw" });
+  });
+
+  it("round-trips a session through the encrypted cookie and rejects a malformed one", () => {
+    expect(decodePulpAuth(encodePulpAuth(auth))).toEqual(auth);
+
+    const bad = { username: "admin", password: "pw", pulpSession: { sessionid: 5 } };
+    expect(decodePulpAuth(encodePulpAuth(bad as unknown as PulpAuth))).toBeNull();
   });
 });

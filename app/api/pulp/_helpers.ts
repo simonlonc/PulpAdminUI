@@ -1,6 +1,33 @@
 import { cookies } from "next/headers";
 import { logError, logWarn } from "@/lib/log";
-import { decodePulpAuth, PULP_AUTH_COOKIE, type PulpAuth } from "@/lib/pulp";
+import {
+  decodePulpAuth,
+  encodePulpAuth,
+  PULP_AUTH_COOKIE,
+  takePulpAuthRenewal,
+  type PulpAuth,
+} from "@/lib/pulp";
+
+function isCookieSecure(): boolean {
+  const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "false" || override === "0") {
+    return false;
+  }
+  return process.env.NODE_ENV === "production";
+}
+
+/** Encrypts `auth` (including its Pulp session) into the auth cookie. Throws if it can't encode. */
+export async function setPulpAuthCookie(auth: PulpAuth): Promise<void> {
+  const encodedAuth = encodePulpAuth(auth);
+  const cookieStore = await cookies();
+  cookieStore.set(PULP_AUTH_COOKIE, encodedAuth, {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: isCookieSecure(),
+    path: "/",
+    maxAge: 60 * 60 * 8,
+  });
+}
 
 export async function requirePulpAuth(): Promise<
   { ok: true; auth: PulpAuth } | { ok: false; response: Response }
@@ -152,9 +179,16 @@ export function withPulpAuth<Context = unknown>(
       return authResult.response;
     }
 
+    const auth = authResult.auth;
     try {
-      return await handler(request, authResult.auth, context);
+      const response = await handler(request, auth, context);
+      // pulpFetch may have logged in to Pulp again; keep the new session in the cookie.
+      if (takePulpAuthRenewal(auth)) {
+        await setPulpAuthCookie(auth);
+      }
+      return response;
     } catch (error) {
+      const renewed = takePulpAuthRenewal(auth);
       const route = `${request.method} ${new URL(request.url).pathname}`;
 
       if (!(error instanceof PulpApiError)) {
@@ -171,6 +205,8 @@ export function withPulpAuth<Context = unknown>(
       if (error.status === 401) {
         const cookieStore = await cookies();
         cookieStore.delete(PULP_AUTH_COOKIE);
+      } else if (renewed) {
+        await setPulpAuthCookie(auth);
       }
 
       return Response.json({ detail: error.detail }, { status: error.status });
