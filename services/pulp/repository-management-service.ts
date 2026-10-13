@@ -48,8 +48,7 @@ type RepositoryVersionDeleteResponse = { task: string | null };
 /** Modify and version repair both answer with only the dispatched task href. */
 type TaskDispatchResponse = { task: string };
 
-const LIST_ALL_PAGE_SIZE = 1000;
-const LIST_ALL_MAX_PAGES = 10;
+export type PulpRepositorySummary = Pick<PulpRepository, "pulp_href" | "name" | "latest_version_href">;
 
 export const pulpRepositoryManagementService = {
   async list(
@@ -63,23 +62,14 @@ export const pulpRepositoryManagementService = {
   },
 
   /**
-   * Every repository of every plugin kind, from Pulp's generic list, paged until `count` rows
-   * are in (at most LIST_ALL_MAX_PAGES pages). One request instead of one per kind.
+   * Every repository of every plugin kind, from Pulp's generic list. The route follows Pulp's
+   * pages, so this is one request instead of one per kind.
    */
-  async listAll(): Promise<PulpRepository[]> {
-    const repositories: PulpRepository[] = [];
-    for (let page = 0; page < LIST_ALL_MAX_PAGES; page += 1) {
-      const qs = new URLSearchParams({
-        limit: String(LIST_ALL_PAGE_SIZE),
-        offset: String(repositories.length),
-      });
-      const response = await fetch(`/api/pulp/repositories?${qs.toString()}`);
-      if (!response.ok) throw new Error(await readApiDetail(response));
-      const data = (await response.json()) as PulpPaginatedResponse<PulpRepository>;
-      repositories.push(...data.results);
-      if (data.results.length === 0 || repositories.length >= data.count) break;
-    }
-    return repositories;
+  async listAll(): Promise<PulpRepositorySummary[]> {
+    const response = await fetch("/api/pulp/repositories");
+    if (!response.ok) throw new Error(await readApiDetail(response));
+    const data = (await response.json()) as PulpPaginatedResponse<PulpRepositorySummary>;
+    return data.results;
   },
 
   async create(

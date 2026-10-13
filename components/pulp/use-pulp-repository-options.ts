@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
-import { pulpRepositoryManagementService } from "@/services/pulp/repository-management-service";
-import type { PulpRepository } from "@/services/pulp/types";
+import {
+  pulpRepositoryManagementService,
+  type PulpRepositorySummary,
+} from "@/services/pulp/repository-management-service";
 
 export type PulpRepositoryOption = {
   href: string;
@@ -26,7 +28,7 @@ export function usePulpRepositoryOptions(enabled: boolean) {
   const { setError } = usePulpAuthContext();
   const { findPluginForRepositoryHref } = usePulpPluginsContext();
   // null while loading.
-  const [repositories, setRepositories] = useState<PulpRepository[] | null>(null);
+  const [repositories, setRepositories] = useState<PulpRepositorySummary[] | null>(null);
 
   useEffect(() => {
     let active = true;
