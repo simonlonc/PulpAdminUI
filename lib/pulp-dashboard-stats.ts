@@ -1,6 +1,6 @@
-import { unstable_cache } from "next/cache";
-import { pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { getPulpBaseUrl, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { getPulpPluginRegistry } from "@/lib/pulp-plugin-registry";
+import { findPluginForRepositoryHrefIn } from "@/lib/pulp-plugins";
 import type { PulpStatus } from "@/services/pulp/types";
 
 type PulpCountListResponse = {
@@ -45,6 +45,43 @@ function countFromSettled(result: PromiseSettledResult<PulpCountFetchResult>): n
   return result.status === "fulfilled" && result.value.ok ? result.value.data.count : null;
 }
 
+type PulpRepositoryHrefPage = {
+  next: string | null;
+  results: { pulp_href?: string }[];
+};
+
+// Path of a `next` link relative to the Pulp API base, or null when there is none. lib/ does not
+// import from app/, so this is not app/api/pulp/repositories/_server.ts's extractNextApiPath.
+function nextPathFrom(next: unknown): string | null {
+  if (!next || typeof next !== "string") return null;
+  try {
+    const url = new URL(next);
+    const basePath = new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
+    const path = url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) : url.pathname;
+    return path + url.search;
+  } catch {
+    return null;
+  }
+}
+
+/** Every repository href of every kind, following `next` to the end; null when a page fails. */
+async function loadRepositoryHrefs(auth: PulpAuth): Promise<string[] | null> {
+  const hrefs: string[] = [];
+  let nextPath: string | null = "/repositories/?fields=pulp_href&limit=1000";
+  while (nextPath) {
+    const result: PulpFetchResult<PulpRepositoryHrefPage> = await pulpFetch<PulpRepositoryHrefPage>(
+      nextPath,
+      auth
+    );
+    if (!result.ok || !Array.isArray(result.data.results)) return null;
+    for (const row of result.data.results) {
+      if (typeof row.pulp_href === "string") hrefs.push(row.pulp_href);
+    }
+    nextPath = nextPathFrom(result.data.next);
+  }
+  return hrefs;
+}
+
 function failureFromSettled<TData>(
   result: PromiseSettledResult<PulpFetchResult<TData>>
 ): { detail: string; status?: number } | null {
@@ -55,17 +92,25 @@ function failureFromSettled<TData>(
 }
 
 async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
-  const [pluginsResult, usersResult, groupsResult, runningTasksResult, failedTasksResult, statusResult] =
-    await Promise.allSettled([
-      getPulpPluginRegistry(auth),
-      pulpFetch<PulpCountListResponse>("/users/?limit=1&offset=0", auth),
-      pulpFetch<PulpCountListResponse>("/groups/?limit=1&offset=0", auth),
-      // state__in must be sent as repeated params -- a comma-joined value silently matches zero
-      // tasks on this API.
-      pulpFetch<PulpCountListResponse>("/tasks/?state__in=running&state__in=waiting&limit=1", auth),
-      pulpFetch<PulpCountListResponse>("/tasks/?state=failed&limit=1", auth),
-      pulpFetch<PulpStatus>("/status/", auth),
-    ]);
+  const [
+    pluginsResult,
+    usersResult,
+    groupsResult,
+    runningTasksResult,
+    failedTasksResult,
+    statusResult,
+    repoHrefsResult,
+  ] = await Promise.allSettled([
+    getPulpPluginRegistry(auth),
+    pulpFetch<PulpCountListResponse>("/users/?limit=1&offset=0", auth),
+    pulpFetch<PulpCountListResponse>("/groups/?limit=1&offset=0", auth),
+    // state__in must be sent as repeated params -- a comma-joined value silently matches zero
+    // tasks on this API.
+    pulpFetch<PulpCountListResponse>("/tasks/?state__in=running&state__in=waiting&limit=1", auth),
+    pulpFetch<PulpCountListResponse>("/tasks/?state=failed&limit=1", auth),
+    pulpFetch<PulpStatus>("/status/", auth),
+    loadRepositoryHrefs(auth),
+  ]);
 
   const plugins = pluginsResult.status === "fulfilled" ? pluginsResult.value : [];
   const usersCount = countFromSettled(usersResult);
@@ -80,16 +125,19 @@ async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStat
     : null;
   const onlineApiApps = Array.isArray(status?.online_api_apps) ? status.online_api_apps.length : null;
 
-  const repoResults = await Promise.allSettled(
-    plugins.map((plugin) =>
-      pulpFetch<PulpCountListResponse>(`${plugin.repositoryPath}?limit=1&offset=0`, auth)
-    )
-  );
+  // One walk of the generic /repositories/ list, grouped by kind. Hrefs no registry entry claims
+  // are ignored; a failed walk leaves every count null.
+  const repoHrefs = repoHrefsResult.status === "fulfilled" ? repoHrefsResult.value : null;
+  const repoCounts = new Map<string, number>();
+  for (const href of repoHrefs ?? []) {
+    const plugin = findPluginForRepositoryHrefIn(plugins, href);
+    if (plugin) repoCounts.set(plugin.kind, (repoCounts.get(plugin.kind) ?? 0) + 1);
+  }
 
-  const repositories: PulpDashboardRepositoryCount[] = plugins.map((plugin, index) => ({
+  const repositories: PulpDashboardRepositoryCount[] = plugins.map((plugin) => ({
     kind: plugin.kind,
     label: plugin.label,
-    count: countFromSettled(repoResults[index]),
+    count: repoHrefs ? (repoCounts.get(plugin.kind) ?? 0) : null,
   }));
 
   const hasSignal =
@@ -130,16 +178,35 @@ async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStat
   };
 }
 
-// Cache dashboard stats (users, groups, repositories, activity) for 60s to avoid
-// fanning out ~1 list call per repository family plus 5 more to Pulp per page load.
-// Cached to .next/cache via Next's IncrementalCache.set; a failed disk write logs a
-// non-fatal warning; the in-memory copy continues to serve. Runtime user must be able
-// to write .next/cache relative to the working directory; the in-repo Containerfiles
-// set up the required permissions.
+// Dashboard stats (users, groups, repositories, activity) are kept in memory per username: the
+// last good result is served at once, and once it is 60s old one background refresh replaces it.
+// unstable_cache was dropped because it cannot do this here: it does serve the stale value, but
+// the route's response is not ended until its background refresh finishes (Next 16.2.2
+// build/templates/app-route.js passes renderOpts.pendingWaitUntil to sendResponse, and
+// pipe-readable.js awaits it before res.end()), so a stale call still waited the full ~13s.
+const DASHBOARD_STATS_TTL_MS = 60_000;
+const dashboardStatsCache = new Map<string, { result: PulpDashboardStatsResult; loadedAt: number }>();
+const dashboardStatsInFlight = new Map<string, Promise<PulpDashboardStatsResult>>();
+
+function refreshPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
+  const inFlight = dashboardStatsInFlight.get(auth.username);
+  if (inFlight) return inFlight;
+  const refresh = loadPulpDashboardStats(auth)
+    .then((result) => {
+      // A failed load never replaces the last good result.
+      if (result.ok) dashboardStatsCache.set(auth.username, { result, loadedAt: Date.now() });
+      return result;
+    })
+    .finally(() => dashboardStatsInFlight.delete(auth.username));
+  dashboardStatsInFlight.set(auth.username, refresh);
+  return refresh;
+}
+
 export function getCachedPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
-  return unstable_cache(
-    async () => loadPulpDashboardStats(auth),
-    ["pulp-dashboard-stats", auth.username],
-    { revalidate: 60, tags: ["pulp-dashboard"] }
-  )();
+  const entry = dashboardStatsCache.get(auth.username);
+  if (!entry) return refreshPulpDashboardStats(auth);
+  if (Date.now() - entry.loadedAt >= DASHBOARD_STATS_TTL_MS) {
+    refreshPulpDashboardStats(auth).catch(() => {});
+  }
+  return Promise.resolve(entry.result);
 }
