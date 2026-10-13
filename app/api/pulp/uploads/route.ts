@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getPulpApiUrl, pulpFetch, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
+import { getPulpApiUrl, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import { PulpApiError, withPulpAuth } from "../_helpers";
 import { authHeaders, normalizePulpHrefToApiPath, readDetail } from "../repositories/_server";
 
@@ -104,9 +104,9 @@ export const POST = withPulpAuth(async (request, auth) => {
   const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
   // The per-chunk PUT below sends multipart FormData (Content-Range header, no JSON body), which
   // pulpFetch cannot express (it always assumes/serializes a JSON request body), so that one call
-  // stays on raw fetch with the shared authHeaders()/readDetail() helpers; every other call in
-  // this route is plain JSON and goes through pulpFetch.
-  const authHeader = toBasicAuthHeader(auth);
+  // stays on raw fetch with the shared authHeaders()/readDetail() helpers (so it sends the Pulp
+  // session when there is one, without pulpFetch's renewal retry); every other call in this route
+  // is plain JSON and goes through pulpFetch.
 
   const createUploadResult = await pulpFetch<CreateUploadResponse>("/uploads/", auth, {
     method: "POST",
@@ -126,7 +126,7 @@ export const POST = withPulpAuth(async (request, auth) => {
   for (let start = 0; start < fileBuffer.byteLength; start += CHUNK_SIZE) {
     const end = Math.min(fileBuffer.byteLength - 1, start + CHUNK_SIZE - 1);
     const chunk = fileBuffer.subarray(start, end + 1);
-    const uploadChunkHeaders = authHeaders(authHeader);
+    const uploadChunkHeaders = authHeaders(auth, "PUT");
     uploadChunkHeaders.set("Content-Range", `bytes ${start}-${end}/*`);
 
     const chunkUrl = getPulpApiUrl(normalizePulpHrefToApiPath(uploadHref));

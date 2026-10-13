@@ -19,19 +19,18 @@ vi.mock("next/headers", () => ({
 
 import { GET } from "@/app/api/pulp/repositories/route";
 
-const LIST_BODY = {
-  count: 1,
-  next: null,
+function repo(id: string, name: string) {
+  const href = `/pulp/api/v3/repositories/rpm/rpm/${id}/`;
+  return { pulp_href: href, name, latest_version_href: `${href}versions/0/` };
+}
+
+const PAGE_ONE = {
+  count: 2,
+  next: "http://pulp.test/pulp/api/v3/repositories/?fields=pulp_href,name,latest_version_href&limit=1000&offset=1000",
   previous: null,
-  results: [
-    {
-      pulp_href: "/pulp/api/v3/repositories/rpm/rpm/a/",
-      name: "epel-10",
-      latest_version_href: "/pulp/api/v3/repositories/rpm/rpm/a/versions/0/",
-      pulp_labels: {},
-    },
-  ],
+  results: [repo("a", "epel-10")],
 };
+const PAGE_TWO = { count: 2, next: null, previous: "x", results: [repo("b", "test")] };
 
 describe("GET /api/pulp/repositories", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -40,7 +39,7 @@ describe("GET /api/pulp/repositories", () => {
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
     vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     cookieState.value = encodePulpAuth({ username: "admin", password: "admin" });
-    fetchMock = vi.fn(async () => new Response(JSON.stringify(LIST_BODY), { status: 200 }));
+    fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
   });
 
@@ -54,25 +53,27 @@ describe("GET /api/pulp/repositories", () => {
     return new URL(String(input instanceof Request ? input.url : input));
   }
 
-  it("lists every kind through Pulp's generic /repositories/ endpoint", async () => {
+  it("walks every page of Pulp's generic /repositories/ list and returns one merged list", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify(PAGE_ONE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(PAGE_TWO), { status: 200 }));
+
     const response = await GET(new Request("http://pulp.test/api/pulp/repositories"), undefined);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(LIST_BODY);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual({
+      count: 2,
+      next: null,
+      previous: null,
+      results: [repo("a", "epel-10"), repo("b", "test")],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(calledUrl().pathname).toBe("/pulp/api/v3/repositories/");
-  });
-
-  it("defaults limit to 200 and offset to 0, forwards both, and drops an unlisted param", async () => {
-    await GET(new Request("http://pulp.test/api/pulp/repositories?arbitrary=1"), undefined);
-    expect(calledUrl().searchParams.get("limit")).toBe("200");
-    expect(calledUrl().searchParams.get("offset")).toBe("0");
-    expect(calledUrl().searchParams.has("arbitrary")).toBe(false);
-
-    fetchMock.mockClear();
-    await GET(new Request("http://pulp.test/api/pulp/repositories?limit=1000&offset=2000"), undefined);
+    expect(calledUrl().searchParams.get("fields")).toBe("pulp_href,name,latest_version_href");
     expect(calledUrl().searchParams.get("limit")).toBe("1000");
-    expect(calledUrl().searchParams.get("offset")).toBe("2000");
+    const [second] = fetchMock.mock.calls[1] as [RequestInfo | URL];
+    const secondUrl = new URL(String(second instanceof Request ? second.url : second));
+    expect(secondUrl.searchParams.get("offset")).toBe("1000");
   });
 
   it("passes a Pulp error status and detail through", async () => {

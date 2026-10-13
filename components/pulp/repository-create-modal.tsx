@@ -11,12 +11,12 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
 import { retainCheckpointsProblem } from "@/lib/repository-edit-form";
-import { pulpRemoteService } from "@/services/pulp/remote-service";
+import { pulpRemoteService, type PulpRemoteSummary } from "@/services/pulp/remote-service";
 import {
   pulpRepositoryManagementService,
   type RepositoryCreateResult,
 } from "@/services/pulp/repository-management-service";
-import { PulpRemote, type RepositoryCreatePayload } from "@/services/pulp/types";
+import { type RepositoryCreatePayload } from "@/services/pulp/types";
 
 const repoCreateTextareaClass =
   "min-h-[4rem] w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
@@ -38,7 +38,7 @@ export function RepositoryCreateModal({
   onBusyChange,
 }: RepositoryCreateModalProps) {
   const { setError } = usePulpAuthContext();
-  const { plugins, getPlugin } = usePulpPluginsContext();
+  const { plugins, getPlugin, findPluginForRemoteHref } = usePulpPluginsContext();
   const titleId = useId();
 
   const [createKind, setCreateKind] = useState<PulpPluginKind>(initialKind);
@@ -53,7 +53,7 @@ export function RepositoryCreateModal({
   const [createResult, setCreateResult] = useState<RepositoryCreateResult | null>(null);
   // Filled in per kind as remotes load. The registry is derived from the server, so a kind
   // this map has not reached yet reads as an empty list rather than undefined.
-  const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemote[]>>({});
+  const [remotesByKind, setRemotesByKind] = useState<Record<PulpPluginKind, PulpRemoteSummary[]>>({});
 
   function resetCreateRepositoryFields() {
     setCreateDescription("");
@@ -67,13 +67,16 @@ export function RepositoryCreateModal({
     let active = true;
     void (async () => {
       try {
-        const lists = await Promise.all(
-          plugins.map(
-            async (plugin) => [plugin.kind, (await pulpRemoteService.list(plugin.kind)).results] as const
-          )
-        );
+        const remotes = await pulpRemoteService.listAll();
         if (active) {
-          setRemotesByKind(Object.fromEntries(lists) as Record<PulpPluginKind, PulpRemote[]>);
+          const grouped: Record<PulpPluginKind, PulpRemoteSummary[]> = {};
+          for (const remote of remotes) {
+            const plugin = findPluginForRemoteHref(remote.pulp_href);
+            if (plugin) {
+              (grouped[plugin.kind] ??= []).push(remote);
+            }
+          }
+          setRemotesByKind(grouped);
         }
       } catch {
         // Leave remotes empty; the (none) option still works.

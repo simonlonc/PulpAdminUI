@@ -4,9 +4,17 @@ import { logError, logWarn } from "@/lib/log";
 
 export const PULP_AUTH_COOKIE = "pulp_auth";
 
+// Pulp's own login session (`POST /login/`): far cheaper per request than Basic auth, which makes
+// Pulp hash the password on every call. Optional because older Pulp servers have no `/login/`.
+export type PulpSession = {
+  sessionid: string;
+  csrftoken: string;
+};
+
 export type PulpAuth = {
   username: string;
   password: string;
+  pulpSession?: PulpSession;
 };
 
 /**
@@ -104,6 +112,29 @@ export function toBasicAuthHeader(auth: PulpAuth): string {
   return `Basic ${encoded}`;
 }
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The credential headers for one Pulp request: the Pulp session cookie when `auth` has one (plus
+ * the CSRF token and a same-origin Referer on unsafe methods, which Django requires), Basic
+ * otherwise. Shared by pulpFetch and the routes that call Pulp with a raw `fetch`.
+ */
+export function pulpAuthHeaders(auth: PulpAuth, method = "GET"): Headers {
+  const headers = new Headers();
+  const session = auth.pulpSession;
+  if (!session) {
+    headers.set("Authorization", toBasicAuthHeader(auth));
+    return headers;
+  }
+
+  headers.set("Cookie", `sessionid=${session.sessionid}; csrftoken=${session.csrftoken}`);
+  if (!SAFE_METHODS.has(method.toUpperCase())) {
+    headers.set("X-CSRFToken", session.csrftoken);
+    headers.set("Referer", `${new URL(getPulpBaseUrl()).origin}/`);
+  }
+  return headers;
+}
+
 const PULP_AUTH_IV_LENGTH = 12;
 const PULP_AUTH_AUTH_TAG_LENGTH = 16;
 
@@ -147,7 +178,7 @@ export function decodePulpAuth(value: string): PulpAuth | null {
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(authTag);
     const decoded = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-    const parsed = JSON.parse(decoded) as Partial<PulpAuth>;
+    const parsed = JSON.parse(decoded) as Partial<PulpAuth> & { pulpSession?: unknown };
 
     if (
       typeof parsed.username !== "string" ||
@@ -158,9 +189,30 @@ export function decodePulpAuth(value: string): PulpAuth | null {
       return null;
     }
 
+    // Cookies written before Pulp sessions existed have no pulpSession and keep working with Basic.
+    if (parsed.pulpSession === undefined) {
+      return {
+        username: parsed.username,
+        password: parsed.password,
+      };
+    }
+
+    const session = parsed.pulpSession as Partial<PulpSession> | null;
+    if (
+      session === null ||
+      typeof session !== "object" ||
+      typeof session.sessionid !== "string" ||
+      session.sessionid.length === 0 ||
+      typeof session.csrftoken !== "string" ||
+      session.csrftoken.length === 0
+    ) {
+      return null;
+    }
+
     return {
       username: parsed.username,
       password: parsed.password,
+      pulpSession: { sessionid: session.sessionid, csrftoken: session.csrftoken },
     };
   } catch {
     return null;
@@ -197,44 +249,238 @@ function fetchCauseFields(error: unknown) {
   };
 }
 
-export async function pulpFetch<TData>(
-  pathname: string,
-  auth: PulpAuth,
-  init?: RequestInit
-): Promise<{ ok: true; status: number; data: TData } | { ok: false; status: number; detail: string }> {
-  const headers = new Headers(init?.headers);
-  headers.set("Authorization", toBasicAuthHeader(auth));
-  headers.set("Accept", "application/json");
-
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+function pulpFailureDetail(response: Response, rawText: string, parsed: unknown): string {
+  const fromJson = pulpErrorDetailFromBody(parsed);
+  if (fromJson != null) {
+    return fromJson;
   }
 
-  const apiUrl = getPulpApiUrl(pathname);
-  const method = (init?.method ?? "GET").toUpperCase();
+  const nonJsonSnippet =
+    rawText.length > 0 && parsed === undefined ? rawText.trim().slice(0, 500) : "";
+  if (nonJsonSnippet.length > 0) {
+    return nonJsonSnippet;
+  }
+
+  const statusText = response.statusText.trim();
+  if (statusText.length > 0) {
+    return statusText;
+  }
+  return `Pulp request failed with status ${response.status}.`;
+}
+
+export type PulpLoginResult =
+  | { kind: "session"; session: PulpSession }
+  // Pulp has no `/login/` (404), or answered without session cookies: keep using Basic.
+  | { kind: "unsupported" }
+  | { kind: "failed"; status: number; detail: string };
+
+function cookieValueFromSetCookie(setCookies: string[], name: string): string | null {
+  for (const line of setCookies) {
+    const pair = line.split(";", 1)[0];
+    const eq = pair.indexOf("=");
+    if (eq > 0 && pair.slice(0, eq).trim() === name) {
+      const value = pair.slice(eq + 1).trim();
+      return value.length > 0 ? value : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * `POST /login/` with Basic: the password check and, on a Pulp that has the endpoint, the session
+ * to use instead of Basic from then on. Needs a raw fetch because pulpFetch drops the response
+ * headers that carry the cookies.
+ */
+export async function pulpLogin(auth: PulpAuth): Promise<PulpLoginResult> {
+  const apiUrl = getPulpApiUrl("/login/");
   const startedAt = performance.now();
 
   let response: Response;
   try {
     response = await fetch(apiUrl, {
-      ...init,
-      headers,
+      method: "POST",
+      headers: {
+        Authorization: toBasicAuthHeader(auth),
+        Accept: "application/json",
+      },
       cache: "no-store",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logError("pulp_fetch_unreachable", {
-      method,
+      method: "POST",
       url: loggableUrl(apiUrl),
       message,
       ...fetchCauseFields(error),
       ms: Math.round(performance.now() - startedAt),
     });
     return {
-      ok: false,
+      kind: "failed",
       status: 502,
       detail: `Could not reach Pulp server at ${getPulpBaseUrl()}: ${message}`,
     };
+  }
+
+  const rawText = await response.text();
+
+  if (response.status === 404) {
+    return { kind: "unsupported" };
+  }
+
+  if (!response.ok) {
+    let parsed: unknown;
+    try {
+      parsed = rawText.length > 0 ? (JSON.parse(rawText) as unknown) : undefined;
+    } catch {
+      parsed = undefined;
+    }
+    const detail = pulpFailureDetail(response, rawText, parsed);
+    logWarn("pulp_fetch_failed", {
+      method: "POST",
+      url: loggableUrl(apiUrl),
+      status: response.status,
+      detail,
+      ms: Math.round(performance.now() - startedAt),
+    });
+    return { kind: "failed", status: response.status, detail };
+  }
+
+  const setCookies = response.headers.getSetCookie();
+  const sessionid = cookieValueFromSetCookie(setCookies, "sessionid");
+  const csrftoken = cookieValueFromSetCookie(setCookies, "csrftoken");
+  if (!sessionid || !csrftoken) {
+    return { kind: "unsupported" };
+  }
+  return { kind: "session", session: { sessionid, csrftoken } };
+}
+
+/** Best-effort `DELETE /login/`: ends the Pulp session. Never throws, the outcome is ignored. */
+export async function pulpLogout(auth: PulpAuth): Promise<void> {
+  if (!auth.pulpSession) {
+    return;
+  }
+  try {
+    const response = await fetch(getPulpApiUrl("/login/"), {
+      method: "DELETE",
+      headers: pulpAuthHeaders(auth, "DELETE"),
+      cache: "no-store",
+    });
+    await response.text();
+  } catch {
+    // The cookie is cleared by the caller regardless.
+  }
+}
+
+// Auth objects whose session was replaced while a request ran; withPulpAuth writes those back to
+// the cookie, the only place that can (a route handler).
+const renewedAuths = new WeakSet<PulpAuth>();
+const pendingRenewals = new WeakMap<PulpAuth, Promise<boolean>>();
+
+/** True once (and clears the mark) if pulpFetch replaced or dropped `auth`'s Pulp session. */
+export function takePulpAuthRenewal(auth: PulpAuth): boolean {
+  return renewedAuths.delete(auth);
+}
+
+// Logs in again with the stored password, updating `auth` in place. Concurrent callers for the
+// same auth share one login. False when Pulp refused (e.g. the password changed).
+function renewPulpSession(auth: PulpAuth): Promise<boolean> {
+  const pending = pendingRenewals.get(auth);
+  if (pending) {
+    return pending;
+  }
+
+  const renewal = pulpLogin(auth)
+    .then((result) => {
+      if (result.kind === "failed") {
+        return false;
+      }
+      if (result.kind === "session") {
+        auth.pulpSession = result.session;
+      } else {
+        delete auth.pulpSession;
+      }
+      renewedAuths.add(auth);
+      return true;
+    })
+    .finally(() => {
+      pendingRenewals.delete(auth);
+    });
+  pendingRenewals.set(auth, renewal);
+  return renewal;
+}
+
+function isReplayableBody(body: RequestInit["body"]): boolean {
+  return (
+    body === undefined ||
+    body === null ||
+    typeof body === "string" ||
+    body instanceof URLSearchParams ||
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
+  );
+}
+
+export async function pulpFetch<TData>(
+  pathname: string,
+  auth: PulpAuth,
+  init?: RequestInit
+): Promise<{ ok: true; status: number; data: TData } | { ok: false; status: number; detail: string }> {
+  const apiUrl = getPulpApiUrl(pathname);
+  const method = (init?.method ?? "GET").toUpperCase();
+  const startedAt = performance.now();
+
+  let response: Response;
+  let renewalTried = false;
+  for (;;) {
+    const headers = new Headers(init?.headers);
+    headers.delete("Authorization");
+    pulpAuthHeaders(auth, method).forEach((value, name) => headers.set(name, value));
+    headers.set("Accept", "application/json");
+
+    if (init?.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const usedSession = auth.pulpSession;
+    try {
+      response = await fetch(apiUrl, {
+        ...init,
+        headers,
+        cache: "no-store",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError("pulp_fetch_unreachable", {
+        method,
+        url: loggableUrl(apiUrl),
+        message,
+        ...fetchCauseFields(error),
+        ms: Math.round(performance.now() - startedAt),
+      });
+      return {
+        ok: false,
+        status: 502,
+        detail: `Could not reach Pulp server at ${getPulpBaseUrl()}: ${message}`,
+      };
+    }
+
+    // A rejected Pulp session is renewed once with the stored password and the request retried.
+    // If another request already replaced the session this one used, just retry with the new one.
+    if (response.status !== 401 || !usedSession || renewalTried) {
+      break;
+    }
+    renewalTried = true;
+    if (auth.pulpSession === usedSession && !(await renewPulpSession(auth))) {
+      break;
+    }
+    if (!isReplayableBody(init?.body)) {
+      break;
+    }
+    // Drain, not cancel: under Next's patched fetch the body can be one branch of a tee, and
+    // cancelling one branch waits for the other, so `body.cancel()` hung the request forever.
+    await response.text();
   }
 
   const rawText = await response.text();
@@ -256,24 +502,7 @@ export async function pulpFetch<TData>(
   }
 
   if (!response.ok) {
-    const fromJson = pulpErrorDetailFromBody(parsed);
-    let detail: string;
-    if (fromJson != null) {
-      detail = fromJson;
-    } else {
-      const nonJsonSnippet =
-        rawText.length > 0 && parsed === undefined ? rawText.trim().slice(0, 500) : "";
-      if (nonJsonSnippet.length > 0) {
-        detail = nonJsonSnippet;
-      } else {
-        const statusText = response.statusText.trim();
-        if (statusText.length > 0) {
-          detail = statusText;
-        } else {
-          detail = `Pulp request failed with status ${response.status}.`;
-        }
-      }
-    }
+    const detail = pulpFailureDetail(response, rawText, parsed);
     logWarn("pulp_fetch_failed", { method, url: loggableUrl(apiUrl), status: response.status, detail, ms });
     return { ok: false, status: response.status, detail };
   }

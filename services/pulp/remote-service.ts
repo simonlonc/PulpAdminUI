@@ -13,6 +13,8 @@ import {
 /** What the update and delete routes return before the browser has polled the dispatched task. */
 type RemoteWriteResponse = { task: string | null };
 
+export type PulpRemoteSummary = Pick<PulpRemote, "pulp_href" | "name" | "url">;
+
 function remotesPath(kind: PulpPluginKind): string {
   return `/api/pulp/remotes/${kind}`;
 }
@@ -29,6 +31,19 @@ export const pulpRemoteService = {
     }
 
     return (await response.json()) as PulpPaginatedResponse<PulpRemote>;
+  },
+
+  /**
+   * Every remote of every plugin kind, from Pulp's generic list. The route follows Pulp's pages,
+   * so this is one request instead of one per kind.
+   */
+  async listAll(): Promise<PulpRemoteSummary[]> {
+    const response = await fetch("/api/pulp/remotes");
+    if (!response.ok) {
+      throw new Error(await readApiDetail(response));
+    }
+
+    return ((await response.json()) as PulpPaginatedResponse<PulpRemoteSummary>).results;
   },
 
   async create(
