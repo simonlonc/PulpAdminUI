@@ -23,7 +23,7 @@ async function loadAllPages(
       return { ok: false, status: result.status, detail: result.detail };
     }
     allResults.push(...result.data.results);
-    nextPath = extractNextApiPath(result.data.next);
+    nextPath = extractNextApiPath(result.data.next, auth);
   }
 
   return { ok: true, rows: allResults };
@@ -43,7 +43,7 @@ export const GET = withPulpAuth(async (request, auth) => {
     decodedHref = pulpHref;
   }
 
-  const apiRelative = normalizePulpHrefToApiPath(decodedHref);
+  const apiRelative = normalizePulpHrefToApiPath(decodedHref, auth);
   const basePath = apiRelative.endsWith("/") ? apiRelative : `${apiRelative}/`;
 
   const plugin = findPluginForRepositoryHrefIn(await getPulpPluginRegistry(auth), basePath);

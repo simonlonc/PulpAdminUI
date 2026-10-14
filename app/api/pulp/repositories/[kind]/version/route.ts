@@ -29,7 +29,7 @@ export const GET = withPulpAuth(async (request, auth, { params }: { params: Prom
     decodedHref = pulpHref;
   }
 
-  const apiPath = normalizePulpHrefToApiPath(decodedHref);
+  const apiPath = normalizePulpHrefToApiPath(decodedHref, auth);
   if (!isRepositoryVersionInstancePath(apiPath, plugin.repositoryPath)) {
     return Response.json(
       {
@@ -61,7 +61,7 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isRepositoryVersionInstancePath(apiPath, plugin.repositoryPath)) {
     return Response.json(
       {

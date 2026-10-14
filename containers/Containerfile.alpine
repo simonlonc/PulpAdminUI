@@ -44,10 +44,11 @@ COPY --from=builder /app/public ./public
 
 # OpenShift ignores USER and runs the container as an arbitrary UID in the root
 # group. COPY already leaves the tree owned by root:root, so it is group-owned
-# by gid 0 and group-readable; only the directory Next writes to at runtime
-# needs the group write bit. Narrowing it to that directory keeps this layer at
-# a few kilobytes instead of duplicating the whole app.
-RUN mkdir -p .next/cache && chmod -R g+rwX .next/cache
+# by gid 0 and group-readable; only the directories written at runtime need the
+# group write bit: Next's cache, and data/, where the list of Pulp servers is
+# saved (the default PULP_BACKENDS_FILE). Narrowing it to those directories
+# keeps this layer at a few kilobytes instead of duplicating the whole app.
+RUN mkdir -p .next/cache data && chmod -R g+rwX .next/cache data
 
 USER 1001
 EXPOSE 3000

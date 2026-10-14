@@ -42,6 +42,9 @@ yarn-error.log*
 next-env.d.ts
 /.idea
 
+# default location of the Pulp server list (lib/pulp-backends.ts), local state
+/data/
+
 # local planning notes, not part of the fork
 TASKS.md
 AGENT_GUIDE.md

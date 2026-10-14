@@ -27,7 +27,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: "Repository pulp_href is required." }, { status: 400 });
   }
 
-  const repository = toPulpHrefPath(repoHref);
+  const repository = toPulpHrefPath(repoHref, auth);
 
   const publishResult = await pulpFetch<TaskRefResponse>(plugin.publicationPath, auth, {
     method: "POST",
@@ -47,7 +47,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
   // task href goes back to the UI to poll and resolve the publication from.
   return Response.json({
     publication: published.pulp_href ?? published.href ?? null,
-    repository: normalizePulpHrefToApiPath(repoHref),
+    repository: normalizePulpHrefToApiPath(repoHref, auth),
     task: published.task ?? null,
   });
 });

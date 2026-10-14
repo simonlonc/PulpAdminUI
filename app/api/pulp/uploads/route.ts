@@ -58,7 +58,7 @@ async function findArtifactBySha256(auth: PulpAuth, sha256: string): Promise<str
 
 async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskResponse> {
   const maxAttempts = 60;
-  const taskPath = normalizePulpHrefToApiPath(taskHref);
+  const taskPath = normalizePulpHrefToApiPath(taskHref, auth);
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await pulpFetch<TaskResponse>(taskPath, auth);
@@ -129,7 +129,7 @@ export const POST = withPulpAuth(async (request, auth) => {
     const uploadChunkHeaders = authHeaders(auth, "PUT");
     uploadChunkHeaders.set("Content-Range", `bytes ${start}-${end}/*`);
 
-    const chunkUrl = getPulpApiUrl(normalizePulpHrefToApiPath(uploadHref));
+    const chunkUrl = getPulpApiUrl(normalizePulpHrefToApiPath(uploadHref, auth), auth);
     const chunkForm = new FormData();
     const chunkBlob = new Blob([chunk], { type: "application/octet-stream" });
     chunkForm.set("file", chunkBlob, "chunk");
@@ -147,7 +147,7 @@ export const POST = withPulpAuth(async (request, auth) => {
   }
 
   const commitUploadResult = await pulpFetch<CommitUploadResponse>(
-    normalizePulpHrefToApiPath(`${uploadHref}commit/`),
+    normalizePulpHrefToApiPath(`${uploadHref}commit/`, auth),
     auth,
     {
       method: "POST",

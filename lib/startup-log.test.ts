@@ -14,6 +14,7 @@ beforeEach(() => {
   vi.stubEnv("PULP_EXPORT_HTTP_BASE_URL", undefined);
   vi.stubEnv("PULP_EXPORT_HTTP_PATH_PREFIX", undefined);
   vi.stubEnv("PULP_PLUGIN_DIR", undefined);
+  vi.stubEnv("PULP_BACKENDS_FILE", undefined);
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     lines.push(String(chunk));
     return true;
@@ -31,6 +32,7 @@ describe("logStartupConfig", () => {
     vi.stubEnv("PULP_EXPORT_HTTP_BASE_URL", "http://files.example.test:8099/");
     vi.stubEnv("PULP_EXPORT_HTTP_PATH_PREFIX", " /var/lib/pulp/exports ");
     vi.stubEnv("PULP_PLUGIN_DIR", " /etc/pulp-plugins ");
+    vi.stubEnv("PULP_BACKENDS_FILE", " /var/lib/pulp-admin/pulp-backends.json ");
 
     logStartupConfig();
 
@@ -46,6 +48,7 @@ describe("logStartupConfig", () => {
       export_http_base_url: "http://files.example.test:8099",
       export_http_path_prefix: "/var/lib/pulp/exports",
       plugin_dir: "/etc/pulp-plugins",
+      pulp_backends_file: "/var/lib/pulp-admin/pulp-backends.json",
     });
   });
 
@@ -64,6 +67,7 @@ describe("logStartupConfig", () => {
       export_http_base_url: null,
       export_http_path_prefix: null,
       plugin_dir: null,
+      pulp_backends_file: null,
     });
   });
 

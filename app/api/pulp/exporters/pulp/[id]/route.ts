@@ -37,7 +37,7 @@ export const PATCH = withPulpAuth(
     if (typeof body.path === "string") updatePayload.path = body.path.trim();
     if ("repositories" in body) {
       updatePayload.repositories = readStringArrayField(body, "repositories").map((repository) =>
-        toPulpHrefPath(repository)
+        toPulpHrefPath(repository, auth)
       );
     }
 

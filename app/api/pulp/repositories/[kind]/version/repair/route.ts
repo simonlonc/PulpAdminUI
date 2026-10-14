@@ -23,7 +23,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isRepositoryVersionInstancePath(apiPath, plugin.repositoryPath)) {
     return Response.json(
       {

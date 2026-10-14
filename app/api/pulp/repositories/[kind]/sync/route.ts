@@ -30,7 +30,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: "A remote is required to sync." }, { status: 400 });
   }
 
-  const repoApiPath = normalizePulpHrefToApiPath(repoHref);
+  const repoApiPath = normalizePulpHrefToApiPath(repoHref, auth);
   if (!repoApiPath.includes(plugin.repositoryPath)) {
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
   }
@@ -40,7 +40,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
   // The body carries exactly the fields this plugin's sync schema declares, coerced by type; a
   // name the plugin does not declare is dropped rather than forwarded for the server to reject.
   const sent = body.fields ?? {};
-  const payload: Record<string, unknown> = { remote: toPulpHrefPath(remoteHref) };
+  const payload: Record<string, unknown> = { remote: toPulpHrefPath(remoteHref, auth) };
   for (const field of plugin.syncFields) {
     const value = sent[field.name];
     if (field.type === "boolean") {

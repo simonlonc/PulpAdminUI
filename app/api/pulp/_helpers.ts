@@ -4,9 +4,11 @@ import {
   decodePulpAuth,
   encodePulpAuth,
   PULP_AUTH_COOKIE,
+  pulpFetch,
   takePulpAuthRenewal,
   type PulpAuth,
 } from "@/lib/pulp";
+import { DEFAULT_PULP_BACKEND_ID, getPulpBackend, type PulpBackend } from "@/lib/pulp-backends";
 
 function isCookieSecure(): boolean {
   const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
@@ -50,6 +52,26 @@ export async function requirePulpAuth(): Promise<
     };
   }
 
+  let backend: PulpBackend | null;
+  try {
+    backend = await getPulpBackend(auth.backendId ?? DEFAULT_PULP_BACKEND_ID);
+  } catch {
+    // The store has already logged why, and its message names the file.
+    return {
+      ok: false,
+      response: Response.json({ detail: "The Pulp server list cannot be read." }, { status: 500 }),
+    };
+  }
+  // The server was removed from the list since this session was created.
+  if (!backend) {
+    cookieStore.delete(PULP_AUTH_COOKIE);
+    return {
+      ok: false,
+      response: Response.json({ detail: "Invalid session." }, { status: 401 }),
+    };
+  }
+
+  auth.baseUrl = backend.baseUrl;
   return { ok: true, auth };
 }
 
@@ -155,6 +177,23 @@ export function decodeRefOrNull(encodedRef: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Throws unless the signed-in user is a Pulp superuser. Pulp's API has no `is_superuser` (`User`
+ * exposes `is_staff` only), but the access policy list is open to superusers alone, so
+ * `GET /access_policies/?limit=1` answers 200 for them and 403 for everyone else, staff included.
+ */
+export async function requirePulpSuperuser(auth: PulpAuth): Promise<void> {
+  const result = await pulpFetch("/access_policies/?limit=1", auth);
+  if (result.ok) {
+    return;
+  }
+
+  if (result.status === 403) {
+    throw new PulpApiError(403, "Only a Pulp superuser can manage the Pulp server list.");
+  }
+  throw new PulpApiError(result.status, result.detail);
 }
 
 /**

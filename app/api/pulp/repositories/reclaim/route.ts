@@ -16,11 +16,11 @@ export const POST = withPulpAuth(async (request, auth) => {
   }
 
   const payload: Record<string, unknown> = {
-    repo_hrefs: repoHrefs.map((href) => (href === "*" ? href : toPulpHrefPath(href))),
+    repo_hrefs: repoHrefs.map((href) => (href === "*" ? href : toPulpHrefPath(href, auth))),
   };
   const repoVersionsKeeplist = readStringArrayField(body as Record<string, unknown>, "repo_versions_keeplist");
   if (repoVersionsKeeplist.length > 0) {
-    payload.repo_versions_keeplist = repoVersionsKeeplist.map((href) => toPulpHrefPath(href));
+    payload.repo_versions_keeplist = repoVersionsKeeplist.map((href) => toPulpHrefPath(href, auth));
   }
 
   const reclaimResult = await pulpFetch<{ task: string }>("/repositories/reclaim_space/", auth, {

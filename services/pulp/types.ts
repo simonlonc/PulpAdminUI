@@ -19,6 +19,23 @@ export type ServiceDataResult<T> =
       detail: string;
     };
 
+/** One Pulp server the login page offers; GET /api/pulp/backends never says where it is. */
+export type PulpBackendOption = {
+  id: string;
+  label: string;
+};
+
+/** One Pulp server as the management page sees it; GET /api/pulp/backends/manage says where it is. */
+export type PulpBackend = PulpBackendOption & {
+  baseUrl: string;
+  createdAt: string;
+};
+
+export type SavePulpBackendPayload = {
+  label: string;
+  baseUrl: string;
+};
+
 export type PulpUser = {
   id: number;
   username: string;

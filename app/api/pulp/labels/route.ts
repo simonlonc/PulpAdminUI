@@ -44,7 +44,7 @@ export const POST = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "key is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isAllowedLabelApiPath(apiPath)) {
     return Response.json({ detail: "Not a labelable resource href." }, { status: 400 });
   }
@@ -72,7 +72,7 @@ export const DELETE = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "key is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isAllowedLabelApiPath(apiPath)) {
     return Response.json({ detail: "Not a labelable resource href." }, { status: 400 });
   }

@@ -28,8 +28,12 @@ vi.mock("next/headers", () => ({
 
 const PULP_ROUTES_DIR = join(process.cwd(), "app/api/pulp");
 
-/** login/route.ts and logout/route.ts do not call requirePulpAuth and are excluded here. */
+/**
+ * backends/route.ts (the list the login page shows), login/route.ts and logout/route.ts do not
+ * call requirePulpAuth and are excluded here.
+ */
 const EXCLUDED_ROUTE_FILES = new Set([
+  join(PULP_ROUTES_DIR, "backends", "route.ts"),
   join(PULP_ROUTES_DIR, "login", "route.ts"),
   join(PULP_ROUTES_DIR, "logout", "route.ts"),
 ]);
@@ -76,8 +80,9 @@ function dummyContext() {
 }
 
 describe("route discovery", () => {
-  it("found route.ts files, excluding only login and logout", () => {
+  it("found route.ts files, excluding only backends, login and logout", () => {
     expect(routeFiles.length).toBeGreaterThan(0);
+    expect(routeFiles.some((f) => f.endsWith(`${join("backends", "route.ts")}`))).toBe(false);
     expect(routeFiles.some((f) => f.endsWith(`${join("login", "route.ts")}`))).toBe(false);
     expect(routeFiles.some((f) => f.endsWith(`${join("logout", "route.ts")}`))).toBe(false);
   });
@@ -148,6 +153,7 @@ describe("withPulpAuth logging", () => {
   beforeEach(() => {
     vi.stubEnv("LOG_LEVEL", "info");
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     encodedCookie = encodePulpAuth({ username: "admin", password: PASSWORD });
     cookieState.value = encodedCookie;
     deleteCookieMock.mockClear();

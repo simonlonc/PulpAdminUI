@@ -93,8 +93,8 @@ export function buildUpstreamListParams(
   return params;
 }
 
-export function getBaseApiPath(): string {
-  return new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
+export function getBaseApiPath(auth: PulpAuth): string {
+  return new URL(getPulpBaseUrl(auth)).pathname.replace(/\/+$/, "");
 }
 
 /**
@@ -126,10 +126,10 @@ function resolveHrefPath(href: string): string {
   return resolved.pathname + resolved.search;
 }
 
-export function normalizePulpHrefToApiPath(href: string): string {
+export function normalizePulpHrefToApiPath(href: string, auth: PulpAuth): string {
   const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-  const baseApiPath = getBaseApiPath();
+  const baseApiPath = getBaseApiPath(auth);
 
   if (baseApiPath && normalizedRawPath.startsWith(baseApiPath)) {
     const withoutBase = normalizedRawPath.slice(baseApiPath.length);
@@ -139,10 +139,10 @@ export function normalizePulpHrefToApiPath(href: string): string {
   return normalizedRawPath;
 }
 
-export function toPulpHrefPath(href: string): string {
+export function toPulpHrefPath(href: string, auth: PulpAuth): string {
   const rawPath = resolveHrefPath(href);
   const normalizedRawPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-  const baseApiPath = getBaseApiPath();
+  const baseApiPath = getBaseApiPath(auth);
 
   if (baseApiPath && normalizedRawPath.startsWith(baseApiPath)) {
     return normalizedRawPath;
@@ -157,7 +157,7 @@ export function authHeaders(auth: PulpAuth, method = "GET"): Headers {
   return headers;
 }
 
-export function extractNextApiPath(next: string | null): string | null {
+export function extractNextApiPath(next: string | null, auth: PulpAuth): string | null {
   // `next` is typed `string | null`, but it comes straight off an unchecked `pulpFetch` cast
   // (F-16): a paginated body whose `results` is a real array can still carry a wrong-typed
   // `next` (a number, an object, ...), which would otherwise throw on the `.match` call below.
@@ -166,9 +166,9 @@ export function extractNextApiPath(next: string | null): string | null {
   const normalized = hrefMatch?.[1] ?? next;
   try {
     const url = new URL(normalized);
-    return normalizePulpHrefToApiPath(url.pathname + url.search);
+    return normalizePulpHrefToApiPath(url.pathname + url.search, auth);
   } catch {
-    return normalizePulpHrefToApiPath(normalized);
+    return normalizePulpHrefToApiPath(normalized, auth);
   }
 }
 
@@ -180,7 +180,7 @@ export function extractNextApiPath(next: string | null): string | null {
  */
 export async function waitForTask(taskHref: string, auth: PulpAuth): Promise<TaskResponse> {
   const maxAttempts = 60;
-  const taskPath = normalizePulpHrefToApiPath(taskHref);
+  const taskPath = normalizePulpHrefToApiPath(taskHref, auth);
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await pulpFetch<TaskResponse>(taskPath, auth);

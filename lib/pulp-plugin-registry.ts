@@ -9,7 +9,7 @@
  */
 
 import { logError, logInfo, logWarn } from "@/lib/log";
-import { pulpFetch, type PulpAuth } from "@/lib/pulp";
+import { getPulpBaseUrl, pulpFetch, type PulpAuth } from "@/lib/pulp";
 import {
   PULP_PLUGINS,
   type PulpContentEndpoint,
@@ -23,11 +23,33 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 // trusted before the spec is fetched again.
 const FAILURE_RETRY_MS = 60 * 1000;
 
-let cachedRegistry: readonly PulpPluginDescriptor[] | null = null;
-let cachedAt = 0;
-let fallbackRegistry: readonly PulpPluginDescriptor[] | null = null;
-let fallbackAt = 0;
-let inFlight: Promise<readonly PulpPluginDescriptor[]> | null = null;
+type RegistryState = {
+  cachedRegistry: readonly PulpPluginDescriptor[] | null;
+  cachedAt: number;
+  fallbackRegistry: readonly PulpPluginDescriptor[] | null;
+  fallbackAt: number;
+  inFlight: Promise<readonly PulpPluginDescriptor[]> | null;
+};
+
+// One state per Pulp server, keyed by its base URL: each server has its own spec and plugins, so
+// one server's registry must never be served for another's.
+const registryStates = new Map<string, RegistryState>();
+
+function registryStateFor(auth: PulpAuth): RegistryState {
+  const baseUrl = getPulpBaseUrl(auth);
+  let state = registryStates.get(baseUrl);
+  if (!state) {
+    state = {
+      cachedRegistry: null,
+      cachedAt: 0,
+      fallbackRegistry: null,
+      fallbackAt: 0,
+      inFlight: null,
+    };
+    registryStates.set(baseUrl, state);
+  }
+  return state;
+}
 
 /**
  * Merges the two content endpoint lists by path: the curated endpoints first, in curated order
@@ -143,15 +165,16 @@ function buildRegistryFromSpec(
  * cached for FAILURE_RETRY_MS.
  */
 function fallbackOrKeepRegistry(
+  state: RegistryState,
   overlay: readonly Partial<PulpPluginDescriptor>[]
 ): readonly PulpPluginDescriptor[] {
-  if (cachedRegistry) {
-    cachedAt = Date.now() - CACHE_TTL_MS + FAILURE_RETRY_MS;
-    return cachedRegistry;
+  if (state.cachedRegistry) {
+    state.cachedAt = Date.now() - CACHE_TTL_MS + FAILURE_RETRY_MS;
+    return state.cachedRegistry;
   }
-  fallbackRegistry = applyOverlay(PULP_PLUGINS, overlay);
-  fallbackAt = Date.now();
-  return fallbackRegistry;
+  state.fallbackRegistry = applyOverlay(PULP_PLUGINS, overlay);
+  state.fallbackAt = Date.now();
+  return state.fallbackRegistry;
 }
 
 /**
@@ -161,33 +184,36 @@ function fallbackOrKeepRegistry(
  * deployment's overlay is applied on every path, so it still corrects the fallback registry when
  * the server's document is unreachable.
  */
-async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
+async function fetchAndBuildRegistry(
+  state: RegistryState,
+  auth: PulpAuth
+): Promise<readonly PulpPluginDescriptor[]> {
   const overlay = await loadPulpPluginOverlay();
 
   try {
     const result = await pulpFetch<unknown>("/docs/api.json", auth);
     if (!result.ok) {
       logWarn("plugin_registry_spec_fetch_failed", { detail: result.detail });
-      return fallbackOrKeepRegistry(overlay);
+      return fallbackOrKeepRegistry(state, overlay);
     }
 
     const built = buildRegistryFromSpec(result.data);
     if (!built.ok) {
       logWarn("plugin_registry_spec_empty");
-      return fallbackOrKeepRegistry(overlay);
+      return fallbackOrKeepRegistry(state, overlay);
     }
 
     const registry = applyOverlay(built.registry, overlay);
-    cachedRegistry = registry;
-    cachedAt = Date.now();
-    fallbackRegistry = null;
+    state.cachedRegistry = registry;
+    state.cachedAt = Date.now();
+    state.fallbackRegistry = null;
     return registry;
   } catch (error) {
     logError("plugin_registry_build_failed", {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return fallbackOrKeepRegistry(overlay);
+    return fallbackOrKeepRegistry(state, overlay);
   }
 }
 
@@ -199,27 +225,31 @@ async function fetchAndBuildRegistry(auth: PulpAuth): Promise<readonly PulpPlugi
  * registry nor a fresh fallback waits for the (6.6MB) spec, sharing one in-flight fetch.
  */
 export async function getPulpPluginRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
+  const state = registryStateFor(auth);
   const now = Date.now();
-  if (cachedRegistry) {
-    if (now - cachedAt >= CACHE_TTL_MS) {
-      refreshRegistry(auth).catch(() => {});
+  if (state.cachedRegistry) {
+    if (now - state.cachedAt >= CACHE_TTL_MS) {
+      refreshRegistry(state, auth).catch(() => {});
     }
-    return cachedRegistry;
+    return state.cachedRegistry;
   }
 
-  if (fallbackRegistry && now - fallbackAt < FAILURE_RETRY_MS) {
-    return fallbackRegistry;
+  if (state.fallbackRegistry && now - state.fallbackAt < FAILURE_RETRY_MS) {
+    return state.fallbackRegistry;
   }
 
-  return refreshRegistry(auth);
+  return refreshRegistry(state, auth);
 }
 
-function refreshRegistry(auth: PulpAuth): Promise<readonly PulpPluginDescriptor[]> {
-  if (!inFlight) {
-    inFlight = fetchAndBuildRegistry(auth).finally(() => {
-      inFlight = null;
+function refreshRegistry(
+  state: RegistryState,
+  auth: PulpAuth
+): Promise<readonly PulpPluginDescriptor[]> {
+  if (!state.inFlight) {
+    state.inFlight = fetchAndBuildRegistry(state, auth).finally(() => {
+      state.inFlight = null;
     });
   }
 
-  return inFlight;
+  return state.inFlight;
 }

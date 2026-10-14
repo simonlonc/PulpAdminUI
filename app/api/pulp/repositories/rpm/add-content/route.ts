@@ -72,12 +72,12 @@ export const POST = withPulpAuth(async (request, auth) => {
   const repositoryHref = repoResult.href;
 
   const modifyResult = await pulpFetch<TaskRefResponse>(
-    `${normalizePulpHrefToApiPath(repositoryHref)}modify/`,
+    `${normalizePulpHrefToApiPath(repositoryHref, auth)}modify/`,
     auth,
     {
       method: "POST",
       body: JSON.stringify({
-        add_content_units: [toPulpHrefPath(content)],
+        add_content_units: [toPulpHrefPath(content, auth)],
       }),
     }
   );
@@ -92,7 +92,7 @@ export const POST = withPulpAuth(async (request, auth) => {
   // waited on here.
   return Response.json({
     repository: repositoryHref,
-    content: toPulpHrefPath(content),
+    content: toPulpHrefPath(content, auth),
     task: modifyPayload.task ?? null,
   });
 });

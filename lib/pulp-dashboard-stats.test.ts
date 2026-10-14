@@ -391,5 +391,30 @@ describe("getCachedPulpDashboardStats", () => {
 
       expect(await getCachedPulpDashboardStats({ username: "admin", password })).toEqual(first);
     });
+
+    it("does not share an entry between the same username on two Pulp servers", async () => {
+      const fetchMock = countingFetch();
+      vi.stubGlobal("fetch", fetchMock);
+      const one = { username: "admin", password, baseUrl: "http://one.test/pulp/api/v3" };
+      const two = { username: "admin", password, baseUrl: "http://two.test/pulp/api/v3" };
+
+      const first = await getCachedPulpDashboardStats(one);
+      const second = await getCachedPulpDashboardStats(two);
+      expect(first.ok && first.usersCount).toBe(1);
+      expect(second.ok && second.usersCount).toBe(2);
+      expect(usersFetches(fetchMock)).toBe(2);
+      const usersUrls = fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .filter((url) => url.includes("/users/"));
+      expect(usersUrls).toEqual([
+        "http://one.test/pulp/api/v3/users/?limit=1&offset=0",
+        "http://two.test/pulp/api/v3/users/?limit=1&offset=0",
+      ]);
+
+      // Each now has its own entry: neither refetches.
+      expect(await getCachedPulpDashboardStats(one)).toEqual(first);
+      expect(await getCachedPulpDashboardStats(two)).toEqual(second);
+      expect(usersFetches(fetchMock)).toBe(2);
+    });
   });
 });

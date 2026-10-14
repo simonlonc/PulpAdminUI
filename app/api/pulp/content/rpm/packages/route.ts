@@ -31,12 +31,12 @@ type DuplicatePackageInfo = {
   arch?: string;
 };
 
-function toAbsoluteArtifactUrl(artifact: string): string {
+function toAbsoluteArtifactUrl(artifact: string, auth: PulpAuth): string {
   if (artifact.startsWith("http://") || artifact.startsWith("https://")) {
     return artifact;
   }
 
-  const origin = new URL(getPulpBaseUrl()).origin;
+  const origin = new URL(getPulpBaseUrl(auth)).origin;
   const normalized = artifact.startsWith("/") ? artifact : `/${artifact}`;
   return `${origin}${normalized}`;
 }
@@ -100,7 +100,7 @@ export const POST = withPulpAuth(async (request, auth) => {
 
   const createResult = await pulpFetch<CreateRpmResponse>("/content/rpm/packages/", auth, {
     method: "POST",
-    body: JSON.stringify({ artifact: toAbsoluteArtifactUrl(artifact) }),
+    body: JSON.stringify({ artifact: toAbsoluteArtifactUrl(artifact, auth) }),
   });
 
   if (!createResult.ok) {

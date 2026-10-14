@@ -21,7 +21,7 @@ export const GET = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isAllowedObjectRoleApiPath(apiPath)) {
     return Response.json({ detail: "Not a role-assignable resource href." }, { status: 400 });
   }

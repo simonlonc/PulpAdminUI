@@ -3,9 +3,11 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { AlertCircle, KeyRound, Loader2, UserRound } from "lucide-react";
+import { AlertCircle, KeyRound, Loader2, Server, UserRound } from "lucide-react";
 import { usePulpAuthContext } from "@/components/pulp/auth-context";
 import { safeNextPath } from "@/lib/safe-next-path";
+import { pulpAuthService } from "@/services/pulp/auth-service";
+import type { PulpBackendOption } from "@/services/pulp/types";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -16,9 +18,29 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [backends, setBackends] = useState<PulpBackendOption[]>([]);
+  const [backendId, setBackendId] = useState("");
   const { sessionUser, isLoading, isCheckingSession, error, login } = usePulpAuthContext();
 
   const nextPath = safeNextPath(searchParams.get("next"));
+  const hasChoice = backends.length > 1;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBackends() {
+      const options = await pulpAuthService.listBackends();
+      if (!active) return;
+      setBackends(options);
+      setBackendId(options[0]?.id ?? "");
+    }
+
+    void loadBackends();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isCheckingSession && sessionUser) {
@@ -29,7 +51,7 @@ function LoginPageContent() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const ok = await login(username, password);
+    const ok = await login(username, password, hasChoice ? backendId : undefined);
     if (ok) {
       router.replace(nextPath);
     }
@@ -78,6 +100,36 @@ function LoginPageContent() {
             )}
           >
             <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+              {hasChoice ? (
+                <FormField
+                  label={<span className="font-medium text-zinc-700 dark:text-zinc-300">Pulp server</span>}
+                  className="gap-2"
+                >
+                  <div className="relative">
+                    <Server
+                      className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-zinc-400 dark:text-zinc-500"
+                      aria-hidden
+                    />
+                    <select
+                      value={backendId}
+                      onChange={(event) => setBackendId(event.target.value)}
+                      className={cn(
+                        "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700",
+                        "w-full border-zinc-200 bg-zinc-50/80 py-2.5 pl-10 pr-3 transition-colors",
+                        "focus:border-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400/20",
+                        "dark:border-zinc-700 dark:bg-zinc-950/50 dark:focus:border-zinc-500 dark:focus:bg-zinc-950 dark:focus:ring-zinc-500/20"
+                      )}
+                    >
+                      {backends.map((backend) => (
+                        <option key={backend.id} value={backend.id}>
+                          {backend.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </FormField>
+              ) : null}
+
               <FormField
                 label={<span className="font-medium text-zinc-700 dark:text-zinc-300">Username</span>}
                 className="gap-2"

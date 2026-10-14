@@ -43,7 +43,7 @@ export const POST = withPulpAuth(async (request, auth) => {
     name,
     path,
     repositories: readStringArrayField(body, "repositories").map((repository) =>
-      toPulpHrefPath(repository)
+      toPulpHrefPath(repository, auth)
     ),
   };
 

@@ -26,8 +26,8 @@ function isPluginRepositoryPath(plugin: PulpPluginDescriptor, path: string): boo
   return path.includes(plugin.repositoryPath);
 }
 
-function repoRefKey(href: string): string {
-  return normalizePulpHrefToApiPath(href).replace(/\/+$/, "");
+function repoRefKey(href: string, auth: PulpAuth): string {
+  return normalizePulpHrefToApiPath(href, auth).replace(/\/+$/, "");
 }
 
 type DistListResult = {
@@ -42,9 +42,9 @@ async function findFirstLinkedDistributionHref(
   | { ok: true; pulp_href: string | null }
   | { ok: false; status: number; detail: string }
 > {
-  const want = repoRefKey(repoHref);
+  const want = repoRefKey(repoHref, auth);
   // Ask Pulp to filter server-side instead of paging through every distribution of this family.
-  const repositoryParam = encodeURIComponent(toPulpHrefPath(repoHref));
+  const repositoryParam = encodeURIComponent(toPulpHrefPath(repoHref, auth));
   const listPath = `${plugin.distributionPath}?repository=${repositoryParam}&limit=1`;
 
   const pageResult = await pulpFetch<DistListResult>(listPath, auth);
@@ -55,7 +55,7 @@ async function findFirstLinkedDistributionHref(
     return { ok: false, status: 502, detail: "Pulp returned a response body with no results list." };
   }
   const row = pageResult.data.results[0];
-  if (row && row.repository && repoRefKey(row.repository) === want) {
+  if (row && row.repository && repoRefKey(row.repository, auth) === want) {
     return { ok: true, pulp_href: row.pulp_href };
   }
 
@@ -102,7 +102,7 @@ export const POST = withPulpAuth(
       return Response.json({ detail: "base_path is required." }, { status: 400 });
     }
 
-    const apiPath = normalizePulpHrefToApiPath(repoHref);
+    const apiPath = normalizePulpHrefToApiPath(repoHref, auth);
     if (!isPluginRepositoryPath(plugin, apiPath)) {
       return Response.json(
         {
@@ -112,7 +112,7 @@ export const POST = withPulpAuth(
       );
     }
 
-    const repositoryField = toPulpHrefPath(repoHref);
+    const repositoryField = toPulpHrefPath(repoHref, auth);
 
     const linked = await findFirstLinkedDistributionHref(plugin, repoHref, auth);
     if (!linked.ok) {
@@ -120,7 +120,7 @@ export const POST = withPulpAuth(
     }
 
     if (linked.pulp_href) {
-      const patchPath = normalizePulpHrefToApiPath(linked.pulp_href);
+      const patchPath = normalizePulpHrefToApiPath(linked.pulp_href, auth);
       const patchResult = await pulpFetch<TaskRefResponse>(patchPath, auth, {
         method: "PATCH",
         body: JSON.stringify({ name, base_path: basePath }),

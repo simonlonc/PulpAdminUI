@@ -90,7 +90,7 @@ export const POST = withPulpAuth(async (request, auth) => {
     createPayload.ca_certificate = body.ca_certificate;
   } else if (descriptor.kind === "core.composite" && body.guards !== undefined) {
     createPayload.guards = readStringArrayField(body as Record<string, unknown>, "guards").map((guard) =>
-      toPulpHrefPath(guard)
+      toPulpHrefPath(guard, auth)
     );
   }
 
