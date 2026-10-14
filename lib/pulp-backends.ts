@@ -65,7 +65,8 @@ function isMissingFile(error: unknown): boolean {
 }
 
 function storeFile(): string {
-  return resolve(process.cwd(), process.env.PULP_BACKENDS_FILE?.trim() || DEFAULT_FILE);
+  // The comment stops Turbopack from tracing the whole working directory into the standalone build.
+  return resolve(/* turbopackIgnore: true */ process.cwd(), process.env.PULP_BACKENDS_FILE?.trim() || DEFAULT_FILE);
 }
 
 function checkLabel(value: unknown): Checked<string> {
