@@ -192,6 +192,23 @@ describe("/api/pulp/backends/manage", () => {
       expect(await savedList()).toEqual([backend("a", "Alpha"), backend("b", "Bravo")]);
     });
 
+    it("names the error code when every address of the host refused the connection", async () => {
+      probe = async () => {
+        const cause = Object.assign(
+          new AggregateError([new Error("connect ECONNREFUSED ::1:1"), new Error("connect ECONNREFUSED 127.0.0.1:1")]),
+          { code: "ECONNREFUSED" }
+        );
+        throw new TypeError("fetch failed", { cause });
+      };
+
+      const response = await POST(jsonRequest("POST", { label: "New", baseUrl: NEW_URL }), undefined);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        detail: `Could not reach a Pulp server at ${NEW_URL}: ECONNREFUSED.`,
+      });
+    });
+
     it("answers 400 and saves nothing when the probe times out", async () => {
       probe = async () => {
         throw new DOMException("The operation was aborted due to timeout", "TimeoutError");

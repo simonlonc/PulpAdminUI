@@ -23,7 +23,7 @@ import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { SavePulpBackendPayload } from "@/services/pulp/types";
 
 export default function PulpServersListPage() {
-  const { sessionUser, isLoading, isCheckingSession, hasSession, error, logout } =
+  const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
   const isRedirectingToLogin = useRequireAuth({ hasSession, isCheckingSession });
   const { backends, createBackend, updateBackend, deleteBackend } = usePulpBackends(hasSession);
@@ -55,7 +55,13 @@ export default function PulpServersListPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalOpen, closeModal]);
 
+  function startNewBackend() {
+    setError(null);
+    setModalOpen(true);
+  }
+
   function startEditBackend(backend: (typeof backends)[number]) {
+    setError(null);
     setEditingBackendId(backend.id);
     setBackendLabel(backend.label);
     setBackendBaseUrl(backend.baseUrl);
@@ -93,7 +99,8 @@ export default function PulpServersListPage() {
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}
-      error={error}
+      // While the dialog is open its own alert shows the error; the overlay would hide this one.
+      error={modalOpen ? null : error}
       onLogout={logout}
     >
       {isCheckingSession || isRedirectingToLogin ? (
@@ -110,7 +117,7 @@ export default function PulpServersListPage() {
           </CardTitle>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setModalOpen(true)} disabled={isLoading}>
+              <Button type="button" variant="outline" onClick={startNewBackend} disabled={isLoading}>
                 New Pulp server
               </Button>
             </div>
@@ -192,6 +199,14 @@ export default function PulpServersListPage() {
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               A new or changed base URL is checked for a Pulp API before it is saved.
             </p>
+            {error ? (
+              <p
+                role="alert"
+                className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+              >
+                {error}
+              </p>
+            ) : null}
             <form className="mt-5 grid gap-4" onSubmit={handleSaveBackend}>
               <FormField label="Label">
                 <Input

@@ -27,13 +27,14 @@ export async function probePulpBackend(baseUrl: string): Promise<void> {
     body = await response.json().catch(() => undefined);
   } catch (error) {
     // undici puts the readable reason (ECONNREFUSED, ENOTFOUND, ...) on `cause`; its own message
-    // is only "fetch failed".
-    const reason =
-      error instanceof Error && error.cause instanceof Error
-        ? error.cause.message
-        : error instanceof Error
-          ? error.message
-          : String(error);
+    // is only "fetch failed". A host name with both an IPv6 and an IPv4 address (localhost) gives
+    // an AggregateError there instead, whose message is empty but whose `code` is set.
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause : null;
+    const reason = cause
+      ? cause.message || ("code" in cause ? String(cause.code) : cause.name)
+      : error instanceof Error
+        ? error.message
+        : String(error);
     return probeFailed(baseUrl, `Could not reach a Pulp server at ${baseUrl}: ${reason}.`);
   }
 
