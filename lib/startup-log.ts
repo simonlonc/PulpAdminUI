@@ -27,5 +27,6 @@ export function logStartupConfig() {
     export_http_base_url: exportHttp?.baseUrl ?? null,
     export_http_path_prefix: exportHttp?.pathPrefix ?? null,
     plugin_dir: process.env.PULP_PLUGIN_DIR?.trim() || null,
+    pulp_backends_file: process.env.PULP_BACKENDS_FILE?.trim() || null,
   });
 }
