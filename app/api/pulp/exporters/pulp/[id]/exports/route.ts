@@ -52,11 +52,11 @@ export const POST = withPulpAuth(
     // the exporter's repositories, where leaving the field out means "the current versions".
     const versions = readStringArrayField(body, "versions");
     if (versions.length > 0) {
-      exportPayload.versions = versions.map((version) => toPulpHrefPath(version));
+      exportPayload.versions = versions.map((version) => toPulpHrefPath(version, auth));
     }
     const startVersions = readStringArrayField(body, "start_versions");
     if (startVersions.length > 0) {
-      exportPayload.start_versions = startVersions.map((version) => toPulpHrefPath(version));
+      exportPayload.start_versions = startVersions.map((version) => toPulpHrefPath(version, auth));
     }
     if (typeof body.meta === "object" && body.meta !== null && !Array.isArray(body.meta)) {
       exportPayload.meta = body.meta as Record<string, unknown>;

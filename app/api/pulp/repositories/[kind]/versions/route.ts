@@ -47,7 +47,7 @@ export const GET = withPulpAuth(async (request, auth, { params }: { params: Prom
     decodedHref = pulpHref;
   }
 
-  const apiPath = normalizePulpHrefToApiPath(decodedHref);
+  const apiPath = normalizePulpHrefToApiPath(decodedHref, auth);
   const resolved = resolveVersionsListPath(apiPath, plugin.repositoryPath, plugin.label);
   if (typeof resolved !== "string") {
     return Response.json({ detail: resolved.error }, { status: 400 });
@@ -66,7 +66,7 @@ export const GET = withPulpAuth(async (request, auth, { params }: { params: Prom
     for (const row of result.data.results) {
       allResults.push(mapPulpRepositoryVersion(row));
     }
-    nextPath = extractNextApiPath(result.data.next);
+    nextPath = extractNextApiPath(result.data.next, auth);
   }
 
   return Response.json({

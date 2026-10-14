@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { normalizePulpHrefToApiPath } from "@/app/api/pulp/repositories/_server";
-import { getPulpApiUrl, toBasicAuthHeader } from "@/lib/pulp";
+import { getPulpApiUrl, toBasicAuthHeader, type PulpAuth } from "@/lib/pulp";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
 import { PULP_PLUGINS } from "@/lib/pulp-plugins";
 import { pulpListQuery } from "@/test/fuzz/arbitraries";
@@ -155,6 +155,8 @@ describeLive("(c) pulp_href round-trip: normalizePulpHrefToApiPath must not mang
   });
 
   it("round-trips every pulp_href the server returned, across all plugin repository lists", () => {
+    const auth: PulpAuth = { username: "u", password: "p" };
+
     if (realHrefs.length === 0) {
       // Tolerate an empty result set rather than creating fixture data to force this branch --
       // nothing to round-trip this run is not a failure, just nothing this run could check.
@@ -165,8 +167,8 @@ describeLive("(c) pulp_href round-trip: normalizePulpHrefToApiPath must not mang
     console.log(`  (c) round-tripping ${realHrefs.length} real pulp_href value(s)`);
     fc.assert(
       fc.property(fc.constantFrom(...realHrefs), (href) => {
-        const normalized = normalizePulpHrefToApiPath(href);
-        const rebuiltPath = new URL(getPulpApiUrl(normalized)).pathname;
+        const normalized = normalizePulpHrefToApiPath(href, auth);
+        const rebuiltPath = new URL(getPulpApiUrl(normalized, auth)).pathname;
         // Pulp emits pulp_href RELATIVE ("/pulp/api/v3/repositories/rpm/rpm/<uuid>/"), so the
         // original has to be parsed against a base to get a pathname out of it -- `new URL(href)`
         // alone throws "Invalid URL" on every href a real server returns. The dummy base is only

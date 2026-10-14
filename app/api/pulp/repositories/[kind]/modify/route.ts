@@ -25,7 +25,7 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
     return Response.json({ detail: "Repository pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(repoHref);
+  const apiPath = normalizePulpHrefToApiPath(repoHref, auth);
   if (!apiPath.startsWith(plugin.repositoryPath)) {
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
   }
@@ -47,13 +47,13 @@ export const POST = withPulpAuth(async (request, auth, { params }: { params: Pro
 
   const payload: Record<string, unknown> = {};
   if (addContentUnits.length > 0) {
-    payload.add_content_units = addContentUnits.map((h) => toPulpHrefPath(h));
+    payload.add_content_units = addContentUnits.map((h) => toPulpHrefPath(h, auth));
   }
   if (removeContentUnits.length > 0) {
-    payload.remove_content_units = removeContentUnits.map((h) => (h === "*" ? h : toPulpHrefPath(h)));
+    payload.remove_content_units = removeContentUnits.map((h) => (h === "*" ? h : toPulpHrefPath(h, auth)));
   }
   if (baseVersion) {
-    payload.base_version = toPulpHrefPath(baseVersion);
+    payload.base_version = toPulpHrefPath(baseVersion, auth);
   }
   if (body.overwrite !== undefined) {
     payload.overwrite = body.overwrite;

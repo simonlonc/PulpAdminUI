@@ -172,7 +172,7 @@ export const PATCH = withPulpAuth(async (request, auth, { params }: { params: Pr
     return Response.json({ detail: "Repository name is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!apiPath.includes(plugin.repositoryPath)) {
     return Response.json({ detail: `Not ${plugin.article} ${plugin.label} repository href.` }, { status: 400 });
   }
@@ -220,7 +220,7 @@ export const DELETE = withPulpAuth(async (request, auth, { params }: { params: P
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   const deleteResult = await pulpFetch<TaskRefResponse>(apiPath, auth, {
     method: "DELETE",
   });

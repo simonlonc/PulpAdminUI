@@ -36,6 +36,7 @@ import {
   normalizePulpHrefToApiPath,
   toPulpHrefPath,
 } from "@/app/api/pulp/repositories/_server";
+import type { PulpAuth } from "@/lib/pulp";
 import { pulpHref } from "@/test/fuzz/arbitraries";
 
 // Mirrors FORWARDED_LIST_PARAMS in _server.ts, read as data (not re-derived logic): the
@@ -57,6 +58,8 @@ function pathComponent(result: string): string {
 }
 
 describe("with PULP_BASE_URL stubbed", () => {
+  const auth: PulpAuth = { username: "u", password: "p" };
+
   beforeEach(() => {
     vi.stubEnv("PULP_BASE_URL", "http://localhost:8080/pulp/api/v3");
   });
@@ -69,7 +72,7 @@ describe("with PULP_BASE_URL stubbed", () => {
     it("F-1: never throws, including on absolute hrefs with a malformed authority", () => {
       fc.assert(
         fc.property(pulpHref(), (href) => {
-          expect(() => normalizePulpHrefToApiPath(href)).not.toThrow();
+          expect(() => normalizePulpHrefToApiPath(href, auth)).not.toThrow();
         }),
         { examples: F1_EXAMPLES }
       );
@@ -83,7 +86,7 @@ describe("with PULP_BASE_URL stubbed", () => {
         fc.property(pulpHref(), (href) => {
           let result: string;
           try {
-            result = normalizePulpHrefToApiPath(href);
+            result = normalizePulpHrefToApiPath(href, auth);
           } catch {
             // F-1 covers the inputs that make this throw; out of scope for this property.
             return;
@@ -100,7 +103,7 @@ describe("with PULP_BASE_URL stubbed", () => {
     it("F-1: never throws, including on absolute hrefs with a malformed authority", () => {
       fc.assert(
         fc.property(pulpHref(), (href) => {
-          expect(() => toPulpHrefPath(href)).not.toThrow();
+          expect(() => toPulpHrefPath(href, auth)).not.toThrow();
         }),
         { examples: F1_EXAMPLES }
       );
@@ -114,7 +117,7 @@ describe("with PULP_BASE_URL stubbed", () => {
         fc.property(pulpHref(), (href) => {
           let result: string;
           try {
-            result = toPulpHrefPath(href);
+            result = toPulpHrefPath(href, auth);
           } catch {
             // F-1 covers the inputs that make this throw; out of scope for this property.
             return;
@@ -132,7 +135,7 @@ describe("with PULP_BASE_URL stubbed", () => {
     it("F-1: never throws, including on absolute hrefs with a malformed authority", () => {
       fc.assert(
         fc.property(pulpHref(), (href) => {
-          expect(() => extractNextApiPath(href)).not.toThrow();
+          expect(() => extractNextApiPath(href, auth)).not.toThrow();
         }),
         { examples: F1_EXAMPLES }
       );

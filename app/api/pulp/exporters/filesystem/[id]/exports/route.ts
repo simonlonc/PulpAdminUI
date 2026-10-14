@@ -48,13 +48,13 @@ export const POST = withPulpAuth(
     // Only the fields present and of the right type are forwarded.
     const exportPayload: RunPulpFilesystemExportPayload = {};
     if (typeof body.publication === "string" && body.publication.trim()) {
-      exportPayload.publication = toPulpHrefPath(body.publication.trim());
+      exportPayload.publication = toPulpHrefPath(body.publication.trim(), auth);
     }
     if (typeof body.repository_version === "string" && body.repository_version.trim()) {
-      exportPayload.repository_version = toPulpHrefPath(body.repository_version.trim());
+      exportPayload.repository_version = toPulpHrefPath(body.repository_version.trim(), auth);
     }
     if (typeof body.start_repository_version === "string" && body.start_repository_version.trim()) {
-      exportPayload.start_repository_version = toPulpHrefPath(body.start_repository_version.trim());
+      exportPayload.start_repository_version = toPulpHrefPath(body.start_repository_version.trim(), auth);
     }
 
     // Both or neither: Pulp answers that with a 400 of its own ("publication or repository_version

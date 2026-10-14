@@ -18,7 +18,7 @@ export const GET = withPulpAuth(async (_request, auth) => {
       throw new PulpApiError(result.status, result.detail);
     }
     results.push(...result.data.results);
-    nextPath = extractNextApiPath(result.data.next);
+    nextPath = extractNextApiPath(result.data.next, auth);
   }
 
   return Response.json({ count: results.length, next: null, previous: null, results });

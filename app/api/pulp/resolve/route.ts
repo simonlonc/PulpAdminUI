@@ -39,7 +39,7 @@ export const GET = withPulpAuth(async (request, auth) => {
   }
 
   if (parsed.kind === "href") {
-    const apiPath = normalizePulpHrefToApiPath(parsed.href);
+    const apiPath = normalizePulpHrefToApiPath(parsed.href, auth);
     const result = await pulpFetch<PulpResolvedObject>(apiPath, auth);
     if (!result.ok) {
       throw new PulpApiError(result.status, result.detail);

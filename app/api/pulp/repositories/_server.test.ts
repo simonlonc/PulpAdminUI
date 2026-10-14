@@ -6,6 +6,7 @@ import {
   normalizePulpHrefToApiPath,
   toPulpHrefPath,
 } from "@/app/api/pulp/repositories/_server";
+import type { PulpAuth } from "@/lib/pulp";
 
 describe("buildUpstreamListParams", () => {
   it("defaults limit and offset when absent", () => {
@@ -58,6 +59,8 @@ describe("buildUpstreamListParams", () => {
 });
 
 describe("with PULP_BASE_URL stubbed", () => {
+  const auth: PulpAuth = { username: "u", password: "p" };
+
   beforeEach(() => {
     vi.stubEnv("PULP_BASE_URL", "http://localhost:8080/pulp/api/v3");
   });
@@ -69,115 +72,141 @@ describe("with PULP_BASE_URL stubbed", () => {
   describe("normalizePulpHrefToApiPath", () => {
     it("strips the Pulp base path from a full URL", () => {
       expect(
-        normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/abc/")
+        normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/abc/", auth)
       ).toBe("/repositories/rpm/rpm/abc/");
     });
 
     it("strips the Pulp base path regardless of the URL's host", () => {
       expect(
-        normalizePulpHrefToApiPath("https://other-host:1234/pulp/api/v3/repositories/y/")
+        normalizePulpHrefToApiPath("https://other-host:1234/pulp/api/v3/repositories/y/", auth)
       ).toBe("/repositories/y/");
     });
 
     it("leaves a relative path already stripped of the base path unchanged", () => {
-      expect(normalizePulpHrefToApiPath("/repositories/rpm/rpm/abc/")).toBe(
+      expect(normalizePulpHrefToApiPath("/repositories/rpm/rpm/abc/", auth)).toBe(
         "/repositories/rpm/rpm/abc/"
       );
     });
 
     it("adds a leading slash to a relative path missing one before comparing", () => {
-      expect(normalizePulpHrefToApiPath("pulp/api/v3/repositories/x/")).toBe("/repositories/x/");
+      expect(normalizePulpHrefToApiPath("pulp/api/v3/repositories/x/", auth)).toBe("/repositories/x/");
     });
 
     it("leaves a path with a different prefix unchanged", () => {
-      expect(normalizePulpHrefToApiPath("/other/api/x/")).toBe("/other/api/x/");
+      expect(normalizePulpHrefToApiPath("/other/api/x/", auth)).toBe("/other/api/x/");
     });
 
     it("returns a single slash for the bare base path", () => {
-      expect(normalizePulpHrefToApiPath("/pulp/api/v3")).toBe("/");
+      expect(normalizePulpHrefToApiPath("/pulp/api/v3", auth)).toBe("/");
     });
 
     it("resolves parent-directory segments in a relative href before the base path check", () => {
       expect(
-        normalizePulpHrefToApiPath("/repositories/../../../../pulp/api/v3/status/")
+        normalizePulpHrefToApiPath("/repositories/../../../../pulp/api/v3/status/", auth)
       ).toBe("/status/");
     });
 
     it("keeps the query string when normalizing a relative path", () => {
-      expect(normalizePulpHrefToApiPath("/repositories/x/?limit=1&offset=0")).toBe(
+      expect(normalizePulpHrefToApiPath("/repositories/x/?limit=1&offset=0", auth)).toBe(
         "/repositories/x/?limit=1&offset=0"
       );
     });
 
     it("resolves dot segments in an absolute http(s) URL", () => {
       expect(
-        normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/../../x/")
+        normalizePulpHrefToApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/../../x/", auth)
       ).toBe("/repositories/x/");
     });
 
     it("F-1: never throws for an absolute href with a malformed authority", () => {
-      expect(() => normalizePulpHrefToApiPath("http://h:8080;/repositories/")).not.toThrow();
-      expect(() => normalizePulpHrefToApiPath("http://[/repositories/")).not.toThrow();
-      expect(() => normalizePulpHrefToApiPath("https://%%/repositories/")).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("http://h:8080;/repositories/", auth)).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("http://[/repositories/", auth)).not.toThrow();
+      expect(() => normalizePulpHrefToApiPath("https://%%/repositories/", auth)).not.toThrow();
     });
   });
 
   describe("toPulpHrefPath", () => {
     it("leaves a path already carrying the base path unchanged", () => {
-      expect(toPulpHrefPath("/pulp/api/v3/repositories/x/")).toBe("/pulp/api/v3/repositories/x/");
+      expect(toPulpHrefPath("/pulp/api/v3/repositories/x/", auth)).toBe("/pulp/api/v3/repositories/x/");
     });
 
     it("prefixes a relative path with the base path", () => {
-      expect(toPulpHrefPath("/repositories/x/")).toBe("/pulp/api/v3/repositories/x/");
-      expect(toPulpHrefPath("repositories/x/")).toBe("/pulp/api/v3/repositories/x/");
+      expect(toPulpHrefPath("/repositories/x/", auth)).toBe("/pulp/api/v3/repositories/x/");
+      expect(toPulpHrefPath("repositories/x/", auth)).toBe("/pulp/api/v3/repositories/x/");
     });
 
     it("reduces a full URL to the base-prefixed path", () => {
-      expect(toPulpHrefPath("http://localhost:8080/pulp/api/v3/repositories/x/")).toBe(
+      expect(toPulpHrefPath("http://localhost:8080/pulp/api/v3/repositories/x/", auth)).toBe(
         "/pulp/api/v3/repositories/x/"
       );
     });
 
     it("collapses dot-segments in a relative path, the same way normalizePulpHrefToApiPath does (F-7)", () => {
-      expect(toPulpHrefPath("/repositories/../../signing-services/")).toBe(
+      expect(toPulpHrefPath("/repositories/../../signing-services/", auth)).toBe(
         "/pulp/api/v3/signing-services/"
       );
     });
 
     it("F-1: never throws for an absolute href with a malformed authority", () => {
-      expect(() => toPulpHrefPath("http://h:8080;/repositories/")).not.toThrow();
-      expect(() => toPulpHrefPath("http://[/repositories/")).not.toThrow();
-      expect(() => toPulpHrefPath("https://%%/repositories/")).not.toThrow();
+      expect(() => toPulpHrefPath("http://h:8080;/repositories/", auth)).not.toThrow();
+      expect(() => toPulpHrefPath("http://[/repositories/", auth)).not.toThrow();
+      expect(() => toPulpHrefPath("https://%%/repositories/", auth)).not.toThrow();
     });
   });
 
   describe("extractNextApiPath", () => {
     it("returns null for a null next value", () => {
-      expect(extractNextApiPath(null)).toBeNull();
+      expect(extractNextApiPath(null, auth)).toBeNull();
     });
 
     it("strips the base path from a plain absolute next URL", () => {
       expect(
-        extractNextApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/?offset=10&limit=10")
+        extractNextApiPath("http://localhost:8080/pulp/api/v3/repositories/rpm/rpm/?offset=10&limit=10", auth)
       ).toBe("/repositories/rpm/rpm/?offset=10&limit=10");
     });
 
     it("reads the URL out of an href=\"...\" wrapped value", () => {
       expect(
-        extractNextApiPath('<a href="http://localhost:8080/pulp/api/v3/tasks/?offset=20">next</a>')
+        extractNextApiPath('<a href="http://localhost:8080/pulp/api/v3/tasks/?offset=20">next</a>', auth)
       ).toBe("/tasks/?offset=20");
     });
 
     it("handles a value that is already a relative path", () => {
-      expect(extractNextApiPath("/pulp/api/v3/repositories/?offset=10")).toBe(
+      expect(extractNextApiPath("/pulp/api/v3/repositories/?offset=10", auth)).toBe(
         "/repositories/?offset=10"
       );
     });
 
     it("F-1: never throws for an absolute href with a malformed authority", () => {
-      expect(() => extractNextApiPath("http://h:8080;/repositories/")).not.toThrow();
-      expect(() => extractNextApiPath("http://[/repositories/")).not.toThrow();
-      expect(() => extractNextApiPath("https://%%/repositories/")).not.toThrow();
+      expect(() => extractNextApiPath("http://h:8080;/repositories/", auth)).not.toThrow();
+      expect(() => extractNextApiPath("http://[/repositories/", auth)).not.toThrow();
+      expect(() => extractNextApiPath("https://%%/repositories/", auth)).not.toThrow();
+    });
+  });
+
+  describe("with auth.baseUrl set", () => {
+    const authWithBaseUrl: PulpAuth = {
+      username: "u",
+      password: "p",
+      baseUrl: "http://other.test/pulp/other/v3",
+    };
+
+    it("normalizePulpHrefToApiPath uses auth.baseUrl instead of env", () => {
+      expect(
+        normalizePulpHrefToApiPath("http://other.test/pulp/other/v3/repositories/rpm/rpm/abc/", authWithBaseUrl)
+      ).toBe("/repositories/rpm/rpm/abc/");
+    });
+
+    it("toPulpHrefPath uses auth.baseUrl instead of env", () => {
+      expect(toPulpHrefPath("/repositories/x/", authWithBaseUrl)).toBe(
+        "/pulp/other/v3/repositories/x/"
+      );
+    });
+
+    it("extractNextApiPath uses auth.baseUrl instead of env", () => {
+      expect(
+        extractNextApiPath("http://other.test/pulp/other/v3/repositories/?offset=10", authWithBaseUrl)
+      ).toBe("/repositories/?offset=10");
     });
   });
 });

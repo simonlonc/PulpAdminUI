@@ -52,7 +52,7 @@ export const PATCH = withPulpAuth(async (request, auth) => {
     return Response.json({ detail: "pulp_href is required." }, { status: 400 });
   }
 
-  const apiPath = normalizePulpHrefToApiPath(pulpHref);
+  const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
   if (!isTaskApiPath(apiPath)) {
     return Response.json({ detail: "Not a task href." }, { status: 400 });
   }

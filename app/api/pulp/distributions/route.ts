@@ -106,16 +106,16 @@ export const POST = withPulpAuth(async (request, auth) => {
     createPayload.hidden = body.hidden;
   }
   if (body.repository) {
-    createPayload.repository = toPulpHrefPath(body.repository);
+    createPayload.repository = toPulpHrefPath(body.repository, auth);
   }
   if (body.publication) {
-    createPayload.publication = toPulpHrefPath(body.publication);
+    createPayload.publication = toPulpHrefPath(body.publication, auth);
   }
   if (body.repository_version) {
-    createPayload.repository_version = toPulpHrefPath(body.repository_version);
+    createPayload.repository_version = toPulpHrefPath(body.repository_version, auth);
   }
   if (body.content_guard) {
-    createPayload.content_guard = toPulpHrefPath(body.content_guard);
+    createPayload.content_guard = toPulpHrefPath(body.content_guard, auth);
   }
 
   const createResult = await pulpFetch<TaskRefResponse>(plugin.distributionPath, auth, {

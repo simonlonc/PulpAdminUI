@@ -329,7 +329,7 @@ export const PATCH = withPulpAuth(
       return Response.json({ detail: "pulp_href is required." }, { status: 400 });
     }
 
-    const apiPath = normalizePulpHrefToApiPath(pulpHref);
+    const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
     if (!isRemoteApiPath(plugin, apiPath)) {
       return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
     }
@@ -430,7 +430,7 @@ export const DELETE = withPulpAuth(
       return Response.json({ detail: "pulp_href is required." }, { status: 400 });
     }
 
-    const apiPath = normalizePulpHrefToApiPath(pulpHref);
+    const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
     if (!isRemoteApiPath(plugin, apiPath)) {
       return Response.json({ detail: `Not ${plugin.article} ${plugin.label} remote href.` }, { status: 400 });
     }

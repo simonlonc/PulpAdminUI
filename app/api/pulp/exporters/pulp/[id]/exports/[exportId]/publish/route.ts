@@ -25,18 +25,18 @@ function parseHttpUrl(value: string): string | null {
 }
 
 /** The repository href Pulp expects in the content create body, or null for anything but a File repository. */
-function toFileRepositoryHref(repository: unknown): string | null {
+function toFileRepositoryHref(repository: unknown, auth: PulpAuth): string | null {
   if (typeof repository !== "string" || !repository.trim()) {
     return null;
   }
 
   let href: string;
   try {
-    href = toPulpHrefPath(repository.trim());
+    href = toPulpHrefPath(repository.trim(), auth);
   } catch {
     return null;
   }
-  return FILE_REPOSITORY_PATH.test(href.slice(getBaseApiPath().length)) ? href : null;
+  return FILE_REPOSITORY_PATH.test(href.slice(getBaseApiPath(auth).length)) ? href : null;
 }
 
 async function readExport(exportPath: string, auth: PulpAuth) {
@@ -77,7 +77,7 @@ export const POST = withPulpAuth(async (request: Request, auth, { params }: Publ
 
   const body = await readJsonBody(request);
 
-  const repository = toFileRepositoryHref(body.repository);
+  const repository = toFileRepositoryHref(body.repository, auth);
   if (!repository) {
     return Response.json({ detail: "repository must be a File repository href." }, { status: 400 });
   }

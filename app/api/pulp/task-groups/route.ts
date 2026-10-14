@@ -26,7 +26,7 @@ export const GET = withPulpAuth(async (request, auth) => {
   // A pulp_href selects one group with its member tasks; otherwise the list is returned.
   let path: string;
   if (pulpHref) {
-    const apiPath = normalizePulpHrefToApiPath(pulpHref);
+    const apiPath = normalizePulpHrefToApiPath(pulpHref, auth);
     if (!apiPath.includes("/task-groups/")) {
       return Response.json({ detail: "Not a task group href." }, { status: 400 });
     }
