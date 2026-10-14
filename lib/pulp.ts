@@ -270,7 +270,8 @@ function pulpFailureDetail(response: Response, rawText: string, parsed: unknown)
 
 export type PulpLoginResult =
   | { kind: "session"; session: PulpSession }
-  // Pulp has no `/login/` (404), or answered without session cookies: keep using Basic.
+  // Pulp before 3.70 has no `/login/` (404), or it answered without session cookies: keep
+  // using Basic.
   | { kind: "unsupported" }
   | { kind: "failed"; status: number; detail: string };
 
