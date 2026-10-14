@@ -61,7 +61,7 @@ describe("GET /api/pulp/distributions", () => {
   });
 
   it("leaves base_url identical to Pulp's when PULP_CONTENT_ORIGIN is unset", async () => {
-    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -74,7 +74,7 @@ describe("GET /api/pulp/distributions", () => {
   it("replaces the origin while preserving the content path when PULP_CONTENT_ORIGIN is set", async () => {
     vi.stubEnv("PULP_CONTENT_ORIGIN", "https://pulp.example.com");
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -98,7 +98,7 @@ describe("GET /api/pulp/distributions response-shape guard (F-16)", () => {
   it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body is a bare number", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("42", { status: 200 })));
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"), undefined);
 
     expect(response.status).toBe(502);
     const body = await response.json();
@@ -109,7 +109,7 @@ describe("GET /api/pulp/distributions response-shape guard (F-16)", () => {
   it("returns a 502 with a detail, not a TypeError, when Pulp's 200 body has no results array", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/distributions"), undefined);
 
     expect(response.status).toBe(502);
     const body = await response.json();
@@ -173,7 +173,8 @@ describe("POST /api/pulp/distributions hidden", () => {
       new Request("http://pulp.test/api/pulp/distributions", {
         method: "POST",
         body: JSON.stringify({ kind: "file", name: "d", base_path: "d", ...extra }),
-      })
+      }),
+      undefined
     );
   }
 
@@ -228,7 +229,8 @@ describe("POST /api/pulp/distributions repository_version", () => {
       new Request("http://pulp.test/api/pulp/distributions", {
         method: "POST",
         body: JSON.stringify({ kind: "file", name: "d", base_path: "d", ...extra }),
-      })
+      }),
+      undefined
     );
   }
 

@@ -31,7 +31,7 @@ function paramsFor(kind: string) {
 // without needing a real OpenAPI document, and, since the fallback path is never cached, avoids
 // module-level cross-test cache state entirely.
 function fetchImpl(listResponse: () => Response) {
-  return vi.fn(async (input: RequestInfo | URL) => {
+  return vi.fn<typeof fetch>(async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/docs/api.json")) {
       return new Response("", { status: 500 });

@@ -87,15 +87,6 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-// Same passthrough as routes.fuzz.test.ts: dashboard-summary/route.ts's unstable_cache wrapper
-// throws outside a real Next.js request scope otherwise.
-vi.mock("next/cache", () => ({
-  unstable_cache:
-    <Args extends unknown[], Result>(fn: (...args: Args) => Promise<Result>) =>
-    (...args: Args) =>
-      fn(...args),
-}));
-
 type RouteContext = { params: Promise<Record<string, string>> };
 type RouteHandler = (request: Request, context: RouteContext) => Promise<Response>;
 

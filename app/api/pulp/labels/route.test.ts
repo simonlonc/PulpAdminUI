@@ -44,7 +44,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/abc/", key: "env", value: "prod" }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -59,7 +59,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/content/rpm/packages/abc/", key: "env" }),
     });
 
-    const response = await DELETE(request);
+    const response = await DELETE(request, undefined);
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0][0])).toBe(
@@ -73,7 +73,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/users/1/", key: "env", value: "prod" }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Not a labelable resource href." });
@@ -86,7 +86,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/users/1/", key: "env" }),
     });
 
-    const response = await DELETE(request);
+    const response = await DELETE(request, undefined);
 
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/abc/", key: "env", value: "prod" }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "key: This field is required." });
@@ -128,7 +128,7 @@ describe("labels route", () => {
       body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/abc/", key: "env", value: "prod" }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(403);
     expect(deleteCookieMock).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe("labels route", () => {
       }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();

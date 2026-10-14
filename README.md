@@ -12,10 +12,10 @@ The UI is not hardcoded to RPM and Debian. It works against seven curated Pulp p
 
 ### Overview & status
 
-- **Dashboard**: Summary cards driven by the plugin registry, one set of counts per configured family, plus users and groups. Counts are loaded via a 60-second server cache (persisted to `.next/cache`) with a manual refresh control. The cache avoids sending ~1 list call per repository family plus 5 more to Pulp per page load.
+- **Dashboard**: Summary cards driven by the plugin registry, one set of counts per configured family, plus users and groups. Counts are loaded via a 60-second in-memory server cache, kept per user, with a manual refresh control. Once the 60 seconds are up the last counts are still served at once while one refresh runs in the background. The cache avoids sending ~1 list call per repository family plus 5 more to Pulp per page load.
 - **Global search**: Resolve a Pulp resource by href or PRN (Pulp Resource Name) and jump straight to its detail page.
 - **Server status**: Pulp server version, online services, connectivity, and storage information from Pulp's status endpoint.
-- **Authentication**: Log in against Pulp; cookie-based session (username/password encrypted into the cookie, never stored server-side); protected app pages and API routes; session card with logout.
+- **Authentication**: Log in against Pulp; cookie-based session (username/password encrypted into the cookie, never stored server-side); the app logs in to Pulp's `/login/` once and reuses that Pulp session, which is far cheaper per call than Basic auth, logs in again on its own when the session expires, and falls back to Basic auth on a Pulp without `/login/`; protected app pages and API routes; session card with logout.
 
 ### Identity & access
 
@@ -153,7 +153,7 @@ Run `containers/build.sh --help` for the full option list. Tags follow `<image>:
 
 All three images declare `USER 1001` and ship their files group-owned by gid 0, so they also run correctly under the arbitrary UID that OpenShift assigns (OpenShift ignores `USER` and runs the container as a random UID in the root group). They listen on plain HTTP on port 3000; serve them to browsers over HTTPS (a TLS-terminating reverse proxy or route), because the session cookie is `Secure` and a browser drops it over plain HTTP on any name but `localhost`. See `PULP_COOKIE_SECURE` to opt out on a trusted network. They need the same environment variables as local development: `PULP_BASE_URL`, `PULP_PROJECT_NAME`, and `PULP_SESSION_SECRET` at minimum, plus `PULP_PLUGIN_DIR` if you use a plugin overlay. If running behind a reverse proxy or published TLS endpoint, also set `PULP_CONTENT_ORIGIN` to override how Pulp reports its content URLs. To publish exported files into File repositories without typing each URL, also set `PULP_EXPORT_HTTP_BASE_URL` and `PULP_EXPORT_HTTP_PATH_PREFIX`.
 
-The dashboard caches counts (users, groups, repositories, activity) to `.next/cache` for 60 seconds to avoid repeated list calls to Pulp. The runtime user must be able to write to the `.next/cache` directory relative to the working directory (`/app` for debian/alpine, `/opt/app-root/src` for UBI). The in-repo Containerfiles set up the required permissions with `mkdir -p .next/cache && chmod -R g+rwX .next/cache`. If the directory is not writable, Next logs a non-fatal "Failed to update prerender cache ... EACCES" warning; the dashboard continues to work using in-memory caching, but the cache is lost across container restarts and replicas.
+The dashboard keeps its counts (users, groups, repositories, activity) in memory for 60 seconds, so the cache is per process and starts empty after a restart. The in-repo Containerfiles still create a group-writable `.next/cache` (`mkdir -p .next/cache && chmod -R g+rwX .next/cache`), which Next uses to cache optimized `next/image` files.
 
 Building any of the three images requires outbound network access to `fonts.googleapis.com` during the build stage, because the app loads its fonts with `next/font/google`.
 

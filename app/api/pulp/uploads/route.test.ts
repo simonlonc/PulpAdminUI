@@ -37,7 +37,7 @@ describe("uploads route", () => {
       headers: { "Content-Type": "application/json" },
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Invalid multipart form data." });

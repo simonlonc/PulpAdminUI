@@ -115,7 +115,7 @@ describe("POST /api/pulp/repositories/reclaim", () => {
   });
 
   it("accepts a valid repo_hrefs array, preserving the \"*\" special case", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/abc/" }), { status: 200 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ task: "/pulp/api/v3/tasks/abc/" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const request = new Request("http://pulp.test/api/pulp/repositories/reclaim", {

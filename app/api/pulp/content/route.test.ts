@@ -51,7 +51,8 @@ describe("GET /api/pulp/content", () => {
     await GET(
       new Request(
         `http://pulp.test/api/pulp/content?pulp_type=rpm.package&repository_version=${v(3)}&repository_version_added=${v(2)}&repository_version_removed=${v(1)}&arbitrary=1`
-      )
+      ),
+      undefined
     );
 
     const url = calledUrl(fetchMock);
