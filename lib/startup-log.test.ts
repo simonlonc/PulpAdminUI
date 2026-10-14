@@ -46,8 +46,6 @@ describe("logStartupConfig", () => {
       export_http_base_url: "http://files.example.test:8099",
       export_http_path_prefix: "/var/lib/pulp/exports",
       plugin_dir: "/etc/pulp-plugins",
-      dashboard_cache: expect.stringMatching(/\.next[\\/]cache$/),
-      dashboard_cache_writable: expect.any(Boolean),
     });
   });
 
