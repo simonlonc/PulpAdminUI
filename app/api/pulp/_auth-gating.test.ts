@@ -148,6 +148,7 @@ describe("withPulpAuth logging", () => {
   beforeEach(() => {
     vi.stubEnv("LOG_LEVEL", "info");
     vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3");
     encodedCookie = encodePulpAuth({ username: "admin", password: PASSWORD });
     cookieState.value = encodedCookie;
     deleteCookieMock.mockClear();

@@ -52,11 +52,11 @@ type PulpRepositoryHrefPage = {
 
 // Path of a `next` link relative to the Pulp API base, or null when there is none. lib/ does not
 // import from app/, so this is not app/api/pulp/repositories/_server.ts's extractNextApiPath.
-function nextPathFrom(next: unknown): string | null {
+function nextPathFrom(next: unknown, auth: PulpAuth): string | null {
   if (!next || typeof next !== "string") return null;
   try {
     const url = new URL(next);
-    const basePath = new URL(getPulpBaseUrl()).pathname.replace(/\/+$/, "");
+    const basePath = new URL(getPulpBaseUrl(auth)).pathname.replace(/\/+$/, "");
     const path = url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) : url.pathname;
     return path + url.search;
   } catch {
@@ -77,7 +77,7 @@ async function loadRepositoryHrefs(auth: PulpAuth): Promise<string[] | null> {
     for (const row of result.data.results) {
       if (typeof row.pulp_href === "string") hrefs.push(row.pulp_href);
     }
-    nextPath = nextPathFrom(result.data.next);
+    nextPath = nextPathFrom(result.data.next, auth);
   }
   return hrefs;
 }
@@ -178,8 +178,9 @@ async function loadPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStat
   };
 }
 
-// Dashboard stats (users, groups, repositories, activity) are kept in memory per username: the
-// last good result is served at once, and once it is 60s old one background refresh replaces it.
+// Dashboard stats (users, groups, repositories, activity) are kept in memory per Pulp server and
+// username: the last good result is served at once, and once it is 60s old one background refresh
+// replaces it.
 // unstable_cache was dropped because it cannot do this here: it does serve the stale value, but
 // the route's response is not ended until its background refresh finishes (Next 16.2.2
 // build/templates/app-route.js passes renderOpts.pendingWaitUntil to sendResponse, and
@@ -188,22 +189,28 @@ const DASHBOARD_STATS_TTL_MS = 60_000;
 const dashboardStatsCache = new Map<string, { result: PulpDashboardStatsResult; loadedAt: number }>();
 const dashboardStatsInFlight = new Map<string, Promise<PulpDashboardStatsResult>>();
 
+// `admin` exists on every Pulp server, so the username alone would share one entry between them.
+function dashboardStatsKey(auth: PulpAuth): string {
+  return `${getPulpBaseUrl(auth)} ${auth.username}`;
+}
+
 function refreshPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
-  const inFlight = dashboardStatsInFlight.get(auth.username);
+  const key = dashboardStatsKey(auth);
+  const inFlight = dashboardStatsInFlight.get(key);
   if (inFlight) return inFlight;
   const refresh = loadPulpDashboardStats(auth)
     .then((result) => {
       // A failed load never replaces the last good result.
-      if (result.ok) dashboardStatsCache.set(auth.username, { result, loadedAt: Date.now() });
+      if (result.ok) dashboardStatsCache.set(key, { result, loadedAt: Date.now() });
       return result;
     })
-    .finally(() => dashboardStatsInFlight.delete(auth.username));
-  dashboardStatsInFlight.set(auth.username, refresh);
+    .finally(() => dashboardStatsInFlight.delete(key));
+  dashboardStatsInFlight.set(key, refresh);
   return refresh;
 }
 
 export function getCachedPulpDashboardStats(auth: PulpAuth): Promise<PulpDashboardStatsResult> {
-  const entry = dashboardStatsCache.get(auth.username);
+  const entry = dashboardStatsCache.get(dashboardStatsKey(auth));
   if (!entry) return refreshPulpDashboardStats(auth);
   if (Date.now() - entry.loadedAt >= DASHBOARD_STATS_TTL_MS) {
     refreshPulpDashboardStats(auth).catch(() => {});

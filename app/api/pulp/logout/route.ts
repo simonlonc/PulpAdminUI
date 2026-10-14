@@ -1,12 +1,13 @@
 import { cookies } from "next/headers";
-import { decodePulpAuth, PULP_AUTH_COOKIE, pulpLogout } from "@/lib/pulp";
+import { PULP_AUTH_COOKIE, pulpLogout } from "@/lib/pulp";
+import { requirePulpAuth } from "../_helpers";
 
 export async function POST() {
   const cookieStore = await cookies();
-  const encoded = cookieStore.get(PULP_AUTH_COOKIE)?.value;
-  const auth = encoded ? decodePulpAuth(encoded) : null;
-  if (auth?.pulpSession) {
-    await pulpLogout(auth);
+  // Not ok means no valid cookie or no known server for it: nothing to end on the Pulp side.
+  const authResult = await requirePulpAuth();
+  if (authResult.ok && authResult.auth.pulpSession) {
+    await pulpLogout(authResult.auth);
   }
   cookieStore.delete(PULP_AUTH_COOKIE);
 

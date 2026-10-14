@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   decodePulpAuth,
   encodePulpAuth,
+  getPulpBaseUrl,
   pulpErrorDetailFromBody,
   pulpFetch,
   takePulpAuthRenewal,
@@ -213,6 +214,81 @@ describe("encodePulpAuth / decodePulpAuth", () => {
     const encoded = Buffer.from(JSON.stringify(["admin", "pass"]), "utf8").toString("base64url");
     expect(decodePulpAuth(encoded)).toBeNull();
   });
+
+  it("round-trips a backendId, with or without a session", () => {
+    const plain: PulpAuth = { username: "admin", password: "pw", backendId: "staging" };
+    expect(decodePulpAuth(encodePulpAuth(plain))).toEqual(plain);
+
+    const withSession: PulpAuth = {
+      ...plain,
+      pulpSession: { sessionid: "sess", csrftoken: "csrf" },
+    };
+    expect(decodePulpAuth(encodePulpAuth(withSession))).toEqual(withSession);
+  });
+
+  it("leaves backendId out of the decoded auth when the cookie has none", () => {
+    const decoded = decodePulpAuth(encodePulpAuth({ username: "admin", password: "pw" }));
+    expect(decoded).not.toHaveProperty("backendId");
+  });
+
+  it("never encodes baseUrl into the cookie", () => {
+    const auth: PulpAuth = {
+      username: "admin",
+      password: "pw",
+      pulpSession: { sessionid: "sess", csrftoken: "csrf" },
+      backendId: "staging",
+      baseUrl: "http://staging.test/pulp/api/v3",
+    };
+
+    const decoded = decodePulpAuth(encodePulpAuth(auth));
+
+    expect(decoded).not.toHaveProperty("baseUrl");
+    expect(decoded).toEqual({
+      username: "admin",
+      password: "pw",
+      pulpSession: { sessionid: "sess", csrftoken: "csrf" },
+      backendId: "staging",
+    });
+  });
+
+  it.each([5, "", null, ["staging"], { id: "staging" }])(
+    "rejects a backendId that is not a non-empty string (%j)",
+    (backendId) => {
+      const bad = { username: "admin", password: "pw", backendId };
+      expect(decodePulpAuth(encodePulpAuth(bad as unknown as PulpAuth))).toBeNull();
+    }
+  );
+});
+
+describe("getPulpBaseUrl", () => {
+  beforeEach(() => {
+    vi.stubEnv("PULP_BASE_URL", "http://pulp.test/pulp/api/v3/");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reads PULP_BASE_URL without a trailing slash when there is no auth or the auth has no baseUrl", () => {
+    expect(getPulpBaseUrl()).toBe("http://pulp.test/pulp/api/v3");
+    expect(getPulpBaseUrl({ username: "admin", password: "pw" })).toBe(
+      "http://pulp.test/pulp/api/v3"
+    );
+  });
+
+  it("prefers the baseUrl of the auth over PULP_BASE_URL", () => {
+    expect(
+      getPulpBaseUrl({ username: "admin", password: "pw", baseUrl: "http://other.test/api/v3" })
+    ).toBe("http://other.test/api/v3");
+  });
+
+  it("does not need PULP_BASE_URL when the auth has a baseUrl", () => {
+    vi.stubEnv("PULP_BASE_URL", "");
+    expect(
+      getPulpBaseUrl({ username: "admin", password: "pw", baseUrl: "http://other.test/api/v3" })
+    ).toBe("http://other.test/api/v3");
+    expect(() => getPulpBaseUrl()).toThrow("Missing PULP_BASE_URL");
+  });
 });
 
 describe("pulpFetch", () => {
@@ -258,6 +334,34 @@ describe("pulpFetch", () => {
       ok: false,
       status: 502,
       detail: "Could not reach Pulp server at http://pulp.test/pulp/api/v3: connect ECONNREFUSED",
+    });
+  });
+
+  it("calls the server named by auth.baseUrl instead of PULP_BASE_URL", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ ok: 1 }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await pulpFetch("/status/", { ...auth, baseUrl: "http://other.test/other/api/v3" });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe("http://other.test/other/api/v3/status/");
+  });
+
+  it("names auth.baseUrl in the detail when that server is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("connect ECONNREFUSED");
+      })
+    );
+
+    const result = await pulpFetch("/status/", { ...auth, baseUrl: "http://other.test/api/v3" });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 502,
+      detail: "Could not reach Pulp server at http://other.test/api/v3: connect ECONNREFUSED",
     });
   });
 
@@ -506,6 +610,24 @@ describe("Pulp session auth", () => {
       expect(headersOf(0).has("X-CSRFToken")).toBe(false);
       expect(headersOf(0).has("Referer")).toBe(false);
     }
+  });
+
+  it("sends the Referer, and renews the session, against auth.baseUrl", async () => {
+    auth.baseUrl = "http://other.test/other/api/v3";
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "Authentication credentials were not provided." }))
+      .mockResolvedValueOnce(loginResponse("sess-new", "csrf-new"))
+      .mockResolvedValueOnce(jsonResponse(201, { task: "t" }));
+
+    await pulpFetch("/x/", auth, { method: "POST", body: "{}" });
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://other.test/other/api/v3/x/",
+      "http://other.test/other/api/v3/login/",
+      "http://other.test/other/api/v3/x/",
+    ]);
+    expect(headersOf(0).get("Referer")).toBe("http://other.test/");
+    expect(headersOf(2).get("Referer")).toBe("http://other.test/");
   });
 
   it("sends Basic and no cookie without a session", async () => {

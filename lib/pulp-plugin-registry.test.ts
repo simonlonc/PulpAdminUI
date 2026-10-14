@@ -145,4 +145,37 @@ describe("getPulpPluginRegistry", () => {
     expect(kindsOf(await getPulpPluginRegistry(auth))).toEqual(["built-back"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  describe("with several Pulp servers", () => {
+    const one = { ...auth, baseUrl: "http://one.test/pulp/api/v3" };
+    const two = { ...auth, baseUrl: "http://two.test/pulp/api/v3" };
+
+    it("keeps one registry per base URL and never serves one server's for another", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        specResponse(String(input).startsWith(one.baseUrl) ? "one" : "two")
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      expect(kindsOf(await getPulpPluginRegistry(one))).toEqual(["built-one"]);
+      expect(kindsOf(await getPulpPluginRegistry(two))).toEqual(["built-two"]);
+      expect(kindsOf(await getPulpPluginRegistry(one))).toEqual(["built-one"]);
+      expect(kindsOf(await getPulpPluginRegistry(two))).toEqual(["built-two"]);
+      expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+        "http://one.test/pulp/api/v3/docs/api.json",
+        "http://two.test/pulp/api/v3/docs/api.json",
+      ]);
+    });
+
+    it("keeps one server's outage fallback away from another", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        String(input).startsWith(one.baseUrl)
+          ? new Response("down", { status: 503 })
+          : specResponse("two")
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      expect(await getPulpPluginRegistry(one)).toEqual(PULP_PLUGINS);
+      expect(kindsOf(await getPulpPluginRegistry(two))).toEqual(["built-two"]);
+    });
+  });
 });

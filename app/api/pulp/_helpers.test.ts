@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PulpApiError, withPulpAuth } from "@/app/api/pulp/_helpers";
@@ -117,5 +121,123 @@ describe("withPulpAuth session renewal", () => {
     await handler(new Request("http://app.test/api/pulp/x"), undefined);
 
     expect(setCookieMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("withPulpAuth backend resolution", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let directory: string;
+  let file: string;
+
+  function backend(id: string) {
+    return {
+      id,
+      label: `Server ${id}`,
+      baseUrl: `http://${id}.test/pulp/api/v3`,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  const handler = withPulpAuth(async (_request, auth) => {
+    await pulpFetch("/repositories/", auth);
+    return Response.json({ ok: true });
+  });
+
+  const call = () => handler(new Request("http://app.test/api/pulp/x"), undefined);
+
+  beforeEach(async () => {
+    vi.stubEnv("PULP_SESSION_SECRET", "test-secret-do-not-use-in-production");
+    vi.stubEnv("PULP_BASE_URL", "http://env.test/pulp/api/v3");
+    // A corrupt server list is logged at error level; keep that line out of the test output.
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    directory = await mkdtemp(join(tmpdir(), "pulp-helpers-test-"));
+    file = join(directory, "pulp-backends.json");
+    await writeFile(file, JSON.stringify([backend("default"), backend("b")]));
+    vi.stubEnv("PULP_BACKENDS_FILE", file);
+    setCookieMock.mockClear();
+    deleteCookieMock.mockClear();
+    fetchMock = vi.fn(async () => new Response(JSON.stringify({ count: 0 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("sends the handler's Pulp calls to the server the session's backendId names", async () => {
+    cookieState.value = encodePulpAuth({ username: "admin", password: "pw", backendId: "b" });
+
+    const response = await call();
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("http://b.test/pulp/api/v3/repositories/");
+  });
+
+  it("resolves a session without a backendId to the default backend of the list", async () => {
+    cookieState.value = encodePulpAuth({ username: "admin", password: "pw" });
+
+    await call();
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe("http://default.test/pulp/api/v3/repositories/");
+  });
+
+  it("responds 401 and deletes the cookie when the session's backend is no longer listed", async () => {
+    cookieState.value = encodePulpAuth({ username: "admin", password: "pw", backendId: "gone" });
+
+    const response = await call();
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ detail: "Invalid session." });
+    expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("responds 500 without naming the file when the server list is corrupt, and keeps the cookie", async () => {
+    await writeFile(file, "{ not json");
+    cookieState.value = encodePulpAuth({ username: "admin", password: "pw", backendId: "b" });
+
+    const response = await call();
+
+    expect(response.status).toBe(500);
+    const { detail } = await response.json();
+    expect(detail).toBe("The Pulp server list cannot be read.");
+    expect(detail).not.toContain(directory);
+    expect(deleteCookieMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the backendId, and never the base URL, when a renewal rewrites the cookie", async () => {
+    cookieState.value = encodePulpAuth({
+      username: "admin",
+      password: "pw",
+      pulpSession: { sessionid: "sess-old", csrftoken: "csrf-old" },
+      backendId: "b",
+    });
+    const headers = new Headers();
+    headers.append("Set-Cookie", "csrftoken=csrf-new; Path=/");
+    headers.append("Set-Cookie", "sessionid=sess-new; HttpOnly; Path=/");
+    fetchMock
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 201, headers }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ count: 0 }), { status: 200 }));
+
+    await call();
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://b.test/pulp/api/v3/repositories/",
+      "http://b.test/pulp/api/v3/login/",
+      "http://b.test/pulp/api/v3/repositories/",
+    ]);
+    const stored = decodePulpAuth(setCookieMock.mock.calls[0][1]);
+    expect(stored).toEqual({
+      username: "admin",
+      password: "pw",
+      pulpSession: { sessionid: "sess-new", csrftoken: "csrf-new" },
+      backendId: "b",
+    });
+    expect(stored).not.toHaveProperty("baseUrl");
   });
 });

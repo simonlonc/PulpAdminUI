@@ -129,7 +129,7 @@ export const POST = withPulpAuth(async (request, auth) => {
     const uploadChunkHeaders = authHeaders(auth, "PUT");
     uploadChunkHeaders.set("Content-Range", `bytes ${start}-${end}/*`);
 
-    const chunkUrl = getPulpApiUrl(normalizePulpHrefToApiPath(uploadHref));
+    const chunkUrl = getPulpApiUrl(normalizePulpHrefToApiPath(uploadHref), auth);
     const chunkForm = new FormData();
     const chunkBlob = new Blob([chunk], { type: "application/octet-stream" });
     chunkForm.set("file", chunkBlob, "chunk");

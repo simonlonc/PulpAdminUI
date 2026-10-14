@@ -7,6 +7,7 @@ import {
   takePulpAuthRenewal,
   type PulpAuth,
 } from "@/lib/pulp";
+import { DEFAULT_PULP_BACKEND_ID, getPulpBackend, type PulpBackend } from "@/lib/pulp-backends";
 
 function isCookieSecure(): boolean {
   const override = process.env.PULP_COOKIE_SECURE?.trim().toLowerCase();
@@ -50,6 +51,26 @@ export async function requirePulpAuth(): Promise<
     };
   }
 
+  let backend: PulpBackend | null;
+  try {
+    backend = await getPulpBackend(auth.backendId ?? DEFAULT_PULP_BACKEND_ID);
+  } catch {
+    // The store has already logged why, and its message names the file.
+    return {
+      ok: false,
+      response: Response.json({ detail: "The Pulp server list cannot be read." }, { status: 500 }),
+    };
+  }
+  // The server was removed from the list since this session was created.
+  if (!backend) {
+    cookieStore.delete(PULP_AUTH_COOKIE);
+    return {
+      ok: false,
+      response: Response.json({ detail: "Invalid session." }, { status: 401 }),
+    };
+  }
+
+  auth.baseUrl = backend.baseUrl;
   return { ok: true, auth };
 }
 

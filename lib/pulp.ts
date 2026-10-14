@@ -15,6 +15,11 @@ export type PulpAuth = {
   username: string;
   password: string;
   pulpSession?: PulpSession;
+  // Which entry of the Pulp server list (lib/pulp-backends.ts) this session belongs to. Stored in
+  // the cookie; absent means the default backend, so older and single-server cookies keep their shape.
+  backendId?: string;
+  // That server's base URL, resolved from backendId on every request and never put in the cookie.
+  baseUrl?: string;
 };
 
 /**
@@ -91,7 +96,11 @@ export function pulpErrorDetailFromBody(body: unknown): string | null {
   return null;
 }
 
-export function getPulpBaseUrl(): string {
+export function getPulpBaseUrl(auth?: PulpAuth): string {
+  if (auth?.baseUrl !== undefined) {
+    return auth.baseUrl;
+  }
+
   const rawValue = process.env.PULP_BASE_URL?.trim();
   if (!rawValue) {
     throw new Error("Missing PULP_BASE_URL environment variable.");
@@ -100,9 +109,9 @@ export function getPulpBaseUrl(): string {
   return rawValue.replace(/\/+$/, "");
 }
 
-export function getPulpApiUrl(pathname: string): string {
+export function getPulpApiUrl(pathname: string, auth?: PulpAuth): string {
   const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return `${getPulpBaseUrl()}${normalizedPath}`;
+  return `${getPulpBaseUrl(auth)}${normalizedPath}`;
 }
 
 export function toBasicAuthHeader(auth: PulpAuth): string {
@@ -130,7 +139,7 @@ export function pulpAuthHeaders(auth: PulpAuth, method = "GET"): Headers {
   headers.set("Cookie", `sessionid=${session.sessionid}; csrftoken=${session.csrftoken}`);
   if (!SAFE_METHODS.has(method.toUpperCase())) {
     headers.set("X-CSRFToken", session.csrftoken);
-    headers.set("Referer", `${new URL(getPulpBaseUrl()).origin}/`);
+    headers.set("Referer", `${new URL(getPulpBaseUrl(auth)).origin}/`);
   }
   return headers;
 }
@@ -153,7 +162,14 @@ export function encodePulpAuth(auth: PulpAuth): string {
   const key = getPulpSessionKey();
   const iv = randomBytes(PULP_AUTH_IV_LENGTH);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(auth), "utf8"), cipher.final()]);
+  // Explicit fields only, so the runtime-only baseUrl can never reach the cookie.
+  const payload = {
+    username: auth.username,
+    password: auth.password,
+    pulpSession: auth.pulpSession,
+    backendId: auth.backendId,
+  };
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   return Buffer.concat([iv, authTag, ciphertext]).toString("base64url");
@@ -178,7 +194,10 @@ export function decodePulpAuth(value: string): PulpAuth | null {
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(authTag);
     const decoded = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-    const parsed = JSON.parse(decoded) as Partial<PulpAuth> & { pulpSession?: unknown };
+    const parsed = JSON.parse(decoded) as Partial<PulpAuth> & {
+      pulpSession?: unknown;
+      backendId?: unknown;
+    };
 
     if (
       typeof parsed.username !== "string" ||
@@ -189,11 +208,21 @@ export function decodePulpAuth(value: string): PulpAuth | null {
       return null;
     }
 
+    // Cookies for the default backend, and those written before backends existed, have none.
+    if (
+      parsed.backendId !== undefined &&
+      (typeof parsed.backendId !== "string" || parsed.backendId.length === 0)
+    ) {
+      return null;
+    }
+    const backend = parsed.backendId === undefined ? {} : { backendId: parsed.backendId };
+
     // Cookies written before Pulp sessions existed have no pulpSession and keep working with Basic.
     if (parsed.pulpSession === undefined) {
       return {
         username: parsed.username,
         password: parsed.password,
+        ...backend,
       };
     }
 
@@ -213,6 +242,7 @@ export function decodePulpAuth(value: string): PulpAuth | null {
       username: parsed.username,
       password: parsed.password,
       pulpSession: { sessionid: session.sessionid, csrftoken: session.csrftoken },
+      ...backend,
     };
   } catch {
     return null;
@@ -293,7 +323,7 @@ function cookieValueFromSetCookie(setCookies: string[], name: string): string | 
  * headers that carry the cookies.
  */
 export async function pulpLogin(auth: PulpAuth): Promise<PulpLoginResult> {
-  const apiUrl = getPulpApiUrl("/login/");
+  const apiUrl = getPulpApiUrl("/login/", auth);
   const startedAt = performance.now();
 
   let response: Response;
@@ -318,7 +348,7 @@ export async function pulpLogin(auth: PulpAuth): Promise<PulpLoginResult> {
     return {
       kind: "failed",
       status: 502,
-      detail: `Could not reach Pulp server at ${getPulpBaseUrl()}: ${message}`,
+      detail: `Could not reach Pulp server at ${getPulpBaseUrl(auth)}: ${message}`,
     };
   }
 
@@ -361,7 +391,7 @@ export async function pulpLogout(auth: PulpAuth): Promise<void> {
     return;
   }
   try {
-    const response = await fetch(getPulpApiUrl("/login/"), {
+    const response = await fetch(getPulpApiUrl("/login/", auth), {
       method: "DELETE",
       headers: pulpAuthHeaders(auth, "DELETE"),
       cache: "no-store",
@@ -428,7 +458,7 @@ export async function pulpFetch<TData>(
   auth: PulpAuth,
   init?: RequestInit
 ): Promise<{ ok: true; status: number; data: TData } | { ok: false; status: number; detail: string }> {
-  const apiUrl = getPulpApiUrl(pathname);
+  const apiUrl = getPulpApiUrl(pathname, auth);
   const method = (init?.method ?? "GET").toUpperCase();
   const startedAt = performance.now();
 
@@ -463,7 +493,7 @@ export async function pulpFetch<TData>(
       return {
         ok: false,
         status: 502,
-        detail: `Could not reach Pulp server at ${getPulpBaseUrl()}: ${message}`,
+        detail: `Could not reach Pulp server at ${getPulpBaseUrl(auth)}: ${message}`,
       };
     }
 
