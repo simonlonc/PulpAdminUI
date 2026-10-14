@@ -48,7 +48,7 @@ describe("GET /api/pulp/tasks", () => {
   });
 
   it("defaults limit to 100 (not the shared 200 default) and offset to 0", async () => {
-    await GET(new Request("http://pulp.test/api/pulp/tasks"));
+    await GET(new Request("http://pulp.test/api/pulp/tasks"), undefined);
 
     const url = calledUrl(fetchMock);
     expect(url.searchParams.get("limit")).toBe("100");
@@ -56,13 +56,13 @@ describe("GET /api/pulp/tasks", () => {
   });
 
   it("caps a requested limit above 500 down to 500", async () => {
-    await GET(new Request("http://pulp.test/api/pulp/tasks?limit=10000"));
+    await GET(new Request("http://pulp.test/api/pulp/tasks?limit=10000"), undefined);
 
     expect(calledUrl(fetchMock).searchParams.get("limit")).toBe("500");
   });
 
   it("forwards a requested limit under the cap unchanged", async () => {
-    await GET(new Request("http://pulp.test/api/pulp/tasks?limit=25"));
+    await GET(new Request("http://pulp.test/api/pulp/tasks?limit=25"), undefined);
 
     expect(calledUrl(fetchMock).searchParams.get("limit")).toBe("25");
   });
@@ -71,7 +71,8 @@ describe("GET /api/pulp/tasks", () => {
     await GET(
       new Request(
         "http://pulp.test/api/pulp/tasks?state=failed&name__contains=sync&started_at__gte=2024-01-01&arbitrary=1"
-      )
+      ),
+      undefined
     );
 
     const url = calledUrl(fetchMock);
@@ -85,7 +86,8 @@ describe("GET /api/pulp/tasks", () => {
     await GET(
       new Request(
         "http://pulp.test/api/pulp/tasks?pulp_href__in=/pulp/api/v3/tasks/a/,/pulp/api/v3/tasks/b/"
-      )
+      ),
+      undefined
     );
 
     expect(calledUrl(fetchMock).searchParams.get("pulp_href__in")).toBe(
@@ -98,7 +100,7 @@ describe("GET /api/pulp/tasks", () => {
       new Response(JSON.stringify({ detail: "Not authenticated." }), { status: 401 })
     );
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/tasks"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/tasks"), undefined);
 
     expect(response.status).toBe(401);
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
@@ -111,7 +113,7 @@ describe("GET /api/pulp/tasks", () => {
     fetchMock.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/tasks"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/tasks"), undefined);
 
     expect(response.status).toBe(502);
     expect(String(write.mock.calls[0][0])).toContain('"event":"pulp_fetch_unreachable"');
@@ -144,7 +146,7 @@ describe("PATCH /api/pulp/tasks", () => {
       body: JSON.stringify({ pulp_href: "/repositories/rpm/rpm/abc/" }),
     });
 
-    const response = await PATCH(request);
+    const response = await PATCH(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Not a task href." });
@@ -157,7 +159,7 @@ describe("PATCH /api/pulp/tasks", () => {
       body: JSON.stringify({ pulp_href: "/tasks/abc/" }),
     });
 
-    const response = await PATCH(request);
+    const response = await PATCH(request, undefined);
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0][0])).toBe("http://pulp.test/pulp/api/v3/tasks/abc/");
@@ -172,7 +174,7 @@ describe("PATCH /api/pulp/tasks", () => {
       body: JSON.stringify({ pulp_href: "/tasks/abc/" }),
     });
 
-    const response = await PATCH(request);
+    const response = await PATCH(request, undefined);
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
@@ -189,7 +191,7 @@ describe("PATCH /api/pulp/tasks", () => {
       body: JSON.stringify({ pulp_href: "/tasks/abc/" }),
     });
 
-    const response = await PATCH(request);
+    const response = await PATCH(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "state: Invalid state transition." });
@@ -202,7 +204,7 @@ describe("PATCH /api/pulp/tasks", () => {
       body: JSON.stringify({ pulp_href: "/tasks/abc/" }),
     });
 
-    const response = await PATCH(request);
+    const response = await PATCH(request, undefined);
 
     expect(response.status).toBe(403);
     expect(deleteCookieMock).not.toHaveBeenCalled();

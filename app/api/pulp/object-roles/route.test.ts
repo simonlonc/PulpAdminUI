@@ -43,7 +43,7 @@ describe("object-roles route", () => {
       "http://pulp.test/api/pulp/object-roles?pulp_href=/repositories/rpm/rpm/abc/"
     );
 
-    const response = await GET(request);
+    const response = await GET(request, undefined);
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0][0])).toBe(
@@ -57,7 +57,7 @@ describe("object-roles route", () => {
       body: JSON.stringify({ pulp_href: "/contentguards/abc/", role: "core.viewer", users: ["u"] }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0][0])).toBe(
@@ -71,7 +71,7 @@ describe("object-roles route", () => {
       body: JSON.stringify({ pulp_href: "/distributions/abc/", role: "core.viewer", groups: ["g"] }),
     });
 
-    const response = await DELETE(request);
+    const response = await DELETE(request, undefined);
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0][0])).toBe(
@@ -82,7 +82,7 @@ describe("object-roles route", () => {
   it("GET rejects a disallowed prefix with 400 and never calls fetch", async () => {
     const request = new Request("http://pulp.test/api/pulp/object-roles?pulp_href=/users/1/");
 
-    const response = await GET(request);
+    const response = await GET(request, undefined);
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ detail: "Not a role-assignable resource href." });
@@ -95,7 +95,7 @@ describe("object-roles route", () => {
       body: JSON.stringify({ pulp_href: "/users/1/", role: "core.viewer" }),
     });
 
-    const response = await POST(request);
+    const response = await POST(request, undefined);
 
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe("object-roles route", () => {
       "http://pulp.test/api/pulp/object-roles?pulp_href=/repositories/rpm/rpm/abc/"
     );
 
-    const response = await GET(request);
+    const response = await GET(request, undefined);
 
     expect(response.status).toBe(401);
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");
@@ -124,7 +124,7 @@ describe("object-roles route", () => {
         new URLSearchParams({ pulp_href: "/repositories/../../../../pulp/api/v3/status/" }).toString()
     );
 
-    const response = await GET(request);
+    const response = await GET(request, undefined);
 
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();

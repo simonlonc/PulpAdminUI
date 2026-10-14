@@ -51,7 +51,7 @@ describe("GET /api/pulp/status", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/status"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/status"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -78,7 +78,7 @@ describe("GET /api/pulp/status", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/status"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/status"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -94,7 +94,7 @@ describe("GET /api/pulp/status", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/status"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/status"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -118,7 +118,7 @@ describe("GET /api/pulp/status", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/status"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/status"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();

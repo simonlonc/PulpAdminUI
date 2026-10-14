@@ -41,7 +41,7 @@ describe("GET /api/pulp/search response-shape guard (F-16)", () => {
   it("falls back to a per-family error instead of throwing when a family's 200 body is a bare number", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("42", { status: 200 })));
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -56,7 +56,7 @@ describe("GET /api/pulp/search response-shape guard (F-16)", () => {
   it("falls back to a per-family error instead of throwing when a family's 200 body has no results array", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -80,7 +80,7 @@ describe("GET /api/pulp/search response-shape guard (F-16)", () => {
       })
     );
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"), undefined);
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -104,7 +104,7 @@ describe("GET /api/pulp/search response-shape guard (F-16)", () => {
       })
     );
 
-    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"));
+    const response = await GET(new Request("http://pulp.test/api/pulp/search?search=x"), undefined);
 
     expect(response.status).toBe(401);
     expect(deleteCookieMock).toHaveBeenCalledWith("pulp_auth");

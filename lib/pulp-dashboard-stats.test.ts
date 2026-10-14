@@ -55,7 +55,7 @@ describe("getCachedPulpDashboardStats", () => {
   });
 
   it("resolves per-kind repository counts from the registry, with auth reaching pulpFetch through the closure", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       if (url.includes("/status/")) {
         return new Response(

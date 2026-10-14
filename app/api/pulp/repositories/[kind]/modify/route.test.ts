@@ -29,7 +29,7 @@ function paramsFor(kind: string) {
 // request keeps getPulpPluginRegistry on its curated PULP_PLUGINS fallback (with its known "rpm"
 // family) without a real OpenAPI document.
 function fetchImpl(modifyResponse: () => Response) {
-  return vi.fn(async (input: RequestInfo | URL) => {
+  return vi.fn<typeof fetch>(async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/docs/api.json")) {
       return new Response("", { status: 500 });
