@@ -25,6 +25,17 @@ export type PulpBackendOption = {
   label: string;
 };
 
+/** One Pulp server as the management page sees it; GET /api/pulp/backends/manage says where it is. */
+export type PulpBackend = PulpBackendOption & {
+  baseUrl: string;
+  createdAt: string;
+};
+
+export type SavePulpBackendPayload = {
+  label: string;
+  baseUrl: string;
+};
+
 export type PulpUser = {
   id: number;
   username: string;

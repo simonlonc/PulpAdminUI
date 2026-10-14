@@ -25,6 +25,7 @@ type NavIconName =
   | "importers"
   | "orphans"
   | "status"
+  | "servers"
   | "purge";
 
 type NavItem = {
@@ -55,6 +56,12 @@ const navSections = [
         label: "Server status",
         hint: "Versions, online services, connectivity, and storage",
         icon: "status",
+      },
+      {
+        href: "/pulp-servers/list",
+        label: "Pulp servers",
+        hint: "Servers offered on the login page",
+        icon: "servers",
       },
     ] satisfies NavItem[],
   },
@@ -405,6 +412,22 @@ function SidebarIcon({ name }: { name: NavIconName }) {
           className={iconClassName}
         >
           <path d="M3.5 12h4l2.5-6 4 12 2.5-6h4" />
+        </svg>
+      );
+    case "servers":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={iconClassName}
+        >
+          <rect x="4" y="4" width="16" height="6.5" rx="2" />
+          <rect x="4" y="13.5" width="16" height="6.5" rx="2" />
+          <path d="M8 7.25h.01M8 16.75h.01" />
         </svg>
       );
     case "purge":

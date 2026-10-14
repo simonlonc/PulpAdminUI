@@ -4,6 +4,7 @@ import {
   decodePulpAuth,
   encodePulpAuth,
   PULP_AUTH_COOKIE,
+  pulpFetch,
   takePulpAuthRenewal,
   type PulpAuth,
 } from "@/lib/pulp";
@@ -176,6 +177,23 @@ export function decodeRefOrNull(encodedRef: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Throws unless the signed-in user is a Pulp superuser. Pulp's API has no `is_superuser` (`User`
+ * exposes `is_staff` only), but the access policy list is open to superusers alone, so
+ * `GET /access_policies/?limit=1` answers 200 for them and 403 for everyone else, staff included.
+ */
+export async function requirePulpSuperuser(auth: PulpAuth): Promise<void> {
+  const result = await pulpFetch("/access_policies/?limit=1", auth);
+  if (result.ok) {
+    return;
+  }
+
+  if (result.status === 403) {
+    throw new PulpApiError(403, "Only a Pulp superuser can manage the Pulp server list.");
+  }
+  throw new PulpApiError(result.status, result.detail);
 }
 
 /**

@@ -85,7 +85,7 @@ function checkLabel(value: unknown): Checked<string> {
  * carry a secret or change what a request path means. Rejects instead of stripping them, so the
  * user sees that what they typed is not what would be stored.
  */
-function checkBaseUrl(value: unknown): Checked<string> {
+export function checkPulpBackendBaseUrl(value: unknown): Checked<string> {
   if (!isNonEmptyString(value)) {
     return { ok: false, detail: "Base URL must be a non-empty string." };
   }
@@ -125,7 +125,7 @@ function checkInput(
     fields.label = label.value;
   }
   if (!partial || input.baseUrl !== undefined) {
-    const baseUrl = checkBaseUrl(input.baseUrl);
+    const baseUrl = checkPulpBackendBaseUrl(input.baseUrl);
     if (!baseUrl.ok) return baseUrl;
     fields.baseUrl = baseUrl.value;
   }
@@ -142,7 +142,7 @@ function readEntry(
   if (!isNonEmptyString(record.label)) {
     return { ok: false, problem: 'needs a non-empty string "label"' };
   }
-  const baseUrl = checkBaseUrl(record.baseUrl);
+  const baseUrl = checkPulpBackendBaseUrl(record.baseUrl);
   if (!baseUrl.ok) return { ok: false, problem: `has an unusable "baseUrl": ${baseUrl.detail}` };
   if (typeof record.createdAt !== "string") {
     return { ok: false, problem: 'needs a string "createdAt"' };
