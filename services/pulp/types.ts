@@ -19,6 +19,12 @@ export type ServiceDataResult<T> =
       detail: string;
     };
 
+/** One Pulp server the login page offers; GET /api/pulp/backends never says where it is. */
+export type PulpBackendOption = {
+  id: string;
+  label: string;
+};
+
 export type PulpUser = {
   id: number;
   username: string;

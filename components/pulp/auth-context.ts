@@ -20,7 +20,7 @@ type PulpAuthContextValue = {
   error: string | null;
   setError: (value: string | null) => void;
   setIsLoading: (value: boolean) => void;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string, backendId?: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 
@@ -64,11 +64,11 @@ export function PulpAuthProvider({ children }: { children: ReactNode }) {
 
   const hasSession = useMemo(() => sessionUser !== null, [sessionUser]);
 
-  async function login(username: string, password: string): Promise<boolean> {
+  async function login(username: string, password: string, backendId?: string): Promise<boolean> {
     setError(null);
     setIsLoading(true);
 
-    const result = await pulpAuthService.login(username, password);
+    const result = await pulpAuthService.login(username, password, backendId);
     if (!result.ok) {
       setError(result.detail);
       setIsLoading(false);
