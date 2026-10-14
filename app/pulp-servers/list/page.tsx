@@ -62,12 +62,12 @@ export default function PulpServersListPage() {
     setModalOpen(true);
   }
 
-  async function removeBackend(backendId: string) {
-    if (!window.confirm("Delete this Pulp server?")) {
+  async function removeBackend(backend: (typeof backends)[number]) {
+    if (!window.confirm(`Delete Pulp server “${backend.label}”? This cannot be undone.`)) {
       return;
     }
 
-    await deleteBackend(backendId);
+    await deleteBackend(backend.id);
   }
 
   async function handleSaveBackend(event: FormEvent<HTMLFormElement>) {
@@ -99,14 +99,21 @@ export default function PulpServersListPage() {
       {isCheckingSession || isRedirectingToLogin ? (
         <Card>Checking existing session...</Card>
       ) : (
-        <Card className="flex flex-col gap-0 p-0">
-          <div className="flex flex-col gap-3 border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-800/80 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="mb-0">Pulp servers ({backends.length})</CardTitle>
-            <Button type="button" onClick={() => setModalOpen(true)} disabled={isLoading}>
-              Add server
-            </Button>
-          </div>
-          <CardContent className="p-5">
+        <Card>
+          <CardTitle>
+            Pulp servers
+            {backends.length > 0 ? (
+              <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
+                ({backends.length.toLocaleString()} total)
+              </span>
+            ) : null}
+          </CardTitle>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setModalOpen(true)} disabled={isLoading}>
+                New Pulp server
+              </Button>
+            </div>
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -118,37 +125,46 @@ export default function PulpServersListPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {backends.map((backend) => (
-                    <TableRow key={backend.id}>
-                      <TableCell className="font-medium">{backend.label}</TableCell>
-                      <TableCell className="font-mono text-xs">{backend.baseUrl}</TableCell>
-                      <TableCell className="font-mono text-xs">{backend.id}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <RowActionMenu
-                            label={backend.label}
-                            items={[
-                              {
-                                key: "edit",
-                                label: "Edit",
-                                icon: Pencil,
-                                disabled: isLoading,
-                                onSelect: () => startEditBackend(backend),
-                              },
-                              {
-                                key: "delete",
-                                label: "Delete",
-                                icon: Trash2,
-                                destructive: true,
-                                disabled: isLoading,
-                                onSelect: () => removeBackend(backend.id),
-                              },
-                            ]}
-                          />
-                        </div>
+                  {backends.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-zinc-500">
+                        No Pulp servers found.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    backends.map((backend) => (
+                      <TableRow key={backend.id}>
+                        <TableCell className="font-medium">{backend.label}</TableCell>
+                        <TableCell className="font-mono text-xs">{backend.baseUrl}</TableCell>
+                        <TableCell className="font-mono text-xs">{backend.id}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <RowActionMenu
+                              label={backend.label}
+                              items={[
+                                {
+                                  key: "edit",
+                                  label: "Edit",
+                                  icon: Pencil,
+                                  disabled: isLoading,
+                                  onSelect: () => startEditBackend(backend),
+                                },
+                                { key: "sep-1", separator: true },
+                                {
+                                  key: "delete",
+                                  label: "Delete",
+                                  icon: Trash2,
+                                  destructive: true,
+                                  disabled: isLoading,
+                                  onSelect: () => removeBackend(backend),
+                                },
+                              ]}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </TableWrapper>
