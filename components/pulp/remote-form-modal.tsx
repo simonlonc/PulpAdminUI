@@ -161,7 +161,7 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
           {editing ? "Edit remote" : `New ${kind.toUpperCase()} remote`}
         </h2>
         {editing ? (
-          <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">
             {editing.name}
           </p>
         ) : kind === "rpm" ? (

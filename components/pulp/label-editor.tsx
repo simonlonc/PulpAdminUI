@@ -144,13 +144,13 @@ export function LabelEditorModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+        className="max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Edit labels
         </h2>
-        <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">{resourceName}</p>
+        <p className="mt-1 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">{resourceName}</p>
 
         {modalError ? (
           <p
@@ -167,7 +167,7 @@ export function LabelEditorModal({
           ) : null}
           {rows.map((row, index) => (
             <div key={index} className="flex items-end gap-2">
-              <FormField label="Key" className="flex-1">
+              <FormField label="Key" className="min-w-0 flex-1">
                 <Input
                   value={row.key}
                   onChange={(event) => updateRow(index, { key: event.target.value })}
@@ -175,7 +175,7 @@ export function LabelEditorModal({
                   className="font-mono"
                 />
               </FormField>
-              <FormField label="Value" className="flex-1">
+              <FormField label="Value" className="min-w-0 flex-1">
                 <Input
                   value={row.value}
                   onChange={(event) => updateRow(index, { value: event.target.value })}
