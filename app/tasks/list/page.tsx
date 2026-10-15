@@ -9,6 +9,7 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { RowCard, RowCardField } from "@/components/ui/row-card";
 import { Ban, Eye } from "lucide-react";
 import {
   Table,
@@ -81,6 +82,26 @@ function shortTaskName(name: string): string {
   return parts.length > 2 ? parts.slice(-2).join(".") : name;
 }
 
+function TaskStateBadge({ state }: { state: string }) {
+  return (
+    <span
+      className={cn(
+        "rounded-md px-2 py-0.5 text-xs font-medium",
+        state === "completed" &&
+          "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+        state === "failed" && "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
+        state === "running" && "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+        state === "waiting" &&
+          "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+        !["completed", "failed", "running", "waiting"].includes(state) &&
+          "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
+      )}
+    >
+      {state}
+    </span>
+  );
+}
+
 function TasksListPageContent() {
   const { sessionUser, isLoading, isCheckingSession, hasSession, error, setError, logout } =
     usePulpAuthContext();
@@ -139,6 +160,30 @@ function TasksListPageContent() {
     } finally {
       setCancelingHref(null);
     }
+  }
+
+  function renderActions(t: PulpTask) {
+    return (
+      <RowActionMenu
+        label={shortTaskName(t.name)}
+        items={[
+          {
+            key: "details",
+            label: "Details",
+            icon: Eye,
+            href: `/tasks/detail?pulp_href=${encodeURIComponent(t.pulp_href)}`,
+          },
+          CANCELABLE_STATES.includes(t.state) && {
+            key: "cancel",
+            label: "Cancel",
+            icon: Ban,
+            destructive: true,
+            disabled: cancelingHref === t.pulp_href,
+            onSelect: () => setCancelModalTask(t),
+          },
+        ]}
+      />
+    );
   }
 
   const tasks = data?.results ?? [];
@@ -213,8 +258,11 @@ function TasksListPageContent() {
               </FormField>
             </div>
 
+            {/* The cards share the table's wrapper so that, from sm up, it is still the only child here:
+                a separate hidden sibling would stop the table being the last child of this space-y stack
+                and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table>
+              <Table className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>
@@ -279,23 +327,7 @@ function TasksListPageContent() {
                     tasks.map((t) => (
                       <TableRow key={t.pulp_href} frozen={cancelingHref === t.pulp_href}>
                         <TableCell>
-                          <span
-                            className={cn(
-                              "rounded-md px-2 py-0.5 text-xs font-medium",
-                              t.state === "completed" &&
-                                "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-                              t.state === "failed" &&
-                                "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
-                              t.state === "running" &&
-                                "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
-                              t.state === "waiting" &&
-                                "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-                              !["completed", "failed", "running", "waiting"].includes(t.state) &&
-                                "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
-                            )}
-                          >
-                            {t.state}
-                          </span>
+                          <TaskStateBadge state={t.state} />
                         </TableCell>
                         <TableCell className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
                           {taskIdFromHref(t.pulp_href)}
@@ -316,33 +348,84 @@ function TasksListPageContent() {
                           {workerIdFromHref(t.worker)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end">
-                            <RowActionMenu
-                              label={shortTaskName(t.name)}
-                              items={[
-                                {
-                                  key: "details",
-                                  label: "Details",
-                                  icon: Eye,
-                                  href: `/tasks/detail?pulp_href=${encodeURIComponent(t.pulp_href)}`,
-                                },
-                                CANCELABLE_STATES.includes(t.state) && {
-                                  key: "cancel",
-                                  label: "Cancel",
-                                  icon: Ban,
-                                  destructive: true,
-                                  disabled: cancelingHref === t.pulp_href,
-                                  onSelect: () => setCancelModalTask(t),
-                                },
-                              ]}
-                            />
-                          </div>
+                          <div className="flex justify-end">{renderActions(t)}</div>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <div className="space-y-3 sm:hidden">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span>Sort by</span>
+                  <SortableColumnHeader
+                    label="State"
+                    field="state"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                  <SortableColumnHeader
+                    label="Name"
+                    field="name"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                  <SortableColumnHeader
+                    label="Created"
+                    field="pulp_created"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                  <SortableColumnHeader
+                    label="Started"
+                    field="started_at"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                  <SortableColumnHeader
+                    label="Finished"
+                    field="finished_at"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                </div>
+                <ul aria-label="Tasks" className="space-y-3">
+                  {loading && tasks.length === 0 ? (
+                    <li className="text-sm text-zinc-500">Loading tasks…</li>
+                  ) : !loading && tasks.length === 0 ? (
+                    <li className="text-sm text-zinc-500">No tasks on this page.</li>
+                  ) : (
+                    tasks.map((t) => (
+                      <RowCard
+                        key={t.pulp_href}
+                        frozen={cancelingHref === t.pulp_href}
+                        heading={
+                          <div className="flex flex-wrap items-center gap-2">
+                            <TaskStateBadge state={t.state} />
+                            <span className="break-all font-mono text-xs font-normal" title={t.name}>
+                              {shortTaskName(t.name)}
+                            </span>
+                          </div>
+                        }
+                        actions={renderActions(t)}
+                      >
+                        <RowCardField
+                          label="Task"
+                          className="break-all font-mono text-zinc-600 dark:text-zinc-400"
+                        >
+                          {taskIdFromHref(t.pulp_href)}
+                        </RowCardField>
+                        <RowCardField label="Created">{formatIso(t.pulp_created)}</RowCardField>
+                        <RowCardField label="Started">{formatIso(t.started_at)}</RowCardField>
+                        <RowCardField label="Finished">{formatIso(t.finished_at)}</RowCardField>
+                        <RowCardField label="Worker" className="break-all font-mono">
+                          {workerIdFromHref(t.worker)}
+                        </RowCardField>
+                      </RowCard>
+                    ))
+                  )}
+                </ul>
+              </div>
             </TableWrapper>
 
             <ListPagination
