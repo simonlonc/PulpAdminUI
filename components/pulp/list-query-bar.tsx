@@ -106,14 +106,14 @@ export function ListQueryBar({
     <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
       <div className="flex flex-wrap items-end gap-3">
         {showSearch ? (
-          <FormField label="Search">
+          <FormField label="Search" className="max-sm:w-full">
             <div className="flex gap-2">
               <Input
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder={searchPlaceholder}
                 disabled={disabled}
-                className="w-56"
+                className="w-56 max-sm:min-w-0 max-sm:flex-1"
               />
               <Button type="submit" variant="outline" disabled={disabled}>
                 Search
@@ -196,7 +196,7 @@ export function ListQueryBar({
               onChange={(event) => setQDraft(event.target.value)}
               placeholder="state=completed AND name__contains=sync"
               disabled={disabled}
-              className="w-96 font-mono text-xs"
+              className="w-96 font-mono text-xs max-sm:min-w-0 max-sm:flex-1"
             />
             <Button type="submit" variant="outline" disabled={disabled}>
               Apply

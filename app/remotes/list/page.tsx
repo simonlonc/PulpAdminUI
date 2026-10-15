@@ -9,6 +9,7 @@ import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { RowCard, RowCardField } from "@/components/ui/row-card";
 import { Pencil, ShieldCheck, Tag, Trash2 } from "lucide-react";
 import {
   Table,
@@ -43,6 +44,18 @@ function formatIso(iso: string | null): string {
     return iso;
   }
   return d.toLocaleString();
+}
+
+function TlsBadge({ enabled }: { enabled: boolean }) {
+  return enabled ? (
+    <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+      on
+    </span>
+  ) : (
+    <span className="rounded-md bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+      off
+    </span>
+  );
 }
 
 function RemotesListPageContent() {
@@ -125,6 +138,58 @@ function RemotesListPageContent() {
     }
   }
 
+  function renderActions(remote: RemoteRow) {
+    return (
+      <RowActionMenu
+        label={remote.name}
+        disabled={isLoading || busyHref === remote.pulp_href}
+        onOpenChange={(open) => {
+          if (open) ensurePermissions(remote.pulp_href);
+        }}
+        items={[
+          {
+            key: "edit",
+            label: "Edit",
+            icon: Pencil,
+            disabled:
+              isLoading ||
+              busyHref === remote.pulp_href ||
+              !canOnRemote(remote.pulp_href, "change"),
+            onSelect: () => openEdit(remote),
+          },
+          {
+            key: "labels",
+            label: "Labels",
+            icon: Tag,
+            disabled:
+              isLoading ||
+              busyHref === remote.pulp_href ||
+              !canOnRemote(remote.pulp_href, "change"),
+            onSelect: () => setLabelsTarget(remote),
+          },
+          {
+            key: "access",
+            label: "Access",
+            icon: ShieldCheck,
+            disabled: isLoading || busyHref === remote.pulp_href,
+            onSelect: () => setAccessTarget(remote),
+          },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: Trash2,
+            destructive: true,
+            disabled:
+              isLoading ||
+              busyHref === remote.pulp_href ||
+              !canOnRemote(remote.pulp_href, "delete"),
+            onSelect: () => void handleDelete(remote),
+          },
+        ]}
+      />
+    );
+  }
+
   return (
     <AdminShell
       title="Remotes"
@@ -197,8 +262,11 @@ function RemotesListPageContent() {
               labelSelect={query.labelSelect}
               showLabelSelect
             />
+            {/* The cards share the table's wrapper so that, from sm up, it is still the only child here:
+                a separate hidden sibling would stop the table being the last child of this space-y stack
+                and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table>
+              <Table className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>
@@ -245,15 +313,7 @@ function RemotesListPageContent() {
                           {remote.policy}
                         </TableCell>
                         <TableCell>
-                          {remote.tls_validation ? (
-                            <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-                              on
-                            </span>
-                          ) : (
-                            <span className="rounded-md bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                              off
-                            </span>
-                          )}
+                          <TlsBadge enabled={remote.tls_validation} />
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm">
                           {formatIso(remote.pulp_last_updated ?? remote.pulp_created)}
@@ -262,61 +322,55 @@ function RemotesListPageContent() {
                           <LabelChips labels={remote.pulp_labels} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end">
-                            <RowActionMenu
-                              label={remote.name}
-                              disabled={isLoading || busyHref === remote.pulp_href}
-                              onOpenChange={(open) => {
-                                if (open) ensurePermissions(remote.pulp_href);
-                              }}
-                              items={[
-                                {
-                                  key: "edit",
-                                  label: "Edit",
-                                  icon: Pencil,
-                                  disabled:
-                                    isLoading ||
-                                    busyHref === remote.pulp_href ||
-                                    !canOnRemote(remote.pulp_href, "change"),
-                                  onSelect: () => openEdit(remote),
-                                },
-                                {
-                                  key: "labels",
-                                  label: "Labels",
-                                  icon: Tag,
-                                  disabled:
-                                    isLoading ||
-                                    busyHref === remote.pulp_href ||
-                                    !canOnRemote(remote.pulp_href, "change"),
-                                  onSelect: () => setLabelsTarget(remote),
-                                },
-                                {
-                                  key: "access",
-                                  label: "Access",
-                                  icon: ShieldCheck,
-                                  disabled: isLoading || busyHref === remote.pulp_href,
-                                  onSelect: () => setAccessTarget(remote),
-                                },
-                                {
-                                  key: "delete",
-                                  label: "Delete",
-                                  icon: Trash2,
-                                  destructive: true,
-                                  disabled:
-                                    isLoading ||
-                                    busyHref === remote.pulp_href ||
-                                    !canOnRemote(remote.pulp_href, "delete"),
-                                  onSelect: () => void handleDelete(remote),
-                                },
-                              ]}
-                            />
-                          </div>
+                          <div className="flex justify-end">{renderActions(remote)}</div>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <div className="space-y-3 sm:hidden">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <span>Sort by</span>
+                  <SortableColumnHeader
+                    label="Name"
+                    field="name"
+                    ordering={query.ordering}
+                    onSort={setOrdering}
+                  />
+                </div>
+                <ul aria-label="Remotes" className="space-y-3">
+                  {isLoadingRemotes && remotes.length === 0 ? (
+                    <li className="text-sm text-zinc-500">Loading remotes…</li>
+                  ) : !isLoadingRemotes && remotes.length === 0 ? (
+                    <li className="text-sm text-zinc-500">No {kind.toUpperCase()} remotes yet.</li>
+                  ) : (
+                    remotes.map((remote) => (
+                      <RowCard
+                        key={remote.pulp_href}
+                        heading={<span className="break-all">{remote.name}</span>}
+                        actions={renderActions(remote)}
+                      >
+                        <RowCardField label="URL" className="break-all font-mono">
+                          {remote.url}
+                        </RowCardField>
+                        <RowCardField label="Policy" className="font-mono">
+                          {remote.policy}
+                        </RowCardField>
+                        <RowCardField label="TLS">
+                          <TlsBadge enabled={remote.tls_validation} />
+                        </RowCardField>
+                        <RowCardField label="Updated">
+                          {formatIso(remote.pulp_last_updated ?? remote.pulp_created)}
+                        </RowCardField>
+                        <RowCardField label="Labels">
+                          <LabelChips labels={remote.pulp_labels} />
+                        </RowCardField>
+                      </RowCard>
+                    ))
+                  )}
+                </ul>
+              </div>
             </TableWrapper>
             <ListPagination
               page={query.page}

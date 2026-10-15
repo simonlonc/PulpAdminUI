@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -468,15 +469,41 @@ function SidebarIcon({ name }: { name: NavIconName }) {
   }
 }
 
-export function ManagementSidebar() {
+export const MANAGEMENT_SIDEBAR_ID = "management-sidebar";
+
+type ManagementSidebarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+export function ManagementSidebar({ isOpen = false, onClose }: ManagementSidebarProps) {
   const pathname = usePathname();
   const projectName = usePulpProjectName();
+  const asideRef = useRef<HTMLElement>(null);
+
+  // The toggle sits after the sidebar in DOM order, so without this a keyboard
+  // user who opens the drawer would Tab straight past it into the page.
+  useEffect(() => {
+    if (isOpen) {
+      asideRef.current?.querySelector("a")?.focus();
+    }
+  }, [isOpen]);
 
   return (
-    <aside className="w-full border-b border-zinc-200/80 bg-zinc-50/80 md:h-screen md:w-[16.75rem] md:shrink-0 md:border-r md:border-b-0 dark:border-zinc-800/80 dark:bg-zinc-950/80">
-      <div className="flex h-full flex-col gap-2 px-3 py-4 md:sticky md:top-0 md:overflow-y-auto md:px-4 md:py-5">
+    <aside
+      id={MANAGEMENT_SIDEBAR_ID}
+      ref={asideRef}
+      className={cn(
+        "fixed inset-y-0 left-0 z-40 w-[16.75rem] max-w-[85vw] overflow-y-auto border-r border-zinc-200/80 bg-zinc-50 duration-200 ease-out motion-reduce:transition-none md:static md:z-auto md:visible md:h-screen md:w-[16.75rem] md:shrink-0 md:translate-none md:overflow-visible md:border-r md:border-b-0 md:bg-zinc-50/80 md:transition-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:md:bg-zinc-950/80",
+        isOpen
+          ? "translate-x-0 transition-transform"
+          : "invisible -translate-x-full transition-[transform,visibility]"
+      )}
+    >
+      <div className="flex min-h-full flex-col gap-2 px-3 py-4 md:sticky md:top-0 md:h-full md:overflow-y-auto md:px-4 md:py-5">
         <Link
           href="/dashboard"
+          onClick={onClose}
           className="group/brand mb-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-2 text-zinc-900 outline-none ring-zinc-400 transition-[transform,box-shadow] duration-300 ease-out hover:bg-zinc-100/90 focus-visible:ring-2 motion-reduce:transition-none dark:text-zinc-100 dark:hover:bg-zinc-900/60"
         >
           <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-zinc-200/90 bg-white shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out group-hover/brand:scale-[1.03] group-hover/brand:border-zinc-300 group-hover/brand:shadow-md motion-reduce:group-hover/brand:scale-100 dark:border-zinc-700 dark:bg-zinc-900 dark:group-hover/brand:border-zinc-600">
@@ -511,6 +538,7 @@ export function ManagementSidebar() {
                       <Link
                         href={item.href}
                         title={item.hint}
+                        onClick={onClose}
                         className={cn(
                           "group/nav relative flex items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-1.5 text-sm leading-snug transition-[transform,background-color,color,box-shadow] duration-300 ease-out motion-reduce:transition-none",
                           "hover:translate-x-0.5 motion-reduce:hover:translate-x-0",

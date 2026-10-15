@@ -19,6 +19,7 @@ import { usePulpRepositoryOptions } from "@/components/pulp/use-pulp-repository-
 import { useRequireAuth } from "@/components/pulp/use-require-auth";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
+import { RowCard, RowCardField } from "@/components/ui/row-card";
 import {
   Table,
   TableBody,
@@ -31,6 +32,7 @@ import {
 import { ListPagination } from "@/components/pulp/list-pagination";
 import { ListQueryBar } from "@/components/pulp/list-query-bar";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
+import { PulpContentItem } from "@/services/pulp/types";
 
 const PAGE_SIZE = 50;
 
@@ -124,6 +126,28 @@ function ContentListPageContent() {
 
   function handleContentTypeFilterChange(value: string) {
     setExtraParams(pulpContentFiltersToUrlParams({ ...filters, pulpType: value }));
+  }
+
+  function renderAction(item: PulpContentItem) {
+    const rpmPackageId = extractRpmPackageContentId(item.pulp_href);
+    const contentMatch = rpmPackageId ? null : findContentForHref(item.pulp_href);
+    return rpmPackageId ? (
+      <Link
+        href={`/content/packages/${rpmPackageId}`}
+        className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+      >
+        View package
+      </Link>
+    ) : contentMatch ? (
+      <Link
+        href={`/content/${contentMatch.kind}/${contentMatch.id}?path=${encodeURIComponent(contentMatch.path)}`}
+        className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+      >
+        View content
+      </Link>
+    ) : (
+      <span className="text-xs text-zinc-500">-</span>
+    );
   }
 
   return (
@@ -231,8 +255,11 @@ function ContentListPageContent() {
                 </select>
               </FormField>
             </div>
+            {/* The cards share the table's wrapper so that, from sm up, it is still the only child here:
+                a separate hidden sibling would stop the table being the last child of this space-y stack
+                and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table>
+              <Table className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>Pulp Href</TableHeaderCell>
@@ -255,41 +282,43 @@ function ContentListPageContent() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    contentItems.map((item) => {
-                      const rpmPackageId = extractRpmPackageContentId(item.pulp_href);
-                      const contentMatch = rpmPackageId ? null : findContentForHref(item.pulp_href);
-                      return (
-                        <TableRow key={item.pulp_href}>
-                          <TableCell className="font-mono text-xs">{item.pulp_href}</TableCell>
-                          <TableCell>{item.pulp_created}</TableCell>
-                          <TableCell className="text-xs">
-                            {Object.keys(item.artifacts).join(", ") || "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {rpmPackageId ? (
-                              <Link
-                                href={`/content/packages/${rpmPackageId}`}
-                                className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                              >
-                                View package
-                              </Link>
-                            ) : contentMatch ? (
-                              <Link
-                                href={`/content/${contentMatch.kind}/${contentMatch.id}?path=${encodeURIComponent(contentMatch.path)}`}
-                                className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                              >
-                                View content
-                              </Link>
-                            ) : (
-                              <span className="text-xs text-zinc-500">-</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
+                    contentItems.map((item) => (
+                      <TableRow key={item.pulp_href}>
+                        <TableCell className="font-mono text-xs">{item.pulp_href}</TableCell>
+                        <TableCell>{item.pulp_created}</TableCell>
+                        <TableCell className="text-xs">
+                          {Object.keys(item.artifacts).join(", ") || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">{renderAction(item)}</TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>
+              <ul aria-label="Content" className="space-y-3 sm:hidden">
+                {loading && contentItems.length === 0 ? (
+                  <li className="text-sm text-zinc-500">Loading content…</li>
+                ) : !loading && contentItems.length === 0 ? (
+                  <li className="text-sm text-zinc-500">No content on this page.</li>
+                ) : (
+                  contentItems.map((item) => (
+                    <RowCard
+                      key={item.pulp_href}
+                      heading={
+                        <span className="break-all font-mono text-xs font-normal">
+                          {item.pulp_href}
+                        </span>
+                      }
+                      actions={renderAction(item)}
+                    >
+                      <RowCardField label="Created">{item.pulp_created}</RowCardField>
+                      <RowCardField label="Artifacts" className="break-all">
+                        {Object.keys(item.artifacts).join(", ") || "-"}
+                      </RowCardField>
+                    </RowCard>
+                  ))
+                )}
+              </ul>
             </TableWrapper>
 
             <ListPagination

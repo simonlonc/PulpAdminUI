@@ -50,6 +50,18 @@ import { PulpDistribution, PulpRemote, PulpRepository } from "@/services/pulp/ty
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 
+/*
+ * Below sm the table can scroll sideways (a long label chip is enough), so the Actions column
+ * is pinned to the right edge and keeps the row menu on screen. A pinned cell must be opaque
+ * to hide what scrolls under it, so it uses the nearest solid shade of the translucent
+ * background behind it. The divider is an inset shadow because a collapsed table border does
+ * not move with a sticky cell.
+ */
+const pinnedActionsHeadClassName =
+  "max-sm:sticky max-sm:right-0 max-sm:bg-zinc-50 max-sm:shadow-[inset_1px_0_0_var(--color-zinc-200)] dark:max-sm:bg-zinc-900 dark:max-sm:shadow-[inset_1px_0_0_var(--color-zinc-800)]";
+const pinnedActionsCellClassName =
+  "max-sm:sticky max-sm:right-0 max-sm:bg-zinc-50 max-sm:shadow-[inset_1px_0_0_var(--color-zinc-200)] dark:max-sm:bg-zinc-950 dark:max-sm:shadow-[inset_1px_0_0_var(--color-zinc-800)]";
+
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
   const map: Record<string, string> = {};
@@ -433,7 +445,9 @@ function RepositoriesListPageContent() {
                     </TableHeaderCell>
                     <TableHeaderCell>Distribution URL</TableHeaderCell>
                     <TableHeaderCell>Labels</TableHeaderCell>
-                    <TableHeaderCell className="text-right">Actions</TableHeaderCell>
+                    <TableHeaderCell className={`text-right ${pinnedActionsHeadClassName}`}>
+                      Actions
+                    </TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -459,7 +473,7 @@ function RepositoriesListPageContent() {
                       <TableCell>
                         <LabelChips labels={repo.pulp_labels} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className={`text-right ${pinnedActionsCellClassName}`}>
                         <div className="flex justify-end">
                           <RowActionMenu
                             label={repo.name}

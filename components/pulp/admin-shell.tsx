@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import packageJson from "../../package.json";
-import { ManagementSidebar } from "@/components/pulp/management-sidebar";
+import { MANAGEMENT_SIDEBAR_ID, ManagementSidebar } from "@/components/pulp/management-sidebar";
 import { Button } from "@/components/ui/button";
+import { Menu } from "lucide-react";
 
 const APP_VERSION = packageJson.version;
 
@@ -29,20 +30,59 @@ export function AdminShell({
   onLogout,
   children,
 }: AdminShellProps) {
+  const [isNavOpen, setIsNavOpen] = useState(false);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isNavOpen) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsNavOpen(false);
+        navToggleRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isNavOpen]);
+
   return (
     <main className="min-h-screen w-full bg-zinc-100/70 dark:bg-zinc-950">
       <div className="flex min-h-screen flex-col md:flex-row">
-        <ManagementSidebar />
+        {isNavOpen ? (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-30 bg-zinc-950/50 md:hidden"
+            onClick={() => setIsNavOpen(false)}
+          />
+        ) : null}
+        <ManagementSidebar isOpen={isNavOpen} onClose={() => setIsNavOpen(false)} />
 
         <section className="flex min-w-0 flex-1 flex-col p-4 md:p-8">
-          <header className="sticky top-0 z-20 -mx-4 mb-6 border-b border-zinc-200 bg-zinc-100/90 px-4 py-3 backdrop-blur md:-mx-8 md:px-8 dark:border-zinc-800 dark:bg-zinc-950/90">
+          <header className="z-20 -mx-4 mb-6 border-b border-zinc-200 bg-zinc-100/90 px-4 py-3 backdrop-blur md:sticky md:top-0 md:-mx-8 md:px-8 dark:border-zinc-800 dark:bg-zinc-950/90">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Administration
-                </p>
-                <h1 className="text-2xl font-semibold">{title}</h1>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
+              <div className="flex items-start gap-3">
+                <button
+                  ref={navToggleRef}
+                  type="button"
+                  aria-label="Navigation menu"
+                  aria-expanded={isNavOpen}
+                  aria-controls={MANAGEMENT_SIDEBAR_ID}
+                  onClick={() => setIsNavOpen((open) => !open)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-zinc-300 outline-none ring-zinc-400 focus-visible:ring-2 md:hidden dark:border-zinc-700"
+                >
+                  <Menu aria-hidden="true" className="h-5 w-5" />
+                </button>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+                    Administration
+                  </p>
+                  <h1 className="text-2xl font-semibold">{title}</h1>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
+                </div>
               </div>
               <div className="w-full rounded-xl border border-zinc-200 bg-white/80 p-3 md:w-auto md:min-w-72 dark:border-zinc-800 dark:bg-zinc-900/70">
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Session</p>

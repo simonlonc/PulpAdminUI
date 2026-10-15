@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
 import { PulpAuthProvider } from "@/components/pulp/auth-context";
@@ -20,6 +20,21 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Pulp Admin UI",
   description: "Manage Pulp users and groups",
+  appleWebApp: {
+    capable: true,
+    title: "Pulp Admin",
+    statusBarStyle: "default",
+  },
+};
+
+// Pinch-zoom stays enabled on purpose: no maximumScale or userScalable.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f7f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export default async function RootLayout({
