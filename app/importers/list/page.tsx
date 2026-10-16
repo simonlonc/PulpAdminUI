@@ -21,7 +21,7 @@ import { ImportRunModal } from "@/components/pulp/import-run-modal";
 import { ImporterCreateModal } from "@/components/pulp/importer-create-modal";
 import { ImporterEditModal } from "@/components/pulp/importer-edit-modal";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { PulpImporter } from "@/services/pulp/types";
@@ -86,6 +86,11 @@ function ImportersListPageContent() {
               q={query.q}
               showQ
             />
+            <SortBar
+              fields={[{ label: "Name", field: "name" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -114,8 +119,8 @@ function ImportersListPageContent() {
                       const mapping = Object.entries(importer.repo_mapping);
                       return (
                         <TableRow key={importer.pulp_href}>
-                          <TableCell className="font-medium">{importer.name}</TableCell>
-                          <TableCell>
+                          <TableCell stack="heading" className="font-medium">{importer.name}</TableCell>
+                          <TableCell label="Mapping">
                             {mapping.length === 0 ? (
                               <span className="text-zinc-500">None</span>
                             ) : (
@@ -128,7 +133,7 @@ function ImportersListPageContent() {
                               </ul>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell stack="actions" className="text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={importer.name}

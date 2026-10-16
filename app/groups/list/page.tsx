@@ -135,10 +135,10 @@ function GroupsListPageContent() {
                 <TableBody>
                   {groups.map((group) => (
                     <TableRow key={group.id}>
-                      <TableCell>{group.id}</TableCell>
+                      <TableCell label="ID">{group.id}</TableCell>
                       {editingGroupId === group.id ? (
                         <>
-                          <TableCell>
+                          <TableCell label="Name">
                             <Input
                               value={editGroupName}
                               onChange={(event) => setEditGroupName(event.target.value)}
@@ -166,8 +166,8 @@ function GroupsListPageContent() {
                         </>
                       ) : (
                         <>
-                          <TableCell className="font-medium">{group.name}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell stack="heading" className="font-medium">{group.name}</TableCell>
+                          <TableCell stack="actions" className="text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={group.name}
@@ -203,7 +203,7 @@ function GroupsListPageContent() {
       )}
 
       {createModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 max-sm:p-0 sm:items-center">
           <button
             type="button"
             aria-label="Close dialog"
@@ -214,7 +214,7 @@ function GroupsListPageContent() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-group-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="relative z-10 w-full max-w-lg rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           >
             <h2 id="create-group-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               New group

@@ -23,7 +23,7 @@ import {
 import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RemoteFormModal } from "@/components/pulp/remote-form-modal";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
@@ -266,7 +266,7 @@ function RemotesListPageContent() {
                 a separate hidden sibling would stop the table being the last child of this space-y stack
                 and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table className="max-sm:hidden">
+              <Table stacked={false} className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>
@@ -330,15 +330,13 @@ function RemotesListPageContent() {
                 </TableBody>
               </Table>
               <div className="space-y-3 sm:hidden">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <span>Sort by</span>
-                  <SortableColumnHeader
-                    label="Name"
-                    field="name"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                </div>
+                <SortBar
+                  fields={[
+                    { label: "Name", field: "name" },
+                  ]}
+                  ordering={query.ordering}
+                  onSort={setOrdering}
+                />
                 <ul aria-label="Remotes" className="space-y-3">
                   {isLoadingRemotes && remotes.length === 0 ? (
                     <li className="text-sm text-zinc-500">Loading remotes…</li>

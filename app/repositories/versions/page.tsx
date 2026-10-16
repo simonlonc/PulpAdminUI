@@ -142,7 +142,7 @@ function RepositoryVersionsInner() {
                   <TableBody>
                     {versions.map((v) => (
                       <TableRow key={v.pulp_href}>
-                        <TableCell className="align-top font-medium tabular-nums">
+                        <TableCell stack="heading" className="align-top font-medium tabular-nums">
                           <Link
                             href={`/repositories/version?kind=${kind}&pulp_href=${encodeURIComponent(v.pulp_href)}`}
                             className="text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600 dark:text-zinc-100 dark:decoration-zinc-600 dark:hover:decoration-zinc-400"
@@ -150,10 +150,10 @@ function RepositoryVersionsInner() {
                             {v.number}
                           </Link>
                         </TableCell>
-                        <TableCell className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
+                        <TableCell label="Created" className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
                           {v.pulp_created || "—"}
                         </TableCell>
-                        <TableCell className="align-top break-all font-mono text-xs">
+                        <TableCell label="Href" className="align-top break-all font-mono text-xs">
                           <Link
                             href={`/repositories/version?kind=${kind}&pulp_href=${encodeURIComponent(v.pulp_href)}`}
                             className="text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-600 dark:text-zinc-200"
@@ -161,7 +161,7 @@ function RepositoryVersionsInner() {
                             {v.pulp_href}
                           </Link>
                         </TableCell>
-                        <TableCell className="align-top">
+                        <TableCell label="Content" className="align-top">
                           <RepositoryVersionSummary version={v} />
                         </TableCell>
                         <TableCell className="align-top whitespace-nowrap">

@@ -21,7 +21,7 @@ import { FilesystemExportRunModal } from "@/components/pulp/filesystem-export-ru
 import { FilesystemExporterCreateModal } from "@/components/pulp/filesystem-exporter-create-modal";
 import { FilesystemExporterEditModal } from "@/components/pulp/filesystem-exporter-edit-modal";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { PulpFilesystemExporter } from "@/services/pulp/types";
@@ -86,6 +86,11 @@ function FilesystemExportersListPageContent() {
               q={query.q}
               showQ
             />
+            <SortBar
+              fields={[{ label: "Name", field: "name" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -113,10 +118,10 @@ function FilesystemExportersListPageContent() {
                   ) : (
                     exporters.map((exporter) => (
                       <TableRow key={exporter.pulp_href}>
-                        <TableCell className="font-medium">{exporter.name}</TableCell>
-                        <TableCell className="break-all font-mono text-xs">{exporter.path}</TableCell>
-                        <TableCell>{exporter.method}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell stack="heading" className="font-medium">{exporter.name}</TableCell>
+                        <TableCell label="Path" className="break-all font-mono text-xs">{exporter.path}</TableCell>
+                        <TableCell label="Method">{exporter.method}</TableCell>
+                        <TableCell stack="actions" className="text-right">
                           <div className="flex justify-end">
                             <RowActionMenu
                               label={exporter.name}

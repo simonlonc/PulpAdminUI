@@ -193,23 +193,23 @@ function TaskSchedulesListPageContent() {
                       const duration = task ? formatTaskDuration(task.started_at, task.finished_at) : null;
                       return (
                         <TableRow key={s.pulp_href}>
-                          <TableCell className="max-w-[14rem] font-medium">{s.name}</TableCell>
-                          <TableCell className="max-w-[16rem] truncate font-mono text-xs" title={s.task_name}>
+                          <TableCell stack="heading" className="max-w-[14rem] font-medium">{s.name}</TableCell>
+                          <TableCell label="Task" className="max-w-[16rem] truncate font-mono text-xs" title={s.task_name}>
                             {shortTaskName(s.task_name)}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                          <TableCell label="Interval" className="whitespace-nowrap font-mono text-xs text-zinc-600 dark:text-zinc-400">
                             {s.dispatch_interval}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm">
+                          <TableCell label="Next dispatch" className="whitespace-nowrap text-sm">
                             {formatIso(s.next_dispatch)}
                             <div className="text-xs text-zinc-500 dark:text-zinc-400">
                               {formatNextDispatchCountdown(s.next_dispatch, now)}
                             </div>
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm">
+                          <TableCell label="Created" className="whitespace-nowrap text-sm">
                             {formatIso(s.pulp_created)}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">
+                          <TableCell label="Last task" className="whitespace-nowrap text-xs">
                             {s.last_task ? (
                               <Link
                                 href={`/tasks/detail?pulp_href=${encodeURIComponent(s.last_task)}`}

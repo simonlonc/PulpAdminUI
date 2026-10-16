@@ -200,7 +200,7 @@ export function AccessPanelModal({ pulpHref, resourceName, onClose }: AccessPane
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -212,13 +212,13 @@ export function AccessPanelModal({ pulpHref, resourceName, onClose }: AccessPane
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+        className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
           Manage access
         </h2>
-        <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">{resourceName}</p>
+        <p className="mt-1 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">{resourceName}</p>
 
         {modalError ? (
           <p
@@ -275,7 +275,7 @@ export function AccessPanelModal({ pulpHref, resourceName, onClose }: AccessPane
                   You do not have permission to manage roles on this object.
                 </p>
               ) : null}
-              <div className="mt-2 flex flex-wrap items-end gap-2">
+              <div className="mt-2 flex flex-wrap items-end gap-2 max-sm:flex-col max-sm:items-stretch max-sm:[&_select]:w-full">
                 <FormField label="Role">
                   <select
                     value={newRole}

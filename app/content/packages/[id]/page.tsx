@@ -409,7 +409,7 @@ export default function PackageDetailsPage() {
             <CardTitle className="mb-2">Checksums</CardTitle>
             <CardContent>
               <TableWrapper>
-                <Table>
+                <Table stacked={false}>
                   <TableBody>
                     {[
                       ["MD5", pkg.md5],
@@ -435,7 +435,7 @@ export default function PackageDetailsPage() {
               <CardTitle className="mb-2">Requires ({pkg.requires.length})</CardTitle>
               <CardContent>
                 <TableWrapper>
-                  <Table>
+                  <Table stacked={false}>
                     <TableHead>
                       <TableRow>
                         <TableHeaderCell>Name</TableHeaderCell>
@@ -461,7 +461,7 @@ export default function PackageDetailsPage() {
               <CardTitle className="mb-2">Provides ({pkg.provides.length})</CardTitle>
               <CardContent>
                 <TableWrapper>
-                  <Table>
+                  <Table stacked={false}>
                     <TableHead>
                       <TableRow>
                         <TableHeaderCell>Name</TableHeaderCell>
@@ -499,9 +499,9 @@ export default function PackageDetailsPage() {
                   <TableBody>
                     {pkg.files.slice(0, 80).map((file, idx) => (
                       <TableRow key={`file-${idx}`}>
-                        <TableCell className="font-mono text-xs">{valueOf(file[1])}</TableCell>
-                        <TableCell>{valueOf(file[2])}</TableCell>
-                        <TableCell className="font-mono text-xs">{valueOf(file[3])}</TableCell>
+                        <TableCell label="Directory" className="font-mono text-xs">{valueOf(file[1])}</TableCell>
+                        <TableCell stack="heading">{valueOf(file[2])}</TableCell>
+                        <TableCell label="Checksum" className="font-mono text-xs">{valueOf(file[3])}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

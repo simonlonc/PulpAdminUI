@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/components/ui/cn";
+import { SlidersHorizontal } from "lucide-react";
 import { PULP_PAGE_SIZES, type PulpListQuery } from "@/lib/pulp-list-query";
 
 const Q_HELP_TEXT =
@@ -59,6 +61,9 @@ export function ListQueryBar({
   const [qDraft, setQDraft] = useState(q);
   const [advancedOpen, setAdvancedOpen] = useState(q.length > 0);
   const [labelSelectDraft, setLabelSelectDraft] = useState(labelSelect);
+  // Below sm only the search row shows until the user asks for the rest.
+  const [filtersOpen, setFiltersOpen] = useState(q.length > 0 || labelSelect.length > 0);
+  const activeFilterCount = (q ? 1 : 0) + (labelSelect ? 1 : 0);
 
   useEffect(() => {
     setDraft(search);
@@ -123,66 +128,80 @@ export function ListQueryBar({
                   Clear
                 </Button>
               ) : null}
-            </div>
-          </FormField>
-        ) : null}
-        <FormField label="Page size">
-          <select
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            disabled={disabled}
-            className="rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-          >
-            {PULP_PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size} / page
-              </option>
-            ))}
-          </select>
-        </FormField>
-        {showLabelSelect ? (
-          <FormField
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                Label
-                <InfoTooltip text={LABEL_SELECT_HELP_TEXT} />
-              </span>
-            }
-          >
-            <div className="flex gap-2">
-              <Input
-                value={labelSelectDraft}
-                onChange={(event) => setLabelSelectDraft(event.target.value)}
-                placeholder="env=prod"
-                disabled={disabled}
-                className="w-48"
+              <FiltersToggle
+                open={filtersOpen}
+                activeCount={activeFilterCount}
+                onToggle={() => setFiltersOpen((open) => !open)}
               />
-              {labelSelectDraft ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled}
-                  onClick={handleClearLabelSelect}
-                >
-                  Clear
-                </Button>
-              ) : null}
             </div>
           </FormField>
-        ) : null}
-        {showQ ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => setAdvancedOpen((open) => !open)}
-          >
-            {advancedOpen ? "Hide advanced filter" : "Advanced filter"}
-          </Button>
-        ) : null}
+        ) : (
+          <FiltersToggle
+            open={filtersOpen}
+            activeCount={activeFilterCount}
+            onToggle={() => setFiltersOpen((open) => !open)}
+          />
+        )}
+        <div className={cn("contents", !filtersOpen && "max-sm:hidden")}>
+          <FormField label="Page size">
+            <select
+              value={pageSize}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              disabled={disabled}
+              className="rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+            >
+              {PULP_PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+          </FormField>
+          {showLabelSelect ? (
+            <FormField
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  Label
+                  <InfoTooltip text={LABEL_SELECT_HELP_TEXT} />
+                </span>
+              }
+            >
+              <div className="flex gap-2">
+                <Input
+                  value={labelSelectDraft}
+                  onChange={(event) => setLabelSelectDraft(event.target.value)}
+                  placeholder="env=prod"
+                  disabled={disabled}
+                  className="w-48"
+                />
+                {labelSelectDraft ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={handleClearLabelSelect}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </FormField>
+          ) : null}
+          {showQ ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => setAdvancedOpen((open) => !open)}
+            >
+              {advancedOpen ? "Hide advanced filter" : "Advanced filter"}
+            </Button>
+          ) : null}
+        </div>
       </div>
       {showQ && advancedOpen ? (
         <FormField
+          className={cn(!filtersOpen && "max-sm:hidden")}
           label={
             <span className="inline-flex items-center gap-1.5">
               Advanced filter (q)
@@ -213,6 +232,30 @@ export function ListQueryBar({
   );
 }
 
+function FiltersToggle({
+  open,
+  activeCount,
+  onToggle,
+}: {
+  open: boolean;
+  activeCount: number;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      aria-expanded={open}
+      aria-label="Filters"
+      onClick={onToggle}
+      className="inline-flex items-center gap-1.5 px-3 sm:hidden"
+    >
+      <SlidersHorizontal aria-hidden className="size-4" />
+      {activeCount > 0 ? <span className="text-xs tabular-nums">{activeCount}</span> : null}
+    </Button>
+  );
+}
+
 export type SortableColumnHeaderProps = {
   label: string;
   field: string;
@@ -238,5 +281,29 @@ export function SortableColumnHeader({ label, field, ordering, onSort }: Sortabl
       {label}
       {isActive ? <span aria-hidden>{isDescending ? "▼" : "▲"}</span> : null}
     </button>
+  );
+}
+
+type SortBarProps = {
+  fields: { label: string; field: string }[];
+  ordering: string;
+  onSort: (ordering: string) => void;
+};
+
+/** Phone-width stand-in for sortable column headers, which are hidden once a table stacks. */
+export function SortBar({ fields, ordering, onSort }: SortBarProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 sm:hidden pointer-coarse:[&_button]:py-2">
+      <span>Sort by</span>
+      {fields.map(({ label, field }) => (
+        <SortableColumnHeader
+          key={field}
+          label={label}
+          field={field}
+          ordering={ordering}
+          onSort={onSort}
+        />
+      ))}
+    </div>
   );
 }

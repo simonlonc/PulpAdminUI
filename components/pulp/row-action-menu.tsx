@@ -44,7 +44,7 @@ export function RowActionMenu({ label, items, disabled, onOpenChange }: RowActio
         <button
           type="button"
           disabled={disabled}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md pointer-coarse:h-10 pointer-coarse:w-10 border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
           aria-label={`Actions for ${label}`}
         >
           <MoreVertical className="size-4" strokeWidth={2} />

@@ -132,7 +132,7 @@ export function LabelEditorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -144,7 +144,7 @@ export function LabelEditorModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+        className="max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -166,7 +166,10 @@ export function LabelEditorModal({
             <p className="text-sm text-zinc-500 dark:text-zinc-400">No labels yet.</p>
           ) : null}
           {rows.map((row, index) => (
-            <div key={index} className="flex items-end gap-2">
+            <div
+              key={index}
+              className="flex items-end gap-2 max-sm:grid max-sm:grid-cols-[1fr_auto] max-sm:rounded-lg max-sm:border max-sm:border-zinc-200 max-sm:p-3 dark:max-sm:border-zinc-800"
+            >
               <FormField label="Key" className="min-w-0 flex-1">
                 <Input
                   value={row.key}
@@ -175,7 +178,7 @@ export function LabelEditorModal({
                   className="font-mono"
                 />
               </FormField>
-              <FormField label="Value" className="min-w-0 flex-1">
+              <FormField label="Value" className="min-w-0 flex-1 max-sm:col-span-2 max-sm:row-start-2">
                 <Input
                   value={row.value}
                   onChange={(event) => updateRow(index, { value: event.target.value })}
@@ -188,6 +191,7 @@ export function LabelEditorModal({
                 variant="outline"
                 disabled={isSaving}
                 onClick={() => removeRow(index)}
+                className="max-sm:col-start-2 max-sm:row-start-1"
                 aria-label={`Remove label ${row.key || index + 1}`}
               >
                 Remove

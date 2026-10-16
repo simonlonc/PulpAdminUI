@@ -27,7 +27,7 @@ import { DistributionCreateModal } from "@/components/pulp/distribution-create-m
 import { DistributionEditModal } from "@/components/pulp/distribution-edit-modal";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { PulpDistribution } from "@/services/pulp/types";
@@ -155,6 +155,11 @@ function DistributionsListPageContent() {
                 </select>
               </FormField>
             </div>
+            <SortBar
+              fields={[{ label: "Name", field: "name" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -195,9 +200,9 @@ function DistributionsListPageContent() {
                         : "-";
                       return (
                         <TableRow key={distribution.pulp_href}>
-                          <TableCell className="font-medium">{distribution.name}</TableCell>
-                          <TableCell>{distribution.base_path}</TableCell>
-                          <TableCell>
+                          <TableCell stack="heading" className="font-medium">{distribution.name}</TableCell>
+                          <TableCell label="Base path">{distribution.base_path}</TableCell>
+                          <TableCell label="Base URL">
                             <a
                               href={url}
                               target="_blank"
@@ -207,13 +212,13 @@ function DistributionsListPageContent() {
                               {url}
                             </a>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{boundTo}</TableCell>
-                          <TableCell>{contentGuard}</TableCell>
-                          <TableCell>{distribution.pulp_created}</TableCell>
-                          <TableCell>
+                          <TableCell label="Bound to" className="font-mono text-xs">{boundTo}</TableCell>
+                          <TableCell label="Content guard">{contentGuard}</TableCell>
+                          <TableCell label="Created">{distribution.pulp_created}</TableCell>
+                          <TableCell label="Labels">
                             <LabelChips labels={distribution.pulp_labels} />
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell stack="actions" className="text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={distribution.name}

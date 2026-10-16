@@ -177,17 +177,17 @@ function ImporterImportsInner() {
                     ) : (
                       importRows.map((importRow) => (
                         <TableRow key={importRow.pulp_href}>
-                          <TableCell className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
+                          <TableCell stack="heading" className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
                             {importRow.pulp_created || "-"}
                           </TableCell>
-                          <TableCell className="align-top">
+                          <TableCell label="Source" className="align-top">
                             {Object.entries(importRow.params ?? {}).map(([key, value]) => (
                               <p key={key} className="break-all font-mono text-xs">
                                 <span className="text-zinc-500">{key}</span> {String(value)}
                               </p>
                             ))}
                           </TableCell>
-                          <TableCell className="align-top break-all font-mono text-xs">
+                          <TableCell label="Task" className="align-top break-all font-mono text-xs">
                             {importRow.task ? (
                               <Link
                                 href={`/tasks/detail?pulp_href=${encodeURIComponent(importRow.task)}`}
@@ -199,7 +199,7 @@ function ImporterImportsInner() {
                               <span className="text-zinc-500">-</span>
                             )}
                           </TableCell>
-                          <TableCell className="align-top text-right">
+                          <TableCell stack="actions" className="align-top text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={`import of ${importRow.pulp_created}`}

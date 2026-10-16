@@ -8,7 +8,7 @@ type CardContentProps = HTMLAttributes<HTMLDivElement>;
 export function Card({ className, ...props }: CardProps) {
   return (
     <section
-      className={cn("rounded-lg border border-zinc-200 p-4 dark:border-zinc-800", className)}
+      className={cn("rounded-lg border border-zinc-200 p-4 max-sm:p-3 dark:border-zinc-800", className)}
       {...props}
     />
   );

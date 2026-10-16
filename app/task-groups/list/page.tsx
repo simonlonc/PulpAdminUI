@@ -108,16 +108,16 @@ export default function TaskGroupsListPage() {
                   ) : (
                     items.map((group) => (
                       <TableRow key={group.pulp_href}>
-                        <TableCell className="max-w-[22rem] truncate" title={group.description}>
+                        <TableCell stack="heading" className="max-w-[22rem] truncate" title={group.description}>
                           {group.description}
                         </TableCell>
-                        <TableCell>{group.all_tasks_dispatched ? "yes" : "no"}</TableCell>
-                        <TableCell>{group.waiting}</TableCell>
-                        <TableCell>{group.running}</TableCell>
-                        <TableCell>{group.completed}</TableCell>
-                        <TableCell>{group.failed}</TableCell>
-                        <TableCell>{group.canceled}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell label="Dispatched">{group.all_tasks_dispatched ? "yes" : "no"}</TableCell>
+                        <TableCell label="Waiting">{group.waiting}</TableCell>
+                        <TableCell label="Running">{group.running}</TableCell>
+                        <TableCell label="Completed">{group.completed}</TableCell>
+                        <TableCell label="Failed">{group.failed}</TableCell>
+                        <TableCell label="Canceled">{group.canceled}</TableCell>
+                        <TableCell stack="actions" className="text-right">
                           <Link
                             href={`/task-groups/detail?pulp_href=${encodeURIComponent(group.pulp_href)}`}
                             className="inline-flex rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"

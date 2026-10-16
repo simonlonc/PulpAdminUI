@@ -20,7 +20,7 @@ import {
   TableWrapper,
 } from "@/components/ui/table";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { type PulpPluginDescriptor, type PulpPluginKind } from "@/lib/pulp-plugins";
@@ -165,6 +165,11 @@ function PublicationsListPageContent() {
                 </select>
               </FormField>
             </div>
+            <SortBar
+              fields={[{ label: "Created", field: "pulp_created" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -198,13 +203,13 @@ function PublicationsListPageContent() {
                         : "-";
                       return (
                         <TableRow key={publication.pulp_href}>
-                          <TableCell className="font-mono text-xs">{repositoryName}</TableCell>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell stack="heading" className="font-mono text-xs">{repositoryName}</TableCell>
+                          <TableCell label="Version" className="font-mono text-xs">
                             {publication.repository_version}
                           </TableCell>
-                          <TableCell>{kind ? getPlugin(kind).label : "Unknown"}</TableCell>
-                          <TableCell>{publication.pulp_created}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell label="Type">{kind ? getPlugin(kind).label : "Unknown"}</TableCell>
+                          <TableCell label="Created">{publication.pulp_created}</TableCell>
+                          <TableCell stack="actions" className="text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={repositoryName}

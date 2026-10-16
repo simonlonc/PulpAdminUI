@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/components/ui/cn";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import { buildPulpListParams } from "@/lib/pulp-list-query";
@@ -262,7 +262,7 @@ function TasksListPageContent() {
                 a separate hidden sibling would stop the table being the last child of this space-y stack
                 and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table className="max-sm:hidden">
+              <Table stacked={false} className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>
@@ -356,39 +356,17 @@ function TasksListPageContent() {
                 </TableBody>
               </Table>
               <div className="space-y-3 sm:hidden">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <span>Sort by</span>
-                  <SortableColumnHeader
-                    label="State"
-                    field="state"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                  <SortableColumnHeader
-                    label="Name"
-                    field="name"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                  <SortableColumnHeader
-                    label="Created"
-                    field="pulp_created"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                  <SortableColumnHeader
-                    label="Started"
-                    field="started_at"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                  <SortableColumnHeader
-                    label="Finished"
-                    field="finished_at"
-                    ordering={query.ordering}
-                    onSort={setOrdering}
-                  />
-                </div>
+                <SortBar
+                  fields={[
+                    { label: "State", field: "state" },
+                    { label: "Name", field: "name" },
+                    { label: "Created", field: "pulp_created" },
+                    { label: "Started", field: "started_at" },
+                    { label: "Finished", field: "finished_at" },
+                  ]}
+                  ordering={query.ordering}
+                  onSort={setOrdering}
+                />
                 <ul aria-label="Tasks" className="space-y-3">
                   {loading && tasks.length === 0 ? (
                     <li className="text-sm text-zinc-500">Loading tasks…</li>
@@ -440,7 +418,7 @@ function TasksListPageContent() {
 
       {cancelModalTask ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && cancelingHref === null) {
@@ -452,7 +430,7 @@ function TasksListPageContent() {
             role="dialog"
             aria-modal="true"
             aria-label={`Cancel task ${taskIdFromHref(cancelModalTask.pulp_href)}`}
-            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Cancel task</h2>

@@ -52,7 +52,7 @@ function ConnectionBadge({ connection }: { connection: { connected: boolean } | 
 function AppTable({ apps, emptyLabel }: { apps: PulpStatusApp[]; emptyLabel: string }) {
   return (
     <TableWrapper>
-      <Table>
+      <Table stacked={false}>
         <TableHead>
           <TableRow>
             <TableHeaderCell>Name</TableHeaderCell>
@@ -254,11 +254,11 @@ export default function StatusPage() {
                   <TableBody>
                     {status.versions.map((version) => (
                       <TableRow key={version.component}>
-                        <TableCell className="font-medium">{version.component}</TableCell>
-                        <TableCell className="font-mono text-xs">{version.version}</TableCell>
-                        <TableCell className="font-mono text-xs">{version.package}</TableCell>
-                        <TableCell className="font-mono text-xs">{version.module}</TableCell>
-                        <TableCell>{version.domain_compatible ? "yes" : "no"}</TableCell>
+                        <TableCell stack="heading" className="font-medium">{version.component}</TableCell>
+                        <TableCell label="Version" className="font-mono text-xs">{version.version}</TableCell>
+                        <TableCell label="Package" className="font-mono text-xs">{version.package}</TableCell>
+                        <TableCell label="Module" className="font-mono text-xs">{version.module}</TableCell>
+                        <TableCell label="Domains">{version.domain_compatible ? "yes" : "no"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -27,7 +27,7 @@ function paginationItems(current: number, total: number): (number | "ellipsis")[
 }
 
 const paginationBtnBase =
-  "inline-flex min-w-[2.25rem] items-center justify-center rounded-md px-2 py-1.5 text-sm transition-opacity";
+  "inline-flex min-w-[2.25rem] items-center justify-center rounded-md px-2 py-1.5 text-sm transition-opacity pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
 function PaginationButton({
   page,

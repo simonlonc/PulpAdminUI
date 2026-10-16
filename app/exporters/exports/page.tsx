@@ -199,18 +199,18 @@ function ExporterExportsInner() {
                     ) : (
                       exportRows.map((exportRow) => (
                         <TableRow key={exportRow.pulp_href}>
-                          <TableCell className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
+                          <TableCell stack="heading" className="align-top whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400">
                             {exportRow.pulp_created || "-"}
                           </TableCell>
-                          <TableCell className="align-top">
+                          <TableCell label="Parameters" className="align-top">
                             {exportParamsSummary(exportRow.params) || (
                               <span className="text-zinc-500">Default options</span>
                             )}
                           </TableCell>
-                          <TableCell className="align-top">
+                          <TableCell label="Files" className="align-top">
                             <ExportFilesManifest exportRow={exportRow} />
                           </TableCell>
-                          <TableCell className="align-top break-all font-mono text-xs">
+                          <TableCell label="Task" className="align-top break-all font-mono text-xs">
                             {exportRow.task ? (
                               <Link
                                 href={`/tasks/detail?pulp_href=${encodeURIComponent(exportRow.task)}`}
@@ -222,7 +222,7 @@ function ExporterExportsInner() {
                               <span className="text-zinc-500">-</span>
                             )}
                           </TableCell>
-                          <TableCell className="align-top text-right">
+                          <TableCell stack="actions" className="align-top text-right">
                             <div className="flex justify-end">
                               <RowActionMenu
                                 label={`export of ${exportRow.pulp_created}`}

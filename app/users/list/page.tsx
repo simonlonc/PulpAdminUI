@@ -262,19 +262,19 @@ export default function UsersListPage() {
                 <TableBody>
                   {users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.username}</TableCell>
-                      <TableCell>{user.email || "-"}</TableCell>
-                      <TableCell>
+                      <TableCell stack="heading" className="font-medium">{user.username}</TableCell>
+                      <TableCell label="Email">{user.email || "-"}</TableCell>
+                      <TableCell label="Staff">
                         <Badge variant={user.is_staff ? "default" : "outline"}>
                           {user.is_staff ? "Staff" : "Standard"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell label="Active">
                         <Badge variant={user.is_active ? "success" : "destructive"}>
                           {user.is_active ? "Active" : "Inactive"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell stack="actions" className="text-right">
                         <div className="flex justify-end">
                           <RowActionMenu
                             label={user.username}
@@ -316,7 +316,7 @@ export default function UsersListPage() {
 
       {createModalOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -328,7 +328,7 @@ export default function UsersListPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby={createDialogTitleId}
-            className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <h2 id={createDialogTitleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -415,7 +415,7 @@ export default function UsersListPage() {
 
       {editingUserId !== null ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -427,7 +427,7 @@ export default function UsersListPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby={editDialogTitleId}
-            className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <h2 id={editDialogTitleId} className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -504,7 +504,7 @@ export default function UsersListPage() {
 
       {passwordUserId !== null ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 p-4 max-sm:p-0 sm:items-center"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -516,7 +516,7 @@ export default function UsersListPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby={passwordDialogTitleId}
-            className="max-h-[min(90vh,720px)] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="max-h-[min(90vh,720px)] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <h2

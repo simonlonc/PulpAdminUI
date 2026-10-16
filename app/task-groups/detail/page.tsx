@@ -183,7 +183,7 @@ function TaskGroupDetailInner() {
                     ) : (
                       group.tasks.map((task) => (
                         <TableRow key={task.pulp_href}>
-                          <TableCell>
+                          <TableCell label="State">
                             <span
                               className={cn(
                                 "rounded-md px-2 py-0.5 text-xs font-medium",
@@ -202,19 +202,19 @@ function TaskGroupDetailInner() {
                               {task.state}
                             </span>
                           </TableCell>
-                          <TableCell
+                          <TableCell stack="heading"
                             className="max-w-[18rem] truncate font-mono text-xs"
                             title={task.name}
                           >
                             {shortTaskName(task.name)}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm">
+                          <TableCell label="Started" className="whitespace-nowrap text-sm">
                             {formatIso(task.started_at)}
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-sm">
+                          <TableCell label="Finished" className="whitespace-nowrap text-sm">
                             {formatIso(task.finished_at)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell stack="actions" className="text-right">
                             <Link
                               href={`/tasks/detail?pulp_href=${encodeURIComponent(task.pulp_href)}`}
                               className="inline-flex rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
