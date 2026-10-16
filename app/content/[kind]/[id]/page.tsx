@@ -161,7 +161,7 @@ function ContentUnitDetailInner() {
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">No other fields.</p>
               ) : (
                 <TableWrapper>
-                  <Table>
+                  <Table stacked={false}>
                     <TableHead>
                       <TableRow>
                         <TableHeaderCell>Field</TableHeaderCell>

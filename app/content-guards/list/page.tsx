@@ -22,7 +22,7 @@ import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { ContentGuardCreateModal } from "@/components/pulp/content-guard-create-modal";
 import { ContentGuardEditModal } from "@/components/pulp/content-guard-edit-modal";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RowActionMenu } from "@/components/pulp/row-action-menu";
 import { usePulpListQuery } from "@/components/pulp/use-pulp-list-query";
 import {
@@ -131,6 +131,11 @@ function ContentGuardsListPageContent() {
                 </select>
               </FormField>
             </div>
+            <SortBar
+              fields={[{ label: "Name", field: "name" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -159,11 +164,11 @@ function ContentGuardsListPageContent() {
                   ) : (
                     contentGuards.map((contentGuard) => (
                       <TableRow key={contentGuard.pulp_href}>
-                        <TableCell className="font-medium">{contentGuard.name}</TableCell>
-                        <TableCell>{contentGuardTypeLabel(contentGuard.pulp_href)}</TableCell>
-                        <TableCell>{contentGuard.description ?? "-"}</TableCell>
-                        <TableCell>{contentGuard.pulp_created}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell stack="heading" className="font-medium">{contentGuard.name}</TableCell>
+                        <TableCell label="Type">{contentGuardTypeLabel(contentGuard.pulp_href)}</TableCell>
+                        <TableCell label="Description">{contentGuard.description ?? "-"}</TableCell>
+                        <TableCell label="Created">{contentGuard.pulp_created}</TableCell>
+                        <TableCell stack="actions" className="text-right">
                           <div className="flex justify-end">
                             <RowActionMenu
                               label={contentGuard.name}

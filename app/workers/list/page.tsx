@@ -69,10 +69,10 @@ export default function WorkersListPage() {
                   ) : (
                     workers.map((w) => (
                       <TableRow key={w.pulp_href}>
-                        <TableCell className="font-medium">{stripHtml(w.name)}</TableCell>
-                        <TableCell>{formatIso(w.pulp_created)}</TableCell>
-                        <TableCell>{formatIso(w.last_heartbeat)}</TableCell>
-                        <TableCell className="max-w-[14rem] truncate font-mono text-xs">
+                        <TableCell stack="heading" className="font-medium">{stripHtml(w.name)}</TableCell>
+                        <TableCell label="Created">{formatIso(w.pulp_created)}</TableCell>
+                        <TableCell label="Last heartbeat">{formatIso(w.last_heartbeat)}</TableCell>
+                        <TableCell label="Current task" className="max-w-[14rem] truncate font-mono text-xs">
                           {w.current_task ?? "—"}
                         </TableCell>
                       </TableRow>

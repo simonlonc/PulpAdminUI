@@ -230,10 +230,10 @@ export default function DashboardPage() {
           </div>
         </Card>
       ) : (
-        <div className="flex flex-col gap-6">
-          <div className="flex gap-3 rounded-lg border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/35 dark:text-sky-100">
+        <div className="flex flex-col gap-4 sm:gap-6">
+          <div className="flex gap-3 rounded-lg border border-sky-200/90 bg-sky-50/90 px-4 py-3 max-sm:hidden text-sm text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/35 dark:text-sky-100">
             <span
-              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-200/80 text-sky-900 dark:bg-sky-900/60 dark:text-sky-100"
+              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-200/80 max-sm:hidden text-sky-900 dark:bg-sky-900/60 dark:text-sky-100"
               aria-hidden
             >
               <CloudCog className="h-5 w-5" strokeWidth={1.75} />
@@ -266,16 +266,16 @@ export default function DashboardPage() {
 
           {hasSession && summary ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                 {statCards.map(({ key, label, icon: Icon, iconWrap }) => (
                   <Card
                     key={key}
                     className="overflow-hidden border-zinc-200/90 shadow-sm dark:border-zinc-800/90"
                   >
-                    <CardContent className="flex items-start gap-3 p-4 pt-4">
+                    <CardContent className="flex items-start gap-3 p-4 pt-4 max-sm:flex-col max-sm:gap-2 max-sm:p-0">
                       <span
                         className={cn(
-                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl max-sm:h-9 max-sm:w-9",
                           iconWrap
                         )}
                         aria-hidden
@@ -286,7 +286,7 @@ export default function DashboardPage() {
                         <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                           {label}
                         </p>
-                        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
+                        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900 max-sm:text-2xl dark:text-zinc-50">
                           {summary[key] ?? "—"}
                         </p>
                       </div>
@@ -298,10 +298,10 @@ export default function DashboardPage() {
                     key={repo.kind}
                     className="overflow-hidden border-zinc-200/90 shadow-sm dark:border-zinc-800/90"
                   >
-                    <CardContent className="flex items-start gap-3 p-4 pt-4">
+                    <CardContent className="flex items-start gap-3 p-4 pt-4 max-sm:flex-col max-sm:gap-2 max-sm:p-0">
                       <span
                         className={cn(
-                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl max-sm:h-9 max-sm:w-9",
                           REPOSITORY_CARD_ICON_WRAP
                         )}
                         aria-hidden
@@ -312,7 +312,7 @@ export default function DashboardPage() {
                         <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                           {repo.label} repositories
                         </p>
-                        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
+                        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900 max-sm:text-2xl dark:text-zinc-50">
                           {repo.count ?? "—"}
                         </p>
                       </div>
@@ -347,7 +347,7 @@ export default function DashboardPage() {
               ) : null}
 
               <Card className="border-zinc-200/90 shadow-sm dark:border-zinc-800/90">
-                <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 pb-3 pt-4 dark:border-zinc-800/80">
+                <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 pb-3 pt-4 max-sm:px-0 max-sm:pt-0 dark:border-zinc-800/80">
                   <div className="flex items-center gap-2">
                     <Activity className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" aria-hidden />
                     <CardTitle className="mb-0">Activity</CardTitle>
@@ -360,7 +360,7 @@ export default function DashboardPage() {
                     <ChevronRight className="h-4 w-4" aria-hidden />
                   </Link>
                 </div>
-                <CardContent className="grid gap-4 p-4 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+                <CardContent className="grid grid-cols-2 gap-3 p-4 pt-4 max-sm:px-0 max-sm:pb-0 max-sm:pt-3 sm:gap-4 lg:grid-cols-3">
                   {visibleActivityTiles.map((tile) => {
                     const value = summary.activity[tile.key];
                     const isBad =
@@ -373,7 +373,7 @@ export default function DashboardPage() {
                         key={tile.key}
                         href={tile.href}
                         className={cn(
-                          "flex items-start gap-3 rounded-xl border p-4 transition hover:shadow-sm",
+                          "flex items-start gap-3 rounded-xl border p-4 transition hover:shadow-sm max-sm:flex-col max-sm:gap-2 max-sm:p-3",
                           isBad
                             ? "border-red-300 bg-red-50/70 hover:border-red-400 dark:border-red-900/60 dark:bg-red-950/20"
                             : "border-zinc-200/90 bg-white/70 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-600"
@@ -381,7 +381,7 @@ export default function DashboardPage() {
                       >
                         <span
                           className={cn(
-                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl max-sm:h-9 max-sm:w-9",
                             isBad ? BAD_ICON_WRAP : NEUTRAL_ICON_WRAP
                           )}
                           aria-hidden
@@ -394,7 +394,7 @@ export default function DashboardPage() {
                           </p>
                           <p
                             className={cn(
-                              "mt-1 text-3xl font-semibold tabular-nums tracking-tight",
+                              "mt-1 text-3xl font-semibold tabular-nums tracking-tight max-sm:text-2xl",
                               isBad
                                 ? "text-red-700 dark:text-red-300"
                                 : "text-zinc-900 dark:text-zinc-50"
@@ -420,19 +420,19 @@ export default function DashboardPage() {
           ) : null}
 
           <Card className="border-zinc-200/90 shadow-sm dark:border-zinc-800/90">
-            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 pb-3 pt-4 dark:border-zinc-800/80">
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-4 pb-3 pt-4 max-sm:px-0 max-sm:pt-0 dark:border-zinc-800/80">
               <LayoutDashboard className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" aria-hidden />
               <CardTitle className="mb-0">Shortcuts</CardTitle>
             </div>
-            <CardContent className="pb-6 pt-5">
-              <ul className="grid gap-4 sm:grid-cols-2 sm:gap-5">
+            <CardContent className="pb-6 pt-5 max-sm:pb-0 max-sm:pt-3">
+              <ul className="grid gap-2 sm:grid-cols-2 sm:gap-5">
                 {quickLinks.map((item) => {
                   const Icon = item.icon;
                   return (
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/70 p-4 transition hover:border-zinc-300 hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/90"
+                        className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/70 p-4 transition max-sm:p-3 hover:border-zinc-300 hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/90"
                       >
                         <span
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 transition group-hover:bg-zinc-200/90 group-hover:text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-300 dark:group-hover:bg-zinc-800 dark:group-hover:text-zinc-100"

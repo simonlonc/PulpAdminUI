@@ -34,7 +34,7 @@ import {
 import { AccessPanelModal } from "@/components/pulp/access-panel";
 import { LabelChips, LabelEditorModal } from "@/components/pulp/label-editor";
 import { ListPagination } from "@/components/pulp/list-pagination";
-import { ListQueryBar, SortableColumnHeader } from "@/components/pulp/list-query-bar";
+import { ListQueryBar, SortableColumnHeader, SortBar } from "@/components/pulp/list-query-bar";
 import { RepositoryCreateModal } from "@/components/pulp/repository-create-modal";
 import { RepositoryDeleteModal } from "@/components/pulp/repository-delete-modal";
 import { RepositorySyncModal } from "@/components/pulp/repository-sync-modal";
@@ -49,18 +49,6 @@ import { PulpDistribution, PulpRemote, PulpRepository } from "@/services/pulp/ty
 
 const selectClassName =
   "rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
-
-/*
- * Below sm the table can scroll sideways (a long label chip is enough), so the Actions column
- * is pinned to the right edge and keeps the row menu on screen. A pinned cell must be opaque
- * to hide what scrolls under it, so it uses the nearest solid shade of the translucent
- * background behind it. The divider is an inset shadow because a collapsed table border does
- * not move with a sticky cell.
- */
-const pinnedActionsHeadClassName =
-  "max-sm:sticky max-sm:right-0 max-sm:bg-zinc-50 max-sm:shadow-[inset_1px_0_0_var(--color-zinc-200)] dark:max-sm:bg-zinc-900 dark:max-sm:shadow-[inset_1px_0_0_var(--color-zinc-800)]";
-const pinnedActionsCellClassName =
-  "max-sm:sticky max-sm:right-0 max-sm:bg-zinc-50 max-sm:shadow-[inset_1px_0_0_var(--color-zinc-200)] dark:max-sm:bg-zinc-950 dark:max-sm:shadow-[inset_1px_0_0_var(--color-zinc-800)]";
 
 function distributionUrlByRepositoryHref(distributions: PulpDistribution[]): Record<string, string> {
   const sorted = [...distributions].sort((a, b) => a.name.localeCompare(b.name));
@@ -431,6 +419,11 @@ function RepositoriesListPageContent() {
               </FormField>
             </div>
 
+            <SortBar
+              fields={[{ label: "Name", field: "name" }]}
+              ordering={query.ordering}
+              onSort={setOrdering}
+            />
             <TableWrapper>
               <Table>
                 <TableHead>
@@ -445,7 +438,7 @@ function RepositoriesListPageContent() {
                     </TableHeaderCell>
                     <TableHeaderCell>Distribution URL</TableHeaderCell>
                     <TableHeaderCell>Labels</TableHeaderCell>
-                    <TableHeaderCell className={`text-right ${pinnedActionsHeadClassName}`}>
+                    <TableHeaderCell className="text-right">
                       Actions
                     </TableHeaderCell>
                   </TableRow>
@@ -455,8 +448,10 @@ function RepositoriesListPageContent() {
                     const distributionUrl = distributionUrlByRepo[repo.pulp_href];
                     return (
                     <TableRow key={repo.pulp_href} frozen={busyHref === repo.pulp_href}>
-                      <TableCell className="font-medium">{repo.name}</TableCell>
-                      <TableCell className="max-w-md">
+                      <TableCell className="font-medium" stack="heading">
+                        {repo.name}
+                      </TableCell>
+                      <TableCell className="max-w-md" label="Distribution URL">
                         {distributionUrl ? (
                           <a
                             href={distributionUrl}
@@ -470,10 +465,10 @@ function RepositoriesListPageContent() {
                           <span className="text-xs text-zinc-500 dark:text-zinc-400">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell label="Labels">
                         <LabelChips labels={repo.pulp_labels} />
                       </TableCell>
-                      <TableCell className={`text-right ${pinnedActionsCellClassName}`}>
+                      <TableCell className="text-right" stack="actions">
                         <div className="flex justify-end">
                           <RowActionMenu
                             label={repo.name}

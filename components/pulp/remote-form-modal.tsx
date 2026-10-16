@@ -141,7 +141,7 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 max-sm:p-0 sm:items-center">
       <button
         type="button"
         aria-label="Close dialog"
@@ -152,7 +152,7 @@ export function RemoteFormModal({ kind, editing, onClose, onSaved, onBusyChange 
         role="dialog"
         aria-modal="true"
         aria-labelledby="remote-modal-title"
-        className="relative z-[101] max-h-[min(90vh,44rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+        className="relative z-[101] max-h-[min(90vh,44rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
       >
         <h2
           id="remote-modal-title"

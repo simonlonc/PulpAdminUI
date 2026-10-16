@@ -7,7 +7,7 @@ type FormFieldProps = HTMLAttributes<HTMLLabelElement> & {
 
 export function FormField({ label, className, children, ...props }: FormFieldProps) {
   return (
-    <label className={cn("flex flex-col gap-2 text-sm", className)} {...props}>
+    <label className={cn("flex min-w-0 max-w-full flex-col gap-2 text-sm", className)} {...props}>
       {label}
       {children}
     </label>

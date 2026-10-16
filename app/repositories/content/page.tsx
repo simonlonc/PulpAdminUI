@@ -184,20 +184,20 @@ function RepositoryContentInner() {
                         <TableRow key={href ?? String(idx)}>
                           {endpoint ? (
                             endpoint.fields.map((field) => (
-                              <TableCell key={field.name} className="max-w-xs truncate text-sm">
+                              <TableCell label={field.label} key={field.name} className="max-w-xs truncate text-sm">
                                 {fieldValue(row[field.name])}
                               </TableCell>
                             ))
                           ) : (
-                            <TableCell className="max-w-xs truncate text-sm">{rowLabel(row)}</TableCell>
+                            <TableCell label="Label" className="max-w-xs truncate text-sm">{rowLabel(row)}</TableCell>
                           )}
-                          <TableCell className="max-w-md truncate font-mono text-xs">{href ?? "-"}</TableCell>
+                          <TableCell label="Href" className="max-w-md truncate font-mono text-xs">{href ?? "-"}</TableCell>
                           {totalSizeBytes !== null ? (
-                            <TableCell className="text-right text-sm">
+                            <TableCell label="Size" className="text-right text-sm">
                               {formatBytes(endpoint?.sizeField ? row[endpoint.sizeField] : null)}
                             </TableCell>
                           ) : null}
-                          <TableCell className="text-right">
+                          <TableCell label="Review" className="text-right">
                             {pkgId ? (
                               <Link
                                 href={`/content/packages/${pkgId}`}

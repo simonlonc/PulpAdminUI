@@ -254,7 +254,7 @@ function GlobalSearchPageContent() {
                                       );
                                       return (
                                         <TableRow key={hit.pulp_href}>
-                                          <TableCell className="font-medium">
+                                          <TableCell stack="heading" className="font-medium">
                                             {target ? (
                                               <Link
                                                 href={target}
@@ -266,7 +266,7 @@ function GlobalSearchPageContent() {
                                               hit.name
                                             )}
                                           </TableCell>
-                                          <TableCell className="text-zinc-500">
+                                          <TableCell label="Href" className="text-zinc-500">
                                             {hit.pulp_href}
                                           </TableCell>
                                         </TableRow>

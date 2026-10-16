@@ -259,7 +259,7 @@ function ContentListPageContent() {
                 a separate hidden sibling would stop the table being the last child of this space-y stack
                 and add a gap under it whenever there is no pagination. */}
             <TableWrapper>
-              <Table className="max-sm:hidden">
+              <Table stacked={false} className="max-sm:hidden">
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>Pulp Href</TableHeaderCell>

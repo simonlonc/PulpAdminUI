@@ -141,10 +141,10 @@ export default function PulpServersListPage() {
                   ) : (
                     backends.map((backend) => (
                       <TableRow key={backend.id}>
-                        <TableCell className="font-medium">{backend.label}</TableCell>
-                        <TableCell className="font-mono text-xs">{backend.baseUrl}</TableCell>
-                        <TableCell className="font-mono text-xs">{backend.id}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell stack="heading" className="font-medium">{backend.label}</TableCell>
+                        <TableCell label="Base URL" className="font-mono text-xs">{backend.baseUrl}</TableCell>
+                        <TableCell label="ID" className="font-mono text-xs">{backend.id}</TableCell>
+                        <TableCell stack="actions" className="text-right">
                           <div className="flex justify-end">
                             <RowActionMenu
                               label={backend.label}
@@ -180,7 +180,7 @@ export default function PulpServersListPage() {
       )}
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 max-sm:p-0 sm:items-center">
           <button
             type="button"
             aria-label="Close dialog"
@@ -191,7 +191,7 @@ export default function PulpServersListPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="save-backend-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="relative z-10 w-full max-w-lg rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           >
             <h2 id="save-backend-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               {editingBackendId ? "Edit Pulp server" : "New Pulp server"}

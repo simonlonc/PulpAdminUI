@@ -494,7 +494,7 @@ export function ManagementSidebar({ isOpen = false, onClose }: ManagementSidebar
       id={MANAGEMENT_SIDEBAR_ID}
       ref={asideRef}
       className={cn(
-        "fixed inset-y-0 left-0 z-40 w-[16.75rem] max-w-[85vw] overflow-y-auto border-r border-zinc-200/80 bg-zinc-50 duration-200 ease-out motion-reduce:transition-none md:static md:z-auto md:visible md:h-screen md:w-[16.75rem] md:shrink-0 md:translate-none md:overflow-visible md:border-r md:border-b-0 md:bg-zinc-50/80 md:transition-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:md:bg-zinc-950/80",
+        "fixed inset-y-0 left-0 z-40 w-[16.75rem] max-w-[85vw] overflow-y-auto overscroll-contain border-r border-zinc-200/80 bg-zinc-50 duration-200 ease-out motion-reduce:transition-none md:static md:z-auto md:visible md:h-screen md:w-[16.75rem] md:shrink-0 md:translate-none md:overflow-visible md:border-r md:border-b-0 md:bg-zinc-50/80 md:transition-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:md:bg-zinc-950/80",
         isOpen
           ? "translate-x-0 transition-transform"
           : "invisible -translate-x-full transition-[transform,visibility]"

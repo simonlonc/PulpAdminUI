@@ -366,10 +366,10 @@ function RolesListPageContent() {
                   ) : (
                     roles.map((r) => (
                       <TableRow key={r.pulp_href}>
-                        <TableCell className="max-w-[20rem] font-mono text-xs font-medium">
+                        <TableCell stack="heading" className="max-w-[20rem] font-mono text-xs font-medium">
                           <span title={r.name}>{r.name}</span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell label="Locked">
                           {r.locked ? (
                             <span className="rounded-md bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
                               Locked
@@ -378,7 +378,7 @@ function RolesListPageContent() {
                             <span className="text-zinc-500">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="max-w-[28rem]">
+                        <TableCell label="Permissions" className="max-w-[28rem]">
                           <div
                             className="max-h-28 overflow-y-auto text-xs leading-relaxed text-zinc-700 dark:text-zinc-300"
                             title={r.permissions.join(", ")}
@@ -392,13 +392,13 @@ function RolesListPageContent() {
                             </ul>
                           </div>
                         </TableCell>
-                        <TableCell className="max-w-[14rem] text-sm text-zinc-600 dark:text-zinc-400">
+                        <TableCell label="Description" className="max-w-[14rem] text-sm text-zinc-600 dark:text-zinc-400">
                           {r.description?.trim() ? r.description : "—"}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
+                        <TableCell label="Created" className="whitespace-nowrap text-sm">
                           {formatIso(r.pulp_created)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell stack="actions" className="text-right">
                           {r.locked ? (
                             <span className="text-xs text-zinc-400">—</span>
                           ) : (
@@ -437,7 +437,7 @@ function RolesListPageContent() {
       )}
 
       {createModalOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 max-sm:p-0 sm:items-center">
           <button
             type="button"
             aria-label="Close dialog"
@@ -448,7 +448,7 @@ function RolesListPageContent() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-role-title"
-            className="relative z-[101] max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="relative z-[101] max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           >
             <h2 id="create-role-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               New role
@@ -521,7 +521,7 @@ function RolesListPageContent() {
       ) : null}
 
       {editingRole ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 max-sm:p-0 sm:items-center">
           <button
             type="button"
             aria-label="Close dialog"
@@ -532,7 +532,7 @@ function RolesListPageContent() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-role-title"
-            className="relative z-[101] max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="relative z-[101] max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200/90 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 max-sm:max-h-[92dvh] max-sm:max-w-none max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           >
             <h2 id="edit-role-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               Edit role
