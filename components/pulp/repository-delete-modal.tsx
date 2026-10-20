@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
 import { Button } from "@/components/ui/button";
 import { type PulpPluginKind } from "@/lib/pulp-plugins";
@@ -37,12 +36,12 @@ export function RepositoryDeleteModal({
   onDeleted,
   onBusyChange,
 }: RepositoryDeleteModalProps) {
-  const { setError } = usePulpAuthContext();
   const { getPlugin } = usePulpPluginsContext();
   const titleId = useId();
 
   const linked = distributionsForRepository(distributions, repo.pulp_href, getPlugin(kind).distributionPath);
   const [deleteAlsoDistributions, setDeleteAlsoDistributions] = useState(linked.length > 0);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -69,7 +68,7 @@ export function RepositoryDeleteModal({
 
   async function handleDelete() {
     onBusyChange(true);
-    setError(null);
+    setModalError(null);
     setIsDeleting(true);
     try {
       if (deleteAlsoDistributions && linked.length > 0) {
@@ -88,7 +87,7 @@ export function RepositoryDeleteModal({
 
       onDeleted();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setModalError(e instanceof Error ? e.message : "Delete failed.");
     } finally {
       onBusyChange(false);
       setIsDeleting(false);
@@ -121,6 +120,14 @@ export function RepositoryDeleteModal({
             {repo.pulp_href}
           </span>
         </p>
+        {modalError ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+          >
+            {modalError}
+          </p>
+        ) : null}
         {linked.length > 0 ? (
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
             <input

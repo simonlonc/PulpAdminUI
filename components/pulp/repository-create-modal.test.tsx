@@ -8,15 +8,11 @@ import { findPluginForRemoteHrefIn, PULP_PLUGINS } from "@/lib/pulp-plugins";
 const file = PULP_PLUGINS.find((plugin) => plugin.kind === "file")!;
 const rpm = PULP_PLUGINS.find((plugin) => plugin.kind === "rpm")!;
 
-const { setErrorMock, createMock, listAllMock } = vi.hoisted(() => ({
-  setErrorMock: vi.fn(),
+const { createMock, listAllMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
   listAllMock: vi.fn(),
 }));
 
-vi.mock("@/components/pulp/auth-context", () => ({
-  usePulpAuthContext: () => ({ setError: setErrorMock }),
-}));
 vi.mock("@/components/pulp/plugins-context", () => ({
   usePulpPluginsContext: () => ({
     plugins: [file, rpm],
@@ -82,9 +78,23 @@ describe("RepositoryCreateModal retain_checkpoints", () => {
   it("rejects 0 visibly, opens the section and does not call create", () => {
     const { container } = renderModal();
     submit("0");
-    expect(setErrorMock).toHaveBeenCalledWith("Retain checkpoints must be a whole number of at least 1.");
+    // The section also shows its own inline alert, so read the dialog-level one: the form's first child.
+    const alert = screen.getByRole("button", { name: "Create" }).closest("form")!.firstElementChild!;
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.textContent).toBe("Retain checkpoints must be a whole number of at least 1.");
     expect(createMock).not.toHaveBeenCalled();
     expect(container.querySelector("details")!.open).toBe(true);
+  });
+});
+
+describe("RepositoryCreateModal errors", () => {
+  it("shows a failed create inside the dialog", async () => {
+    createMock.mockResolvedValue({ ok: false, detail: "name: This field must be unique." });
+    renderModal();
+    submit("");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("name: This field must be unique.");
+    expect(screen.getByRole("dialog").contains(alert)).toBe(true);
   });
 });
 
