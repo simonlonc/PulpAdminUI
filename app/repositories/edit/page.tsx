@@ -366,7 +366,7 @@ function RepositoriesEditInner() {
   return (
     <AdminShell
       title="Edit repository"
-      description="Update repository settings (matches Pulp RPM, Debian APT, and File repository APIs)."
+      description="Update repository settings (matches the Pulp repository API for its type)."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingDetail || isSubmitting}
