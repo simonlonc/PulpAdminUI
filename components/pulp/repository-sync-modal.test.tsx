@@ -8,16 +8,12 @@ import type { PulpRemote, PulpRepository } from "@/services/pulp/types";
 
 const file = PULP_PLUGINS.find((plugin) => plugin.kind === "file")!;
 
-const { setErrorMock, listMock, updateMock, syncMock } = vi.hoisted(() => ({
-  setErrorMock: vi.fn(),
+const { listMock, updateMock, syncMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   updateMock: vi.fn(),
   syncMock: vi.fn(),
 }));
 
-vi.mock("@/components/pulp/auth-context", () => ({
-  usePulpAuthContext: () => ({ setError: setErrorMock }),
-}));
 vi.mock("@/components/pulp/plugins-context", () => ({
   usePulpPluginsContext: () => ({ getPlugin: () => file }),
 }));
@@ -136,10 +132,9 @@ describe("RepositorySyncModal concurrency", () => {
     selectRemote(REMOTE_A);
     fireEvent.change(concurrencyInput(), { target: { value: "7" } });
     start();
-    await waitFor(() =>
-      expect(setErrorMock).toHaveBeenLastCalledWith(expect.stringContaining("boom"))
-    );
-    expect(setErrorMock).toHaveBeenLastCalledWith(expect.stringContaining("no sync was started"));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("boom");
+    expect(alert.textContent).toContain("no sync was started");
     expect(syncMock).not.toHaveBeenCalled();
   });
 
@@ -149,10 +144,9 @@ describe("RepositorySyncModal concurrency", () => {
     selectRemote(REMOTE_A);
     fireEvent.change(concurrencyInput(), { target: { value: "7" } });
     start();
-    await waitFor(() =>
-      expect(setErrorMock).toHaveBeenLastCalledWith(expect.stringContaining("was updated"))
-    );
-    expect(setErrorMock).toHaveBeenLastCalledWith(expect.stringContaining("no workers"));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("was updated");
+    expect(alert.textContent).toContain("no workers");
     expect(onSynced).not.toHaveBeenCalled();
   });
 
@@ -164,7 +158,7 @@ describe("RepositorySyncModal concurrency", () => {
     selectRemote(REMOTE_A);
     fireEvent.change(concurrencyInput(), { target: { value: text } });
     start();
-    await waitFor(() => expect(setErrorMock).toHaveBeenLastCalledWith(message));
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
     expect(updateMock).not.toHaveBeenCalled();
     expect(syncMock).not.toHaveBeenCalled();
   });
@@ -174,10 +168,26 @@ describe("RepositorySyncModal concurrency", () => {
     selectRemote(REMOTE_A);
     fireEvent.change(rateInput(), { target: { value: "1.5" } });
     start();
-    await waitFor(() =>
-      expect(setErrorMock).toHaveBeenLastCalledWith(expect.stringContaining("Rate limit must be"))
-    );
+    expect((await screen.findByRole("alert")).textContent).toContain("Rate limit must be");
     expect(updateMock).not.toHaveBeenCalled();
     expect(syncMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("RepositorySyncModal errors", () => {
+  it("shows a failed remote load inside the dialog", async () => {
+    listMock.mockRejectedValue(new Error("Failed to load remotes: 500"));
+    render(
+      <RepositorySyncModal
+        repo={repo}
+        kind="file"
+        onClose={() => {}}
+        onSynced={onSynced}
+        onBusyChange={() => {}}
+      />
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Failed to load remotes: 500");
+    expect(screen.getByRole("dialog").contains(alert)).toBe(true);
   });
 });

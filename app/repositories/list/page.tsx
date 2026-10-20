@@ -231,7 +231,7 @@ function RepositoriesListPageContent() {
   return (
     <AdminShell
       title="Repositories"
-      description="List RPM, Debian, and File repositories; publish, create distributions, inspect content, or remove a repository."
+      description="List repositories; publish, create distributions, inspect content, or remove a repository."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading || isLoadingRepos || isDeleting || isCreating}
@@ -633,7 +633,7 @@ function RepositoriesListSuspenseFallback() {
   return (
     <AdminShell
       title="Repositories"
-      description="List RPM, Debian, and File repositories; publish, create distributions, inspect content, or remove a repository."
+      description="List repositories; publish, create distributions, inspect content, or remove a repository."
       hasSession={hasSession}
       sessionUser={sessionUser}
       isLoading={isLoading}

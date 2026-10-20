@@ -86,7 +86,7 @@ const navSections = [
   {
     title: "Repository",
     items: [
-      { href: "/repositories/list", label: "Repositories", hint: "RPM, Debian, and File repos", icon: "repos" },
+      { href: "/repositories/list", label: "Repositories", hint: "All repository types", icon: "repos" },
       {
         href: "/remotes/list",
         label: "Remotes",

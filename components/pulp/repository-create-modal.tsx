@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useId, useState } from "react";
-import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
 import { RetainCheckpointsSection } from "./retain-checkpoints-section";
 import { Button } from "@/components/ui/button";
@@ -37,7 +36,6 @@ export function RepositoryCreateModal({
   onCreated,
   onBusyChange,
 }: RepositoryCreateModalProps) {
-  const { setError } = usePulpAuthContext();
   const { plugins, getPlugin, findPluginForRemoteHref } = usePulpPluginsContext();
   const titleId = useId();
 
@@ -49,6 +47,7 @@ export function RepositoryCreateModal({
   const [createManifest, setCreateManifest] = useState("");
   const [createRetainCheckpoints, setCreateRetainCheckpoints] = useState<number | null>(null);
   const [createNamingHintOpen, setCreateNamingHintOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createResult, setCreateResult] = useState<RepositoryCreateResult | null>(null);
   // Filled in per kind as remotes load. The registry is derived from the server, so a kind
@@ -114,16 +113,16 @@ export function RepositoryCreateModal({
     event.preventDefault();
     const trimmed = createName.trim();
     if (!trimmed) {
-      setError("Repository name is required.");
+      setModalError("Repository name is required.");
       return;
     }
     const checkpointsProblem = retainCheckpointsProblem(createRetainCheckpoints);
     if (checkpointsProblem) {
-      setError(checkpointsProblem);
+      setModalError(checkpointsProblem);
       return;
     }
     onBusyChange(true);
-    setError(null);
+    setModalError(null);
     setIsCreating(true);
     setCreateResult(null);
     try {
@@ -152,7 +151,7 @@ export function RepositoryCreateModal({
       resetCreateRepositoryFields();
       onCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed.");
+      setModalError(e instanceof Error ? e.message : "Create failed.");
     } finally {
       onBusyChange(false);
       setIsCreating(false);
@@ -180,7 +179,7 @@ export function RepositoryCreateModal({
           Create repository
         </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          New RPM, Debian APT, or File repository in Pulp.
+          New repository in Pulp; choose its type below.
         </p>
 
         <div className="mt-4">
@@ -216,6 +215,14 @@ export function RepositoryCreateModal({
         </div>
 
         <form className="mt-4 flex flex-col gap-4" onSubmit={(e) => void handleCreateSubmit(e)}>
+          {modalError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+            >
+              {modalError}
+            </p>
+          ) : null}
           <FormField label="Type">
             <select
               value={createKind}

@@ -60,7 +60,7 @@ const quickLinks: QuickLink[] = [
   {
     href: "/repositories/list",
     label: "Repositories",
-    description: "RPM, Debian, and File",
+    description: "All repository types",
     icon: Boxes,
   },
   {

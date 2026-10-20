@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePulpAuthContext } from "./auth-context";
 import { usePulpPluginsContext } from "./plugins-context";
 import { AdvancedSection } from "@/components/ui/advanced-section";
 import { Button } from "@/components/ui/button";
@@ -58,7 +57,6 @@ export function RepositorySyncModal({
   onSynced,
   onBusyChange,
 }: RepositorySyncModalProps) {
-  const { setError } = usePulpAuthContext();
   const { getPlugin } = usePulpPluginsContext();
 
   const [remotes, setRemotes] = useState<PulpRemote[]>([]);
@@ -69,12 +67,12 @@ export function RepositorySyncModal({
   >(() => defaultSyncFieldValues(getPlugin(kind).syncFields));
   const [downloadConcurrency, setDownloadConcurrency] = useState("");
   const [rateLimit, setRateLimit] = useState("");
+  const [modalError, setModalError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const plugin = getPlugin(kind);
 
   useEffect(() => {
     let active = true;
-    setError(null);
     setIsLoadingRemotes(true);
     void (async () => {
       try {
@@ -84,7 +82,7 @@ export function RepositorySyncModal({
         }
       } catch (e) {
         if (active) {
-          setError(e instanceof Error ? e.message : "Failed to load remotes.");
+          setModalError(e instanceof Error ? e.message : "Failed to load remotes.");
           setRemotes([]);
         }
       } finally {
@@ -131,18 +129,18 @@ export function RepositorySyncModal({
   async function handleSync() {
     const remote = remotes.find((r) => r.pulp_href === syncRemoteHref);
     if (!remote) {
-      setError("Select a remote to sync from.");
+      setModalError("Select a remote to sync from.");
       return;
     }
     const rateLimitMinimum = getBaseFieldHint(plugin, "rate_limit").minimum;
     const concurrency = parseIntegerInput(downloadConcurrency, DOWNLOAD_CONCURRENCY_MINIMUM);
     if (!concurrency.ok) {
-      setError(numericProblem("Download concurrency", true, DOWNLOAD_CONCURRENCY_MINIMUM));
+      setModalError(numericProblem("Download concurrency", true, DOWNLOAD_CONCURRENCY_MINIMUM));
       return;
     }
     const rate = parseIntegerInput(rateLimit, rateLimitMinimum);
     if (!rate.ok) {
-      setError(numericProblem("Rate limit", true, rateLimitMinimum));
+      setModalError(numericProblem("Rate limit", true, rateLimitMinimum));
       return;
     }
     // Only the fields that changed are sent, so the PATCH cannot touch secrets, headers or anything else.
@@ -155,7 +153,7 @@ export function RepositorySyncModal({
     }
     onBusyChange(true);
     setIsSyncing(true);
-    setError(null);
+    setModalError(null);
     let remoteUpdated = false;
     try {
       if (Object.keys(changes).length > 0) {
@@ -179,7 +177,7 @@ export function RepositorySyncModal({
       onSynced({ repoName: repo.name, task: result.data.task });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to start sync.";
-      setError(
+      setModalError(
         remoteUpdated
           ? `The remote "${remote.name}" was updated, but the sync did not start: ${message}`
           : message
@@ -218,6 +216,14 @@ export function RepositorySyncModal({
             {repo.pulp_href}
           </span>
         </p>
+        {modalError ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+          >
+            {modalError}
+          </p>
+        ) : null}
         <div className="mt-4 flex flex-col gap-4">
           <FormField label="Remote">
             <select
